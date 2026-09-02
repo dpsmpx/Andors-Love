@@ -44,7 +44,9 @@ const char* const ALL_LOCATIONS[] = {
     "caravanserai", "doubled",
     "halfcity", "endless", "foundry", "canal", "counter", "archive",
     "ordergate", "gatehouse", "library", "drafting", "cells", "furnace",
-    "refusalhall", "node2", "node3", "grave"};
+    "refusalhall", "node2", "node3", "grave",
+    "meadow", "farhouse", "well", "grove", "battlefield", "otherhalf",
+    "upstair", "edge", "emptyalder", "homepath"};
 const int N_LOCATIONS = static_cast<int>(sizeof(ALL_LOCATIONS) / sizeof(ALL_LOCATIONS[0]));
 
 // ------------------------------------------------------------------ тесты
@@ -653,7 +655,7 @@ void test_content_integrity() {
     // Каждая ссылка на предмет/врага/узел из контента должна разрешаться.
     const char* shops[] = {"shop_smith", "shop_general", "shop_herbs", "shop_books",
                            "shop_glass", "shop_market", "shop_foundry", "shop_ferry",
-                           "shop_order"};
+                           "shop_order", "shop_drift"};
     for (const char* sid : shops) {
         const ShopDef* s = c.shop(sid);
         check(s != nullptr, std::string("магазин ") + sid + " существует");
@@ -665,7 +667,8 @@ void test_content_integrity() {
     const char* npcs[] = {"elder", "herbalist", "smith", "trader", "hermit", "enchanter",
                           "glazier", "miller", "warden", "digger", "prohor_l", "prohor_r",
                           "survivor", "founder", "counter", "scribe", "ferryman",
-                          "gatekeeper", "librarian", "draftsman", "stoker", "recorder"};
+                          "gatekeeper", "librarian", "draftsman", "stoker", "recorder",
+                          "driftwife", "halfscribe", "soldier", "grovekeeper", "pathkeeper"};
     for (const char* nid : npcs) {
         const NpcDef* n = c.npc(nid);
         check(n != nullptr, std::string("NPC ") + nid + " существует");
@@ -709,7 +712,16 @@ void test_content_integrity() {
                            "draftsman_root","charts_offer","charts_wait","charts_reward",
                            "stoker_root","ovens_offer","ovens_wait","ovens_reward",
                            "recorder_root","refusal_offer","refusal_master","refusal_council",
-                           "refusal_after_m","refusal_after_c","keepsake_talk"};
+                           "refusal_after_m","refusal_after_c","keepsake_talk",
+                           "driftway_offer","driftway_wait","driftway_reward","driftway_after",
+                           "driftwife_root","driftwife_tally",
+                           "water_offer","water_wait","water_reward","water_after",
+                           "halfscribe_root","halfscribe_shout",
+                           "wholename_offer","wholename_wait","wholename_reward",
+                           "soldier_root","lasthour_offer","lasthour_wait",
+                           "lasthour_reward","lasthour_after",
+                           "grovekeeper_root","grove_rest","grove_why","grove_marks",
+                           "pathkeeper_root","path_why","path_drift"};
     for (const char* nid : nodes) {
         const DlgNode* n = c.node(nid);
         check(n != nullptr, std::string("узел ") + nid + " существует");
@@ -748,7 +760,10 @@ void test_content_integrity() {
                           "canal_walker", "archive_moth", "half_warden", "slag_master",
                           "acolyte", "gate_guard", "page_swarm", "draft_shade",
                           "cell_dweller", "furnace_born", "refusal_echo",
-                          "node_guard", "node_heart", "master_shadow"};
+                          "node_guard", "node_heart", "master_shadow",
+                          "drift_hare", "cart_shade", "stair_walker", "last_hour",
+                          "bannerman", "grove_sleeper", "second_bucket", "other_rat",
+                          "own_copy", "edge_wind"};
     for (const char* mid : mobs) {
         const EnemyDef* e = c.enemy(mid);
         check(e != nullptr, std::string("враг ") + mid + " существует");
@@ -1326,6 +1341,56 @@ void test_gates_and_secret_quests() {
     eqs(to_vault->gate.req_quest, "seam", "и открытая тайна");
     check(!to_vault->gate.denied.empty(), "отказ объясняется словами, а не молчанием");
 
+    // В Дрейф ведут ровно два прохода, и оба под условием: разрыв Третьего
+    // узла — для тех, кто прочёл отметку, и Тропа Возвращения — только для
+    // тех, кто уже прошёл по ней в другую сторону.
+    const Location* n3 = w.location("node3");
+    check(n3 != nullptr, "Третий узел загружается");
+    if (n3) {
+        const MapExit* to_drift = nullptr;
+        for (const MapExit& e : n3->exits)
+            if (e.target == "meadow") to_drift = &e;
+        check(to_drift != nullptr, "из Третьего узла есть проход в Дрейф");
+        if (to_drift) {
+            eqs(to_drift->gate.req_quest, "node3q", "разрыв открыт разгаданной тайной");
+            eq(to_drift->gate.req_stage, QUEST_DONE, "и только полностью разгаданной");
+            check(!to_drift->gate.denied.empty(), "отказ объясняется словами");
+        }
+    }
+    const MapExit* to_path = nullptr;
+    for (const MapExit& e : sanct->exits)
+        if (e.target == "homepath") to_path = &e;
+    check(to_path != nullptr, "из святилища есть выход на Тропу Возвращения");
+    if (to_path) {
+        eqs(to_path->gate.req_quest, "driftway", "тропа открывается поиском обоза");
+        eq(to_path->gate.req_stage, 2, "и лишь после того, как герой сам побывал на лоскуте");
+        check(!to_path->gate.denied.empty(), "отказ объясняется словами");
+    }
+
+    // Проверка на деле: тот же проход отказывает и пускает по состоянию квеста.
+    {
+        Game gd;
+        gd.new_game("Ходок", "human", "swordsman");
+        gd.player().loc = "node3";
+        const Location* loc = gd.here();
+        const MapExit* ex = nullptr;
+        if (loc)
+            for (const MapExit& e : loc->exits)
+                if (e.target == "meadow") ex = &e;
+        check(ex != nullptr, "проход в Дрейф есть и в живой игре");
+        if (ex) {
+            const Vec2 from(ex->pos.x - 1, ex->pos.y);
+            gd.player().pos = from;
+            check(gd.try_move(1, 0) != Bump::Exit, "без разгаданной тайны разрыв не пускает");
+            eqs(gd.player().loc, "node3", "герой остаётся у узла");
+
+            gd.player().quests["node3q"] = QUEST_DONE;
+            gd.player().pos = from;
+            check(gd.try_move(1, 0) == Bump::Exit, "с разгаданной — пускает");
+            eqs(gd.player().loc, "meadow", "и выводит на дрейфующий луг");
+        }
+    }
+
     // Каждое условие врат должно ссылаться на существующие вещи.
     for (const char* lid : ALL_LOCATIONS) {
         const Location* loc = w.location(lid);
@@ -1455,7 +1520,9 @@ void test_books_and_notes() {
                               "lists", "foundry", "halves", "lastclerk",
                               "gates", "watchwrit", "read", "unsealed", "charts",
                               "novice", "keepsake", "ovens", "refusal",
-                              "secondnode", "thirdnode", "emptygrave"};
+                              "secondnode", "thirdnode", "emptygrave",
+                              "drift", "tomorrow", "otherside", "stair", "lastorder",
+                              "marks", "wellrule", "homeward", "houses", "edgeview"};
     for (const char* id : note_ids) {
         const NoteDef* n = c.note(id);
         check(n != nullptr, std::string("записка ") + id + " описана");
@@ -2317,6 +2384,136 @@ void test_playthrough() {
     eq(g.quest_stage("keepsake"), QUEST_DONE, "квест «Оловянный солдатик» закрыт");
     eq(g.count_item("keepsake"), 0, "солдатик остался у Игната");
 
+    // ================= Регион V: Дрейф =================
+
+    // --- Гурий вспоминает про сорок душ ---
+    g.player().loc = "village";
+    check(visible("trader_root", "driftway_offer"),
+          "разгадав тайну караван-сарая, Гурий заговаривает о сорока душах");
+    g.apply_option(c.node("driftway_offer")->options[0], "", &shop);
+    eq(g.quest_stage("driftway"), 1, "поиск обоза начат");
+
+    // --- Третий узел пускает только того, кто понял, куда он ведёт ---
+    g.player().loc = "node3";
+    g.player().quests["node3q"] = 1;          // будто отметка ещё не прочитана
+    check(!travel("meadow"), "в разрыв не шагают наугад");
+    eqs(g.player().loc, "node3", "и герой остаётся у узла");
+    g.player().quests["node3q"] = QUEST_DONE;
+    check(travel("meadow"), "зная, куда ведёт разрыв, пройти можно");
+    eqs(g.player().loc, "meadow", "герой на дрейфующем лугу");
+    eq(g.quest_stage("driftway"), 2, "приход на лоскут двигает поиск обоза");
+    check(gather_note("drift"), "наставление о дрейфе найдено");
+
+    // --- Дом на отшибе: обоз стоит и ждёт утра ---
+    check(travel("farhouse"), "переход к дому на отшибе");
+    check(gather_note("tomorrow"), "запись хозяйки найдена");
+    check(visible("driftwife_root", "driftwife_tally"), "Улита помнит про бирку");
+    g.apply_option(c.node("driftwife_tally")->options[0], "", &shop);
+    check(g.count_item("caravan_tally") >= 1, "путевая бирка обоза у героя");
+
+    check(visible("driftwife_root", "water_offer"), "Улита просит воды");
+    g.apply_option(c.node("water_offer")->options[0], "", &shop);
+    eq(g.quest_stage("water"), 1, "квест «Ведро воды» взят");
+    check(!visible("driftwife_root", "water_reward"), "без второго ведра говорить не о чем");
+
+    // --- Колодец Двух Вёдер ---
+    check(travel("well"), "переход к колодцу");
+    check(gather_note("wellrule"), "правило колодца найдено");
+    eq(g.quest_stage("twobuckets"), 1, "правило открыло тайну «Колодец Двух Вёдер»");
+    check(hunt("second_bucket", 1) == 1, "второе ведро поднялось и не захотело обратно");
+    eq(g.quest_stage("twobuckets"), QUEST_DONE, "тайна колодца разгадана");
+    check(g.count_item("two_bucket") >= 1, "второе ведро у героя");
+
+    g.player().loc = "farhouse";
+    check(visible("driftwife_root", "water_reward"), "теперь Улите есть что показать");
+    g.apply_option(c.node("water_reward")->options[0], "", &shop);
+    eq(g.quest_stage("water"), QUEST_DONE, "квест «Ведро воды» закрыт");
+    eq(g.count_item("two_bucket"), 0, "оба ведра остались у Улиты");
+
+    // --- Роща, где не темнеет ---
+    g.player().loc = "well";
+    check(travel("grove"), "переход в рощу");
+    eq(g.quest_stage("nodark"), 1, "сам приход открыл тайну «Роща, где не темнеет»");
+    check(gather_note("marks"), "зарубки на стволе прочитаны");
+    eq(g.quest_stage("nodark"), QUEST_DONE, "тайна рощи разгадана");
+    check(visible("grovekeeper_root", "grove_marks"),
+          "с зарубками есть о чём спросить Ерофея");
+
+    // --- Поле после битвы ---
+    check(travel("battlefield"), "переход на поле");
+    check(gather_note("lastorder"), "приказ, отданный вчера, найден");
+    check(visible("soldier_root", "lasthour_offer"), "Ратмир объясняет, что за час");
+    g.apply_option(c.node("lasthour_offer")->options[0], "", &shop);
+    eq(g.quest_stage("lasthour"), 1, "квест «Последний час» взят");
+    check(!visible("soldier_root", "lasthour_reward"), "без знамени час не кончить");
+    check(hunt("bannerman", 1) == 1, "знаменосец повержен");
+    check(g.count_item("torn_banner") >= 1, "знамя снято");
+    g.apply_option(c.node("lasthour_reward")->options[0], "", &shop);
+    eq(g.quest_stage("lasthour"), QUEST_DONE, "квест «Последний час» закрыт");
+    check(g.count_item("hour_blade") >= 1, "клинок десятника принят");
+    check(visible("soldier_root", "lasthour_after"), "Ратмиру теперь есть что сказать");
+
+    // --- Вторая Половина Города: половины имени сходятся ---
+    check(travel("otherhalf"), "переход во вторую половину Города");
+    check(gather_note("otherside"), "запись с той стороны среза найдена");
+    check(visible("halfscribe_root", "wholename_offer"), "Пелагея правит списки");
+    g.apply_option(c.node("wholename_offer")->options[0], "", &shop);
+    eq(g.quest_stage("wholename"), 1, "квест «Имя целиком» взят");
+    check(g.count_item("half_name") >= 1,
+          "половина имени из Региона III дожила до второй половины Города");
+    g.apply_option(c.node("wholename_reward")->options[0], "", &shop);
+    eq(g.quest_stage("wholename"), QUEST_DONE, "квест «Имя целиком» закрыт");
+    eq(g.count_item("half_name"), 0, "половина ушла в шов");
+    check(g.count_item("whole_name") >= 1, "целое имя получено");
+
+    // --- Пустая Ольховка ---
+    check(travel("emptyalder"), "переход в пустую Ольховку");
+    eq(g.quest_stage("emptyalder"), 1, "сам приход открыл тайну «Пустая Ольховка»");
+    check(gather_note("houses"), "роспись домов найдена");
+    check(gather("own_key") >= 1, "ключ с пустой биркой подобран");
+    eq(g.quest_stage("emptyalder"), QUEST_DONE, "тайна пустой Ольховки разгадана");
+
+    // --- Лестница вверх ---
+    g.player().loc = "meadow";
+    check(travel("upstair"), "переход к лестнице");
+    check(gather_note("stair"), "замер лестницы найден");
+    {
+        const Location* st = g.here();
+        const MapExit* loop = 0;
+        for (const MapExit& e : st->exits)
+            if (e.target == "upstair") loop = &e;
+        check(loop != nullptr, "у лестницы есть переход в саму себя");
+        if (loop) {
+            g.player().pos = Vec2(loop->pos.x - 1, loop->pos.y);
+            check(g.try_move(1, 0) == Bump::Exit, "верхняя площадка срабатывает как переход");
+            eqs(g.player().loc, "upstair", "и приводит на ту же лестницу");
+            check(g.player().pos.y > loop->pos.y, "но в её низ");
+        }
+    }
+
+    // --- Край Лоскута ---
+    check(travel("edge"), "переход к краю лоскута");
+    check(gather_note("edgeview"), "наблюдение с края найдено");
+    eq(g.quest_stage("edgeq"), 1, "наблюдение открыло тайну «Край Лоскута»");
+    check(hunt("edge_wind", 1) == 1, "Ветер Края улёгся");
+    eq(g.quest_stage("edgeq"), QUEST_DONE, "тайна края разгадана");
+
+    // --- Тропа Возвращения выводит домой ---
+    g.player().loc = "otherhalf";
+    check(travel("homepath"), "переход на Тропу Возвращения");
+    check(gather_note("homeward"), "наказ проводника найден");
+    check(visible("pathkeeper_root", "path_drift"), "Тихону есть что рассказать про Дрейф");
+    check(travel("sanctum"), "тропа действительно выводит к святилищу");
+    eqs(g.player().loc, "sanctum", "герой дома, на своей стороне");
+
+    // --- Бирка возвращается Гурию ---
+    g.player().loc = "village";
+    check(visible("trader_root", "driftway_reward"), "Гурию есть что показать");
+    g.apply_option(c.node("driftway_reward")->options[0], "", &shop);
+    eq(g.quest_stage("driftway"), QUEST_DONE, "квест «Сорок душ» закрыт");
+    check(g.count_item("caravan_tally") >= 1, "бирку Гурий не взял");
+    check(visible("trader_root", "driftway_after"), "и говорит о ней уже иначе");
+
     // --- итог ---
     const char* all_quests[] = {"wolves", "amulet", "pelts", "moss", "books",
                                 "queen", "outpost", "zero_point", "enchanter",
@@ -2326,7 +2523,9 @@ void test_playthrough() {
                                 "cityroad", "foundry", "counting", "lists",
                                 "endless", "deadwater", "halves",
                                 "orderway", "watch4", "charts", "keepsake", "ovens",
-                                "refusal", "unsealed", "node2q", "node3q", "firstmaster"};
+                                "refusal", "unsealed", "node2q", "node3q", "firstmaster",
+                                "driftway", "water", "wholename", "lasthour",
+                                "twobuckets", "nodark", "emptyalder", "edgeq"};
     for (const char* q : all_quests)
         eq(g.player().quests[q], QUEST_DONE, std::string("квест ") + q + " пройден");
 
@@ -2334,7 +2533,7 @@ void test_playthrough() {
     check(g.books().size() >= 2, "библиотека наполнилась находками и своими книгами");
     check(g.book(diary) != nullptr, "своя книга дожила до конца прохождения");
 
-    check(g.player().level >= 20, "к концу четырёх регионов герой заметно вырос");
+    check(g.player().level >= 28, "к концу пяти регионов герой заметно вырос");
     std::cout << "  (итог: уровень " << g.player().level
               << ", золота " << g.player().gold
               << ", квестов пройдено " << (sizeof(all_quests) / sizeof(all_quests[0]))

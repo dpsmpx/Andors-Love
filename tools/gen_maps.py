@@ -214,6 +214,8 @@ sanctum.objects = [
     "exit 2 9 ruins 44 9",
     "exit 31 9 vault 3 9 key=seam_key quest=seam:1 "
     "deny=Северная грань алтаря глухая. Здесь что-то есть, но не для тебя — пока.",
+    "exit 15 16 homepath 44 9 quest=driftway:2 "
+    "deny=Южная ниша глухая. По тропе, которой ты не прошёл, обратно не ходят.",
 ]
 
 # ------------------------------------------------------------ СХРОН ОРДЕНА
@@ -742,6 +744,8 @@ node3.objects = [
     "spawn 36 9 node_guard 2 4",
     "exit 24 15 node2 37 4",
     "exit 8 12 grave 24 15",
+    "exit 24 4 meadow 24 14 quest=node3q:100 "
+    "deny=В разрыв тянет сквозняком. Шагнуть туда, не зная куда, — значит уйти совсем.",
 ]
 
 # --- Могила Первого Мастера ---
@@ -758,12 +762,216 @@ grave.objects = [
     "exit 24 15 node3 9 12",
 ]
 
+# =============================================================== РЕГИОН V: ДРЕЙФ
+# Лоскуты, которые не пристали. Земля обычная, небо — нет.
+
+# --- Дрейфующий луг: первый лоскут без опоры ---
+meadow = Map("meadow", "Дрейфующий луг", ",")
+meadow.rect(4, 2, 44, 15, ",")
+for x, y, n in ((8, 4, 3), (33, 5, 4), (14, 12, 5), (37, 12, 3)):
+    meadow.rect(x, y, x + n - 1, y, "T")
+meadow.rect(20, 7, 28, 9, "=")                   # остаток дороги, обрывается
+meadow.objects = [
+    "sign 24 10 Облака идут в одну сторону, тени от них — в другую.",
+    "note 6 8 drift",
+    "item 42 3 drift_grass 2",
+    "chest 42 14 520 - drift_grass:2 still_water:1 bread:2",
+    "spawn 12 6 drift_hare 3 5",
+    "spawn 36 9 drift_hare 2 4",
+    "spawn 24 13 cart_shade 2 4",
+    "exit 24 15 node3 24 5",
+    "exit 4 8 farhouse 44 9",
+    "exit 44 6 upstair 4 14",
+]
+
+# --- Дом на отшибе: живут и не знают ---
+farhouse = Map("farhouse", "Дом на отшибе", ",")
+farhouse.rect(2, 3, 45, 15, ",")
+farhouse.rect(16, 5, 30, 11, "#")                # сам дом
+farhouse.rect(18, 6, 28, 10, ".")
+farhouse.rect(23, 11, 24, 11, ".")               # порог
+for x in (8, 12, 36, 40):                        # подводы во дворе
+    farhouse.rect(x, 13, x + 2, 13, "#")
+farhouse.objects = [
+    "npc 23 8 driftwife",
+    "sign 23 12 Двенадцать подвод гружены. Кони распряжены и стоят смирно.",
+    "note 20 7 tomorrow",
+    "item 34 4 drift_grass 1",
+    "chest 27 7 480 - still_water:2 bread:3 salt_lump:2",
+    "spawn 6 8 cart_shade 2 4",
+    "spawn 42 8 cart_shade 2 4",
+    "exit 45 9 meadow 5 8",
+    "exit 2 14 well 44 5",
+]
+
+# --- Колодец Двух Вёдер ---
+well = Map("well", "Колодец Двух Вёдер", ",")
+well.rect(3, 3, 45, 15, ",")
+well.rect(22, 7, 26, 10, "#")                    # сруб колодца
+well.rect(24, 10, 24, 10, ".")                   # к вороту подходят снизу
+for x, y, n in ((7, 5, 3), (38, 12, 4)):
+    well.rect(x, y, x + n - 1, y, "T")
+well.objects = [
+    "sign 24 11 Ворот один, вёдер два. Второе холоднее.",
+    "note 20 6 wellrule",
+    "item 42 4 still_water 1",
+    "chest 6 13 560 - still_water:2 drift_grass:2 antidote:2",
+    "spawn 12 9 second_bucket 1 2",
+    "spawn 36 7 drift_hare 2 4",
+    "exit 45 5 farhouse 3 14",
+    "exit 3 8 grove 44 9",
+]
+
+# --- Роща, где не темнеет ---
+grove = Map("grove", "Роща, где не темнеет", ",")
+grove.rect(2, 3, 45, 15, ",")
+for y in range(4, 15, 3):
+    for x in range(6, 43, 6):
+        grove.rect(x, y, x + 1, y, "T")
+grove.rect(20, 8, 28, 10, ",")                   # прогалина
+grove.objects = [
+    "npc 24 9 grovekeeper",
+    "sign 24 11 Свет ровный и не меняется. Тени стоят на месте.",
+    "note 22 5 marks",
+    "item 40 5 grove_leaf 2",
+    "chest 8 13 540 - grove_leaf:2 still_water:1 elixir_haste:1",
+    "spawn 14 12 grove_sleeper 2 4",
+    "spawn 34 12 grove_sleeper 2 4",
+    "exit 45 9 well 4 8",
+    "exit 2 6 battlefield 44 12",
+]
+
+# --- Поле после битвы: час идёт по кругу ---
+battlefield = Map("battlefield", "Поле после битвы", ",")
+battlefield.rect(2, 2, 45, 15, ",")
+battlefield.rect(10, 8, 38, 9, "=")              # вытоптанная полоса строя
+for x in (14, 22, 30):                           # брошенные щиты и телеги
+    battlefield.rect(x, 5, x + 1, 5, "#")
+    battlefield.rect(x, 12, x + 1, 12, "#")
+battlefield.objects = [
+    "npc 10 10 soldier",
+    "sign 24 10 Строй истоптан до земли. Земля свежая.",
+    "note 6 4 lastorder",
+    "item 18 13 scrap_iron 2",
+    "chest 6 13 600 - scrap_iron:3 still_water:2 elixir_might:1",
+    "spawn 20 6 last_hour 3 5",
+    "spawn 34 11 last_hour 2 4",
+    "spawn 40 8 bannerman 1 2",
+    "exit 45 12 grove 3 6",
+    "exit 2 8 otherhalf 44 13",
+]
+
+# --- Вторая Половина Города: срез сходится с Половиной Города ---
+otherhalf = Map("otherhalf", "Вторая Половина Города", "#")
+otherhalf.rect(14, 2, 45, 15, ".")               # уцелевшая половина — восточная
+otherhalf.rect(14, 8, 45, 9, "=")                # Мучная улица упирается в срез
+for x in (20, 28, 36):
+    otherhalf.rect(x, 4, x + 4, 6, "#")
+    otherhalf.rect(x, 11, x + 4, 13, "#")
+    otherhalf.rect(x + 2, 6, x + 2, 6, ".")
+    otherhalf.rect(x + 2, 11, x + 2, 11, ".")
+otherhalf.rect(14, 12, 14, 13, ".")
+otherhalf.objects = [
+    "npc 15 8 halfscribe",
+    "sign 16 10 Улица кончается ровно здесь. Дальше четыре шага и всё небо.",
+    "note 17 5 otherside",
+    "item 43 12 still_water 1",
+    "chest 43 4 620 - whetstone:1 still_water:2 clerk_robe:1",
+    "spawn 26 3 other_rat 3 5",
+    "spawn 34 14 other_rat 2 4",
+    "exit 44 13 battlefield 3 8",
+    "exit 14 13 emptyalder 24 15",
+    "exit 44 3 homepath 4 9",
+]
+
+# --- Лестница вверх: поднимаешься и выходишь внизу ---
+upstair = Map("upstair", "Лестница вверх", "#")
+upstair.rect(4, 13, 12, 15, ".")                 # низ лестницы
+upstair.rect(6, 3, 42, 12, ".")
+for y in range(4, 12, 2):                        # марши со сменой направления
+    upstair.rect(6, y, 42, y, "#")
+    if (y // 2) % 2:
+        upstair.rect(39, y, 42, y, ".")
+    else:
+        upstair.rect(6, y, 9, y, ".")
+upstair.rect(40, 2, 44, 4, ".")                  # верхняя площадка
+upstair.objects = [
+    "sign 8 14 Ступеней двести двенадцать. Считаны трижды.",
+    "note 10 13 stair",
+    "item 42 3 drift_grass 1",
+    "chest 42 2 580 - stair_hood:1 still_water:1 grove_leaf:1",
+    "spawn 20 3 stair_walker 2 4",
+    "spawn 30 11 stair_walker 2 4",
+    "exit 4 14 meadow 43 6",
+    "exit 44 4 upstair 6 12",
+    "exit 6 3 edge 24 15",
+]
+
+# --- Край Лоскута: дальше земли нет ---
+edge = Map("edge", "Край Лоскута", ",")
+edge.rect(6, 6, 42, 15, ",")
+edge.rect(6, 6, 42, 6, "=")                      # кромка, дальше пусто
+for x, y, n in ((10, 10, 3), (34, 12, 4)):
+    edge.rect(x, y, x + n - 1, y, "T")
+edge.objects = [
+    "sign 24 7 Это не обрыв: обрыв предполагает низ.",
+    "note 24 8 edgeview",
+    "item 40 9 drift_grass 2",
+    "chest 8 14 700 - edge_ring:1 still_water:3 portal_stone:1",
+    "spawn 16 9 edge_wind 1 2",
+    "exit 24 15 upstair 7 3",
+]
+
+# --- Пустая Ольховка: копия деревни, дом в дом ---
+emptyalder = Map("emptyalder", "Пустая Ольховка", ",")
+for y in (2, 3, 4):
+    emptyalder.rect(3, y, 9, y, "#").rect(35, y, 41, y, "#")
+emptyalder.rect(1, 7, W - 2, 8, "=")
+emptyalder.rect(17, 10, 21, 12, "~")
+for y in (11, 12, 13):
+    emptyalder.rect(3, y, 9, y, "#").rect(35, y, 41, y, "#")
+emptyalder.rect(7, 15, 9, 15, "T").rect(31, 15, 33, 15, "T")
+emptyalder.rect(26, 12, 30, 14, "#")             # дом последний, лишний
+emptyalder.rect(27, 13, 29, 13, ".")             # горница
+emptyalder.rect(28, 14, 28, 14, ".")             # порог
+emptyalder.objects = [
+    "sign 12 6 Ольховка. Дом в дом, ставня в ставню. Ни одного человека.",
+    "sign 27 15 Дом стоит там, где в настоящей Ольховке пустырь.",
+    "note 24 6 houses",
+    "item 28 13 own_key 1",
+    "chest 11 9 660 - still_water:2 whetstone:1 elixir_guard:1",
+    "spawn 14 3 own_copy 1 2",
+    "spawn 34 13 own_copy 1 2",
+    "exit 24 15 otherhalf 15 13",
+]
+
+# --- Тропа Возвращения: единственная надёжная дорога домой ---
+homepath = Map("homepath", "Тропа Возвращения", ",")
+homepath.rect(2, 8, 45, 10, "=")
+homepath.rect(2, 6, 45, 12, ",")
+homepath.rect(2, 8, 45, 9, "=")
+for x, y, n in ((10, 6, 4), (26, 12, 5), (38, 6, 3)):
+    homepath.rect(x, y, x + n - 1, y, "T")
+homepath.objects = [
+    "npc 24 9 pathkeeper",
+    "sign 24 11 Тропа не петляет. Трава примята в обе стороны.",
+    "note 8 11 homeward",
+    "item 44 11 drift_grass 1",
+    "chest 6 7 600 - still_water:2 grove_leaf:2 portal_stone:1",
+    "spawn 14 10 drift_hare 2 4",
+    "spawn 36 10 drift_hare 2 4",
+    "exit 4 9 otherhalf 43 3",
+    "exit 45 9 sanctum 15 16",
+]
+
 MAPS = [village, forest, cave, ruins, sanctum, vault,
         goatpath, glassfield, mill, market, bridge, saltmines,
         caravanserai, doubled,
         halfcity, endless, foundry, canal, counter_tower, archive,
         ordergate, gatehouse, library, drafting, cells, furnace,
-        refusalhall, node2, node3, grave]
+        refusalhall, node2, node3, grave,
+        meadow, farhouse, well, grove, battlefield, otherhalf,
+        upstair, edge, emptyalder, homepath]
 
 # --------------------------------------------------------------- проверки
 def reachable(m, start):
@@ -793,7 +1001,11 @@ def check():
                "ordergate": (24, 15), "gatehouse": (24, 15), "library": (24, 15),
                "drafting": (24, 15), "cells": (24, 15), "furnace": (24, 15),
                "refusalhall": (24, 15), "node2": (24, 15), "node3": (24, 15),
-               "grave": (24, 15)}
+               "grave": (24, 15),
+               "meadow": (24, 15), "farhouse": (45, 9), "well": (45, 5),
+               "grove": (45, 9), "battlefield": (45, 12), "otherhalf": (44, 13),
+               "upstair": (4, 14), "edge": (24, 15), "emptyalder": (24, 15),
+               "homepath": (45, 9)}
 
     for m in MAPS:
         start = entries[m.id]

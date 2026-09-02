@@ -342,6 +342,61 @@ void Content::build_items() {
     add(mk_item("seam_key", "Ключ шва", ItemKind::Misc, 0,
                 "Не ключ даже — узел из чёрного металла. Страж носил его в себе."));
 
+    // --- Регион V: Дрейф ---
+    add(mk_item("caravan_tally", "Путевая бирка", ItemKind::Misc, 0,
+                "Двенадцать подвод, сорок душ. Обоз числится в пути."));
+    add(mk_item("drift_grass", "Дрейфующая трава", ItemKind::Misc, 42,
+                "Корни висят в воздухе и ничего не держат. Растёт всё равно."));
+    add(mk_item("two_bucket", "Второе ведро", ItemKind::Misc, 0,
+                "Спустили одно, подняли два. Второе тяжелее и холоднее."));
+    add(mk_item("torn_banner", "Обрывок знамени", ItemKind::Misc, 90,
+                "Цвета не разобрать. Держали крепко — ткань порвана поперёк хватки."));
+    add(mk_item("own_key", "Ключ с пустой биркой", ItemKind::Misc, 0,
+                "От дома, в котором никто не жил. Бирку не заполнили."));
+
+    ItemDef wname = mk_item("whole_name", "Имя целиком", ItemKind::Ring, 1350,
+                            "Две половины, сложенные и сшитые ниткой. Чьё — уже не важно.");
+    wname.bonus.max_hp = 20; wname.bonus.attack = 7; wname.bonus.block = 6;
+    wname.bonus.armor = 3;
+    add(wname);
+
+    ItemDef hblade = mk_item("hour_blade", "Клинок последнего часа", ItemKind::Weapon, 1050,
+                             "Заточен утром того дня. С тех пор его не точили и не надо.");
+    hblade.bonus.dmg_min = 13; hblade.bonus.dmg_max = 23;
+    hblade.bonus.attack = 10; hblade.bonus.crit = 6;
+    add(hblade);
+
+    ItemDef dcloak = mk_item("drift_cloak", "Плащ дрейфующего", ItemKind::Armor, 1100,
+                             "Не греет и не мокнет. Ветра на лоскуте нет, а плащ шевелится.");
+    dcloak.bonus.armor = 11; dcloak.bonus.block = 8; dcloak.bonus.max_ap = 1;
+    add(dcloak);
+
+    ItemDef shood = mk_item("stair_hood", "Клобук обходчика", ItemKind::Helmet, 780,
+                            "Обходчик считал ступени вслух. Ткань у висков вытерта ладонями.");
+    shood.bonus.max_ap = 3; shood.bonus.attack = 6; shood.bonus.armor = 2;
+    add(shood);
+
+    ItemDef bshield = mk_item("banner_shield", "Щит знаменосца", ItemKind::Shield, 960,
+                              "Умбон вмят внутрь. Знамя он всё-таки не выронил.");
+    bshield.bonus.block = 20; bshield.bonus.armor = 6; bshield.bonus.max_hp = 8;
+    bshield.bonus.attack = -3;
+    add(bshield);
+
+    ItemDef ering = mk_item("edge_ring", "Кольцо Края", ItemKind::Ring, 1250,
+                            "Смотришь сквозь — видно другие лоскуты. Смотреть подолгу нельзя.");
+    ering.bonus.crit = 12; ering.bonus.attack = 9; ering.bonus.max_ap = 2;
+    add(ering);
+
+    ItemDef swater = mk_item("still_water", "Стоячая вода", ItemKind::Consumable, 145,
+                             "Из колодца Двух Вёдер. Не портится, потому что не идёт время.");
+    swater.heal_hp = 70; swater.cures = "*";
+    add(swater);
+
+    ItemDef gleaf = mk_item("grove_leaf", "Лист из рощи", ItemKind::Consumable, 120,
+                            "Сорван и не вянет. Пока держишь — не устаёшь.");
+    gleaf.heal_ap = 8; gleaf.effect = "haste"; gleaf.effect_turns = 10; gleaf.effect_power = 2;
+    add(gleaf);
+
     // ключи и квестовое
     add(mk_item("rusty_key",  "Ржавый ключ", ItemKind::Misc, 0,
                 "От сундука на старой заставе."));
@@ -936,6 +991,140 @@ void Content::build_notes() {
         "«Не дописывайте. Я ещё хожу.»"
     });
 
+    // --- Регион V: Дрейф ---
+
+    add("drift", "Как понять, что дрейфуешь", {
+        "«Земля под ногами твёрдая, и это сбивает.",
+        "",
+        "Проверять надо по небу. Если облака идут",
+        "в одну сторону, а тени от них — в другую,",
+        "значит, идёшь не ты и не облака: идёт",
+        "лоскут, на котором стоишь.",
+        "",
+        "Второй способ: брось камень и слушай. Здесь",
+        "он падает чуть позже, чем должен.",
+        "",
+        "Третий способ — спросить у местных. Не",
+        "советую. Они не знают и расстраиваются.»"
+    });
+
+    add("tomorrow", "Запись хозяйки", {
+        "«Завтра выходим затемно. Подводы гружены,",
+        "кони кормлены, похлёбка поставлена на утро.",
+        "",
+        "Хозяин сарая сказал ждать, пока пройдёт.",
+        "Прошло, наверное: тихо стало.",
+        "",
+        "Пишу вечером. Завтра допишу, что дошли.»",
+        "",
+        "Ниже — та же рука, тот же вечер, ещё раз.",
+        "И ещё раз. Страница исписана до низу",
+        "одной и той же записью."
+    });
+
+    add("otherside", "С той стороны среза", {
+        "«Прошение о восстановлении улицы подано",
+        "и здесь. Ответа нет и здесь.",
+        "",
+        "Мучная улица кончается ровно там же, где",
+        "у них. Мы стоим на своём краю, они на своём,",
+        "и между нами четыре шага и всё небо.",
+        "",
+        "Кричать пробовали. Слышно. Отвечать",
+        "перестали: за двести лет надоедает",
+        "перекрикиваться с теми, до кого не дойти.»"
+    });
+
+    add("stair", "Замер лестницы", {
+        "«Ступеней двести двенадцать. Считал трижды.",
+        "",
+        "Поднимаешься двести двенадцать — выходишь",
+        "внизу. Не разворачиваешься: именно выходишь",
+        "внизу, лицом туда же, куда шёл.",
+        "",
+        "Спускаться пробовал. Спуска нет: ступени",
+        "под ногой всегда поднимаются.",
+        "",
+        "Я не устал. В этом и беда — я не устал.»"
+    });
+
+    add("lastorder", "Приказ, отданный вчера", {
+        "«Держать до темноты. Подмога к вечеру.»",
+        "",
+        "Бумага свежая. Чернила не выцвели.",
+        "",
+        "На обороте, карандашом, много раз:",
+        "«темноты нет».",
+        "«темноты нет».",
+        "«темноты нет»."
+    });
+
+    add("marks", "Зарубки на стволе", {
+        "Зарубок на стволе сто с лишним, и все",
+        "одинаково старые. Ни одна не заросла.",
+        "",
+        "Ниже вырезано ножом:",
+        "«Считал дни. Дни не идут — идёт счёт.",
+        "Бросил на сто четвёртой.",
+        "",
+        "Хорошо тут. Вот это и плохо.»"
+    });
+
+    add("wellrule", "Правило колодца", {
+        "«Спускаешь одно ведро — поднимаешь два.",
+        "",
+        "Первое — твоё. Второе не твоё, но такое же.",
+        "Вода в нём холоднее, и она не портится.",
+        "",
+        "Пить можно. Оставлять на виду нельзя:",
+        "второе ведро к утру наливается само.",
+        "",
+        "Мы не знаем, откуда берётся вторая вода.",
+        "Мы знаем, что где-то её на одно ведро",
+        "меньше.»"
+    });
+
+    add("homeward", "Наказ проводника", {
+        "«Дорог отсюда много, надёжная одна.",
+        "",
+        "Приметы: тропа не петляет, трава примята",
+        "в обе стороны, и на середине пути слышно",
+        "воду, которой нигде не видно.",
+        "",
+        "Идти молча. Оборачиваться можно —",
+        "возвращаться нельзя. Кто повернул назад,",
+        "выходит не туда, откуда шёл.»"
+    });
+
+    add("houses", "Роспись домов", {
+        "«Дом первый — Мирон, староста.",
+        "Дом второй — Лада, травница.",
+        "Дом третий — Бран, кузнец.",
+        "Дом четвёртый — Гурий, приезжий.",
+        "…",
+        "Всё сходится. Всё до одного.",
+        "",
+        "Дом последний — бирка пустая.",
+        "Рукой писаря приписано: «ждёт».",
+        "",
+        "Ключ на гвозде рядом. Тоже с пустой биркой.»"
+    });
+
+    add("edgeview", "Наблюдение с края", {
+        "«Дальше земли нет, и это не обрыв: обрыв",
+        "предполагает низ.",
+        "",
+        "Видно другие лоскуты. Считал — семнадцать.",
+        "На четырёх дым. На одном, кажется, машут.",
+        "",
+        "Все идут в одну сторону, и я наконец понял,",
+        "в какую: к середине. Нас не разбросало —",
+        "нас сносит вместе.",
+        "",
+        "Стяжение не кончилось. Оно просто идёт",
+        "медленнее, чем нам казалось, и мы внутри.»"
+    });
+
     add("hermit", "Страница из дневника", {
         "Двадцать лет назад я тоже думал, что",
         "сила решает. Ходил в ярости, бил первым.",
@@ -1450,6 +1639,122 @@ void Content::build_enemies() {
     mshadow.on_hit_effect = "weaken"; mshadow.on_hit_chance = 50; mshadow.on_hit_power = 3;
     add(mshadow);
 
+    // --- Регион V: Дрейф ---
+
+    EnemyDef dhare;
+    dhare.id = "drift_hare"; dhare.name = "Заяц, сбившийся";
+    dhare.stats.max_hp = 140; dhare.stats.max_ap = 14; dhare.stats.attack = 96;
+    dhare.stats.dmg_min = 10; dhare.stats.dmg_max = 17; dhare.stats.block = 20;
+    dhare.stats.armor = 4;    dhare.stats.ap_atk = 3;
+    dhare.exp = 230; dhare.gold_min = 18; dhare.gold_max = 55;
+    dhare.drops = { Drop("drift_grass", 55), Drop("bread", 30) };
+    dhare.detect = 9; dhare.kill_counter = "kill_dhare";
+    add(dhare);
+
+    EnemyDef cshade;
+    cshade.id = "cart_shade"; cshade.name = "Тень подводы";
+    cshade.stats.max_hp = 185; cshade.stats.max_ap = 12; cshade.stats.attack = 94;
+    cshade.stats.dmg_min = 12; cshade.stats.dmg_max = 21; cshade.stats.block = 24;
+    cshade.stats.armor = 8;    cshade.stats.ap_atk = 4;
+    cshade.exp = 285; cshade.gold_min = 40; cshade.gold_max = 110;
+    // Путевой бирки у теней нет: её отдаёт Улита, и разговор с ней —
+    // и есть ответ, за которым Гурий послал.
+    cshade.drops = { Drop("drift_grass", 40), Drop("salt_lump", 45),
+                     Drop("still_water", 30) };
+    cshade.detect = 8; cshade.kill_counter = "kill_cshade";
+    cshade.on_hit_effect = "slow"; cshade.on_hit_chance = 40; cshade.on_hit_power = 2;
+    add(cshade);
+
+    EnemyDef swalker;
+    swalker.id = "stair_walker"; swalker.name = "Идущий по лестнице";
+    swalker.stats.max_hp = 195; swalker.stats.max_ap = 14; swalker.stats.attack = 98;
+    swalker.stats.dmg_min = 13; swalker.stats.dmg_max = 22; swalker.stats.block = 26;
+    swalker.stats.armor = 7;    swalker.stats.ap_atk = 3;
+    swalker.exp = 310; swalker.gold_min = 50; swalker.gold_max = 130;
+    swalker.drops = { Drop("stair_hood", 25), Drop("drift_grass", 35) };
+    swalker.detect = 9; swalker.kill_counter = "kill_swalker";
+    swalker.on_hit_effect = "weaken"; swalker.on_hit_chance = 40; swalker.on_hit_power = 2;
+    add(swalker);
+
+    EnemyDef lhour;
+    lhour.id = "last_hour"; lhour.name = "Боец последнего часа";
+    lhour.stats.max_hp = 210; lhour.stats.max_ap = 13; lhour.stats.attack = 99;
+    lhour.stats.dmg_min = 14; lhour.stats.dmg_max = 24; lhour.stats.block = 28;
+    lhour.stats.armor = 9;    lhour.stats.ap_atk = 4;
+    lhour.exp = 335; lhour.gold_min = 55; lhour.gold_max = 140;
+    lhour.drops = { Drop("scrap_iron", 50), Drop("still_water", 35) };
+    lhour.detect = 8; lhour.kill_counter = "kill_lasthour";
+    lhour.on_hit_effect = "bleed"; lhour.on_hit_chance = 45; lhour.on_hit_power = 3;
+    add(lhour);
+
+    EnemyDef banner;
+    banner.id = "bannerman"; banner.name = "Знаменосец";
+    banner.stats.max_hp = 300; banner.stats.max_ap = 13; banner.stats.attack = 101;
+    banner.stats.dmg_min = 16; banner.stats.dmg_max = 27; banner.stats.block = 30;
+    banner.stats.armor = 11;   banner.stats.ap_atk = 4;
+    banner.exp = 640; banner.gold_min = 200; banner.gold_max = 360;
+    banner.drops = { Drop("torn_banner", 100), Drop("banner_shield", 70),
+                     Drop("hour_blade", 45) };
+    banner.detect = 9; banner.kill_counter = "kill_banner";
+    banner.on_hit_effect = "bleed"; banner.on_hit_chance = 50; banner.on_hit_power = 3;
+    add(banner);
+
+    EnemyDef sleeper;
+    sleeper.id = "grove_sleeper"; sleeper.name = "Спящий в роще"; sleeper.female = true;
+    sleeper.stats.max_hp = 205; sleeper.stats.max_ap = 11; sleeper.stats.attack = 95;
+    sleeper.stats.dmg_min = 12; sleeper.stats.dmg_max = 20; sleeper.stats.block = 22;
+    sleeper.stats.armor = 6;    sleeper.stats.ap_atk = 4;
+    sleeper.exp = 300; sleeper.gold_min = 45; sleeper.gold_max = 120;
+    sleeper.drops = { Drop("grove_leaf", 55), Drop("drift_grass", 40) };
+    sleeper.detect = 6; sleeper.kill_counter = "kill_sleeper";
+    sleeper.on_hit_effect = "slow"; sleeper.on_hit_chance = 55; sleeper.on_hit_power = 3;
+    add(sleeper);
+
+    EnemyDef bucket;
+    bucket.id = "second_bucket"; bucket.name = "Второе ведро"; bucket.female = true;
+    bucket.stats.max_hp = 230; bucket.stats.max_ap = 12; bucket.stats.attack = 97;
+    bucket.stats.dmg_min = 13; bucket.stats.dmg_max = 23; bucket.stats.block = 25;
+    bucket.stats.armor = 8;    bucket.stats.ap_atk = 4;
+    bucket.exp = 420; bucket.gold_min = 90; bucket.gold_max = 200;
+    bucket.drops = { Drop("still_water", 100), Drop("two_bucket", 100) };
+    bucket.detect = 7; bucket.kill_counter = "kill_bucket";
+    add(bucket);
+
+    EnemyDef orat;
+    orat.id = "other_rat"; orat.name = "Крыса второй половины";
+    orat.stats.max_hp = 150; orat.stats.max_ap = 13; orat.stats.attack = 93;
+    orat.stats.dmg_min = 10; orat.stats.dmg_max = 18; orat.stats.block = 19;
+    orat.stats.armor = 5;    orat.stats.ap_atk = 3;
+    orat.exp = 240; orat.gold_min = 20; orat.gold_max = 70;
+    orat.drops = { Drop("rat_tail", 60), Drop("still_water", 30) };
+    orat.detect = 8; orat.kill_counter = "kill_orat";
+    orat.on_hit_effect = "poison"; orat.on_hit_chance = 35; orat.on_hit_power = 2;
+    add(orat);
+
+    // Повтор дерётся тем, чем дерёшься ты, и потому неудобен.
+    EnemyDef copy;
+    copy.id = "own_copy"; copy.name = "Повтор";
+    copy.stats.max_hp = 245; copy.stats.max_ap = 14; copy.stats.attack = 100;
+    copy.stats.dmg_min = 14; copy.stats.dmg_max = 24; copy.stats.block = 30;
+    copy.stats.armor = 9;    copy.stats.ap_atk = 3;
+    copy.exp = 400; copy.gold_min = 70; copy.gold_max = 180;
+    copy.drops = { Drop("drift_cloak", 35), Drop("still_water", 45) };
+    copy.detect = 10; copy.kill_counter = "kill_copy";
+    copy.on_hit_effect = "weaken"; copy.on_hit_chance = 45; copy.on_hit_power = 3;
+    add(copy);
+
+    EnemyDef ewind;
+    ewind.id = "edge_wind"; ewind.name = "Ветер Края"; ewind.female = true;
+    ewind.stats.max_hp = 330; ewind.stats.max_ap = 14; ewind.stats.attack = 103;
+    ewind.stats.dmg_min = 17; ewind.stats.dmg_max = 29; ewind.stats.block = 30;
+    ewind.stats.armor = 11;   ewind.stats.ap_atk = 4;
+    ewind.exp = 720; ewind.gold_min = 250; ewind.gold_max = 430;
+    ewind.drops = { Drop("edge_ring", 100), Drop("drift_cloak", 70),
+                    Drop("portal_stone", 100) };
+    ewind.detect = 10; ewind.kill_counter = "kill_edgewind";
+    ewind.on_hit_effect = "slow"; ewind.on_hit_chance = 50; ewind.on_hit_power = 3;
+    add(ewind);
+
     // Вожак носит амулет Лады — цель квеста, а не случайная добыча.
     EnemyDef alpha;
     alpha.id = "wolf_alpha"; alpha.name = "Вожак стаи";
@@ -1764,6 +2069,89 @@ void Content::build_quests() {
     };
     quests_.push_back(q);
 
+    // --- Регион V: Дрейф ---
+
+    q = QuestDef();
+    q.id = "driftway"; q.name = "Сорок душ";
+    q.stages = {
+        QuestStageDef(1, "Гурий так и не узнал, куда делись сорок человек из обоза. "
+                         "Третий узел открыт — уходят через него."),
+        QuestStageDef(2, "Обоз стоит на дрейфующем лоскуте. Хозяйка ждёт утра, "
+                         "которое не наступает. Забрать путевую бирку."),
+        QuestStageDef(QUEST_DONE, "Гурий получил бирку. Обоз числится в пути — "
+                                  "и это, пожалуй, правда.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "water"; q.name = "Ведро воды";
+    q.stages = {
+        QuestStageDef(1, "Улите нужна вода из колодца. Ведро одно, и она просит "
+                         "принести именно одно."),
+        QuestStageDef(QUEST_DONE, "Вёдер вышло два. Улита посмотрела на второе "
+                                  "и первый раз за двести лет замолчала.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "wholename"; q.name = "Имя целиком";
+    q.stages = {
+        QuestStageDef(1, "У Пелагеи вторая половина списков. Половину имени "
+                         "надо принести с той стороны среза."),
+        QuestStageDef(QUEST_DONE, "Половины сошлись. Одно имя из четырёх тысяч "
+                                  "двухсот снова целое.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "lasthour"; q.name = "Последний час";
+    q.stages = {
+        QuestStageDef(1, "Ратмир держит до темноты, а темноты нет. Знамя у "
+                         "знаменосца: пока оно поднято, час начинается заново."),
+        QuestStageDef(QUEST_DONE, "Знамя опущено. Час кончился — впервые.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "twobuckets"; q.name = "Колодец Двух Вёдер"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "Правило колодца: спускаешь одно ведро — поднимаешь два. "
+                         "Где-то воды на ведро меньше."),
+        QuestStageDef(QUEST_DONE, "Второе ведро поднялось само и не захотело "
+                                  "обратно. Теперь понятно, чем кормится Дрейф.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "nodark"; q.name = "Роща, где не темнеет"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "В роще светло, и свет не меняется. Отдых даром, "
+                         "и это настораживает."),
+        QuestStageDef(QUEST_DONE, "Сто четыре зарубки одинаковой старости. "
+                                  "Здесь не отдыхают — здесь остаются.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "emptyalder"; q.name = "Пустая Ольховка"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "Ольховка стоит целая, дом в дом. Людей нет, "
+                         "и не похоже, что они уходили."),
+        QuestStageDef(QUEST_DONE, "Роспись домов сходится вся, кроме последнего. "
+                                  "Бирка пустая, ключ на гвозде, приписано: «ждёт».")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "edgeq"; q.name = "Край Лоскута"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "С края видно семнадцать лоскутов, и все идут в одну "
+                         "сторону — к середине."),
+        QuestStageDef(QUEST_DONE, "Ветер Края улёгся. Стяжение не кончилось: "
+                                  "оно идёт медленно, и мы внутри.")
+    };
+    quests_.push_back(q);
+
     q = QuestDef();
     q.id = "seam"; q.name = "Шов за алтарём"; q.secret = true;
     q.stages = {
@@ -1860,6 +2248,13 @@ void Content::build_shops() {
     shops_[s.id] = s;
 
     s = ShopDef();
+    s.id = "shop_drift"; s.name = "Мешок Тихона";
+    s.goods = {"still_water", "grove_leaf", "drift_grass", "drift_cloak",
+               "stair_hood", "portal_stone", "order_draught", "antidote"};
+    s.buy_pct = 115; s.sell_pct = 55;    // проводник знает, что деваться некуда
+    shops_[s.id] = s;
+
+    s = ShopDef();
     s.id = "shop_herbs"; s.name = "Травы Лады";
     s.goods = {"herb_potion", "ap_tonic", "bread", "antidote", "salve",
                "elixir_might", "elixir_guard", "elixir_haste"};
@@ -1904,6 +2299,13 @@ void Content::build_npcs() {
     add("draftsman",  "Чертёжник Гордей", "draftsman_root",  "");
     add("stoker",     "Истопник Фома",    "stoker_root",     "");
     add("recorder",   "Протоколист Никон","recorder_root",   "");
+
+    // --- Регион V: Дрейф ---
+    add("driftwife",  "Хозяйка Улита",    "driftwife_root",  "");
+    add("halfscribe", "Секретарь Пелагея","halfscribe_root", "");
+    add("soldier",    "Ратмир, десятник", "soldier_root",    "");
+    add("grovekeeper","Ерофей, сидящий",  "grovekeeper_root","");
+    add("pathkeeper", "Проводник Тихон",  "pathkeeper_root", "shop_drift");
 }
 
 // ---------------------------------------------------------------- события
@@ -2003,6 +2405,31 @@ void Content::build_triggers() {
         "«Не дописывайте. Я ещё хожу». Открыта тайна: «Он ещё ходит».");
     add(TriggerKind::MobKilled, "kill_mshadow", 1, "firstmaster", QUEST_DONE, 1,
         "Тень Первого Мастера повержена. Кольцо он всё-таки снял.");
+
+    // --- Регион V ---
+    // Приход на лоскут двигает поиск обоза: дальше ищут уже глазами.
+    add(TriggerKind::LocationEntered, "meadow", 1, "driftway", 2, 1,
+        "Луг дрейфует. Где-то здесь кончился обоз Гурия.");
+
+    add(TriggerKind::NoteTaken, "wellrule", 1, "twobuckets", 1, 0,
+        "Правило колодца записано чужой рукой. Открыта тайна: «Колодец Двух Вёдер».");
+    add(TriggerKind::MobKilled, "kill_bucket", 1, "twobuckets", QUEST_DONE, 1,
+        "Второе ведро больше не поднимается. Где-то воды снова столько, сколько было.");
+
+    add(TriggerKind::LocationEntered, "grove", 1, "nodark", 1, 0,
+        "Свет в роще не меняется. Открыта тайна: «Роща, где не темнеет».");
+    add(TriggerKind::NoteTaken, "marks", 1, "nodark", QUEST_DONE, 1,
+        "Сто четыре зарубки, и все одинаково старые.");
+
+    add(TriggerKind::LocationEntered, "emptyalder", 1, "emptyalder", 1, 0,
+        "Ольховка стоит целая, и в ней никого. Открыта тайна: «Пустая Ольховка».");
+    add(TriggerKind::ItemGained, "own_key", 1, "emptyalder", QUEST_DONE, 1,
+        "Ключ с пустой биркой. От дома, в котором никто не жил.");
+
+    add(TriggerKind::NoteTaken, "edgeview", 1, "edgeq", 1, 0,
+        "Семнадцать лоскутов идут в одну сторону. Открыта тайна: «Край Лоскута».");
+    add(TriggerKind::MobKilled, "kill_edgewind", 1, "edgeq", QUEST_DONE, 1,
+        "Ветер Края улёгся. Стало видно, куда всё это сносит.");
 
     // Половина имени — вещь, с которой начинается вопрос о второй половине.
     add(TriggerKind::ItemGained, "half_name", 1, "halves", 1, 0,
@@ -2469,6 +2896,33 @@ void Content::build_dialogues() {
         b_shop.shop_id = "shop_books";
         b_shop.req_quest = "books"; b_shop.req_stage_min = QUEST_DONE; b_shop.req_stage_max = QUEST_DONE;
         n.options.push_back(b_shop);
+
+        // Дрейф: сорок душ из обоза так и не нашлись, а Третий узел открыт.
+        DlgOption dw_offer;
+        dw_offer.text = "А люди из обоза? Сорок человек.";
+        dw_offer.next = "driftway_offer";
+        dw_offer.req_quest  = "driftway"; dw_offer.req_stage_min  = QUEST_NONE; dw_offer.req_stage_max  = QUEST_NONE;
+        dw_offer.req_quest2 = "caravan";  dw_offer.req_stage2_min = QUEST_DONE; dw_offer.req_stage2_max = QUEST_DONE;
+        n.options.push_back(dw_offer);
+
+        DlgOption dw_done;
+        dw_done.text = "Вот путевая бирка. Обоз числится в пути.";
+        dw_done.next = "driftway_reward";
+        dw_done.req_quest = "driftway"; dw_done.req_stage_min = 2; dw_done.req_stage_max = 2;
+        dw_done.req_item = "caravan_tally"; dw_done.req_item_count = 1;
+        n.options.push_back(dw_done);
+
+        DlgOption dw_wait;
+        dw_wait.text = "Ещё ищу обоз.";
+        dw_wait.next = "driftway_wait";
+        dw_wait.req_quest = "driftway"; dw_wait.req_stage_min = 1; dw_wait.req_stage_max = 1;
+        n.options.push_back(dw_wait);
+
+        DlgOption dw_after;
+        dw_after.text = "Так что теперь с обозом?";
+        dw_after.next = "driftway_after";
+        dw_after.req_quest = "driftway"; dw_after.req_stage_min = QUEST_DONE; dw_after.req_stage_max = QUEST_DONE;
+        n.options.push_back(dw_after);
 
         n.options.push_back(bye("В другой раз."));
         add(n);
@@ -3435,6 +3889,498 @@ void Content::build_dialogues() {
                  "кольцо. Его никто не забирал двести лет.\n"
                  "Теперь и не заберёт.";
         n.options.push_back(bye("Бывает."));
+        add(n);
+    }
+
+    // ================= Регион V: Дрейф =================
+
+    {
+        DlgNode n; n.id = "driftway_offer";
+        n.text = "Гурий перестаёт улыбаться, и без улыбки лицо у него старое.\n"
+                 "— Сорок. Я их всех по именам знаю, я же нанимал.\n"
+                 "\n"
+                 "Столы в сарае накрыты до сих пор, а людей нет. Значит, встали\n"
+                 "из-за стола и куда-то пошли, и это «куда-то» на картах не значится.\n"
+                 "\n"
+                 "Ты был у орденских. Говорят, у них узел сломан и через него\n"
+                 "уходит всё, что ни к чему не пристало.\n"
+                 "\n"
+                 "Пойди туда. Не за ними — за ответом. Я хочу знать, живы ли,\n"
+                 "и если нет, то с какого дня считать.";
+        DlgOption take;
+        take.text = "Схожу в Дрейф.";
+        take.next = "driftway_wait";
+        take.set_quest = "driftway"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Мёртвых не ищут."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "driftway_wait";
+        n.text = "— Через сломанный узел. Другого пути мне не назвали.\n"
+                 "И вот что: если найдёшь их живыми — не радуйся сразу.\n"
+                 "Сорок человек, которые двести лет не постарели, — это не\n"
+                 "«живы». Это что-то другое, и я не знаю, как оно называется.";
+        n.options.push_back(bye("Разберусь на месте."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "driftway_reward";
+        n.text = "Гурий берёт бирку, поворачивает к свету, читает свою же запись\n"
+                 "двухсотлетней давности и кладёт на прилавок.\n"
+                 "\n"
+                 "— «В пути». Ну да. Формально всё верно.\n"
+                 "\n"
+                 "Он долго молчит.\n"
+                 "\n"
+                 "— Знаешь, что хуже всего? Что Улита ждёт утра. Она хорошая была,\n"
+                 "стряпуха каких мало, и она ждёт утра, а утро не придёт.\n"
+                 "Я бы лучше похоронил. Хоронить я умею.\n"
+                 "\n"
+                 "Бирку оставь себе. Мне на неё смотреть нечем.";
+        DlgOption take;
+        take.text = "Взять плату. [900 опыта]";
+        take.set_quest = "driftway"; take.set_stage = QUEST_DONE;
+        take.give_gold = 700; take.give_exp = 900;
+        take.give_item = "portal_stone"; take.give_count = 2;
+        n.options.push_back(take);
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "driftway_after";
+        n.text = "— Числится в пути. Так и буду писать в книге, пока книга есть.\n"
+                 "\n"
+                 "А вот подводы я из описи вычеркнул. Подводы-то точно не вернутся.";
+        n.options.push_back(bye("Бывай, Гурий."));
+        add(n);
+    }
+
+    // --- Хозяйка Улита: завтра, которое не наступит ---
+    {
+        DlgNode n; n.id = "driftwife_root";
+        n.text = "Женщина мешает похлёбку в котле над холодными углями.\n"
+                 "— Садись, коли с дороги. Утром выходим, так что ешь сейчас.";
+
+        DlgOption tally;
+        tally.text = "Покажи путевую бирку обоза.";
+        tally.next = "driftwife_tally";
+        tally.req_quest = "driftway"; tally.req_stage_min = 2; tally.req_stage_max = 2;
+        n.options.push_back(tally);
+
+        DlgOption offer;
+        offer.text = "Помочь чем-нибудь?";
+        offer.next = "water_offer";
+        offer.req_quest = "water"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption done;
+        done.text = "Вода. Только вёдер вышло два.";
+        done.next = "water_reward";
+        done.req_quest = "water"; done.req_stage_min = 1; done.req_stage_max = 1;
+        done.req_item = "two_bucket"; done.req_item_count = 1;
+        n.options.push_back(done);
+
+        DlgOption wait;
+        wait.text = "Иду за водой.";
+        wait.next = "water_wait";
+        wait.req_quest = "water"; wait.req_stage_min = 1; wait.req_stage_max = 1;
+        n.options.push_back(wait);
+
+        DlgOption after;
+        after.text = "Как ты?";
+        after.next = "water_after";
+        after.req_quest = "water"; after.req_stage_min = QUEST_DONE; after.req_stage_max = QUEST_DONE;
+        n.options.push_back(after);
+
+        n.options.push_back(bye("Спасибо, я сыт."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "driftwife_tally";
+        n.text = "— Бирка? Вон на гвозде висит, где ей и висеть.\n"
+                 "Двенадцать подвод, сорок душ. Всё в пути, всё как надо.\n"
+                 "\n"
+                 "Она снимает бирку и подаёт, не глядя.\n"
+                 "\n"
+                 "— Завтра допишу, что дошли. Я каждый вечер собираюсь дописать.";
+        DlgOption take;
+        take.text = "Взять бирку.";
+        take.give_item = "caravan_tally"; take.give_count = 1;
+        n.options.push_back(take);
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "water_offer";
+        n.text = "— Помочь? Помоги, отчего нет. Воды принеси из колодца.\n"
+                 "Одно ведро, больше не надо: нам к утру только похлёбку долить.\n"
+                 "\n"
+                 "Колодец за рощей. Ходить недалеко, только я туда не хожу.\n"
+                 "Не почему-то, а просто не хожу. Некогда всё.";
+        DlgOption take;
+        take.text = "Принесу ведро.";
+        take.next = "water_wait";
+        take.set_quest = "water"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Сама сходишь."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "water_wait";
+        n.text = "— Одно ведро. Слышишь — одно.\n"
+                 "Больше в котёл не влезет, а лишнюю выливать жалко.";
+        n.options.push_back(bye("Понял."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "water_reward";
+        n.text = "Улита берёт первое ведро и ставит у котла. Тянется за вторым —\n"
+                 "и не берёт.\n"
+                 "\n"
+                 "Долго стоит с протянутой рукой.\n"
+                 "\n"
+                 "— Два.\n"
+                 "\n"
+                 "Потом садится на лавку, вытирает руки о передник и говорит уже\n"
+                 "тише, без хозяйского напева:\n"
+                 "\n"
+                 "— Я эту похлёбку сколько раз ставила? Сегодня, вчера, позавчера.\n"
+                 "И каждый раз на утро. И каждый раз вечер.\n"
+                 "\n"
+                 "Она смотрит на второе ведро.\n"
+                 "\n"
+                 "— Не говори мне ничего. Я сама, по-своему. Только не сегодня.";
+        DlgOption take;
+        take.text = "Оставить оба ведра. [850 опыта]";
+        take.set_quest = "water"; take.set_stage = QUEST_DONE;
+        take.take_item = "two_bucket"; take.take_count = 1;
+        take.give_item = "drift_cloak"; take.give_count = 1;
+        take.give_gold = 300; take.give_exp = 850;
+        n.options.push_back(take);
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "water_after";
+        n.text = "— Похлёбку я больше не ставлю. Стоит одна, старая, и пусть стоит.\n"
+                 "\n"
+                 "Странно: думала, станет хуже. А стало просто тихо.";
+        n.options.push_back(bye("Держись, Улита."));
+        add(n);
+    }
+
+    // --- Секретарь Пелагея: вторая половина списков ---
+    {
+        DlgNode n; n.id = "halfscribe_root";
+        n.text = "Стол вынесен прямо на срез улицы, к самому обрыву. За ним\n"
+                 "сидит женщина и правит списки.\n"
+                 "— Не заслоняй свет. Мне отсюда видно их сторону.";
+
+        DlgOption offer;
+        offer.text = "Что это за списки?";
+        offer.next = "wholename_offer";
+        offer.req_quest = "wholename"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption done;
+        done.text = "У меня половина имени с той стороны.";
+        done.next = "wholename_reward";
+        done.req_quest = "wholename"; done.req_stage_min = 1; done.req_stage_max = 1;
+        done.req_item = "half_name"; done.req_item_count = 1;
+        n.options.push_back(done);
+
+        DlgOption wait;
+        wait.text = "Половину ещё не принёс.";
+        wait.next = "wholename_wait";
+        wait.req_quest = "wholename"; wait.req_stage_min = 1; wait.req_stage_max = 1;
+        n.options.push_back(wait);
+
+        DlgOption shout;
+        shout.text = "Вы что, перекрикиваетесь через обрыв?";
+        shout.next = "halfscribe_shout";
+        n.options.push_back(shout);
+
+        n.options.push_back(bye("Не буду мешать."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "wholename_offer";
+        n.text = "— Списки жителей. Наша половина.\n"
+                 "\n"
+                 "Город разрезало не по улицам, а по людям. Каждое имя пополам:\n"
+                 "начало осталось у них, конец у нас. Четыре тысячи двести имён,\n"
+                 "и ни одного целого.\n"
+                 "\n"
+                 "Я правлю их двести лет и ни разу не смогла закончить строку.\n"
+                 "\n"
+                 "Принеси хоть одну половину с той стороны. Одну. Мне хватит,\n"
+                 "чтобы знать, что это вообще возможно.";
+        DlgOption take;
+        take.text = "Принесу.";
+        take.next = "wholename_wait";
+        take.set_quest = "wholename"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Это невозможно."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "wholename_wait";
+        n.text = "— Клочок списка. У них он валяется где попало: у них ведь\n"
+                 "начала имён, а начало без конца читается легко, и они не поняли,\n"
+                 "что чего-то не хватает.\n"
+                 "\n"
+                 "Мы поняли сразу. Конец без начала не читается вовсе.";
+        n.options.push_back(bye("Найду."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "wholename_reward";
+        n.text = "Пелагея прикладывает половину к половине. Обрыв к обрыву.\n"
+                 "Сходится.\n"
+                 "\n"
+                 "Она читает имя вслух — целиком, по слогам, как читают дети.\n"
+                 "Потом ещё раз. Потом сшивает половинки ниткой, прямо по бумаге,\n"
+                 "грубым швом, и вешает на шею.\n"
+                 "\n"
+                 "— Одно из четырёх тысяч двухсот. За двести лет.\n"
+                 "\n"
+                 "— Возьми себе. Я перепишу, у меня рука привычная, а тебе носить.\n"
+                 "Пусть у кого-нибудь будет хоть одно целое имя.";
+        DlgOption take;
+        take.text = "Принять имя. [950 опыта]";
+        take.set_quest = "wholename"; take.set_stage = QUEST_DONE;
+        take.take_item = "half_name"; take.take_count = 1;
+        take.give_item = "whole_name"; take.give_count = 1;
+        take.give_gold = 400; take.give_exp = 950;
+        n.options.push_back(take);
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "halfscribe_shout";
+        n.text = "— Перекрикивались. Первые лет тридцать.\n"
+                 "\n"
+                 "Слышно отлично: четыре шага, а между ними всё небо. Мы им кричали\n"
+                 "имена, они нам. Записывали. Ошибались.\n"
+                 "\n"
+                 "Потом кто-то с их стороны крикнул: «а зачем?» — и никто не нашёлся\n"
+                 "ответить. С тех пор молчим и машем по праздникам.";
+        n.options.push_back(bye("Понятно."));
+        add(n);
+    }
+
+    // --- Ратмир: час, который не кончается ---
+    {
+        DlgNode n; n.id = "soldier_root";
+        n.text = "Десятник сидит на щите, воткнув меч в землю, и смотрит на запад.\n"
+                 "— Держим до темноты. Ты вовремя: скоро начнётся.";
+
+        DlgOption offer;
+        offer.text = "Что начнётся?";
+        offer.next = "lasthour_offer";
+        offer.req_quest = "lasthour"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption done;
+        done.text = "Знамя у меня. Знаменосец больше не поднимет.";
+        done.next = "lasthour_reward";
+        done.req_quest = "lasthour"; done.req_stage_min = 1; done.req_stage_max = 1;
+        done.req_item = "torn_banner"; done.req_item_count = 1;
+        n.options.push_back(done);
+
+        DlgOption wait;
+        wait.text = "Ещё не добрался до знаменосца.";
+        wait.next = "lasthour_wait";
+        wait.req_quest = "lasthour"; wait.req_stage_min = 1; wait.req_stage_max = 1;
+        n.options.push_back(wait);
+
+        DlgOption after;
+        after.text = "Ну что, стемнело?";
+        after.next = "lasthour_after";
+        after.req_quest = "lasthour"; after.req_stage_min = QUEST_DONE; after.req_stage_max = QUEST_DONE;
+        n.options.push_back(after);
+
+        n.options.push_back(bye("Держитесь."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "lasthour_offer";
+        n.text = "— Последний час. Он у нас один, и он идёт по кругу.\n"
+                 "\n"
+                 "Приказ был: держать до темноты, подмога к вечеру. Мы держали.\n"
+                 "Темноты не случилось. Вечера тоже.\n"
+                 "\n"
+                 "Пока знамя поднято — час начинается заново: мы встаём, строимся,\n"
+                 "нас сминают, и мы опять встаём. Я это помню весь. Каждый раз весь.\n"
+                 "\n"
+                 "Знаменосец не отдаст. Он хороший был мужик и потому не отдаст:\n"
+                 "уронить знамя — это ведь позор, а он про позор помнит, а про\n"
+                 "остальное уже нет.\n"
+                 "\n"
+                 "Сними с него знамя. Как хочешь.";
+        DlgOption take;
+        take.text = "Схожу к знаменосцу.";
+        take.next = "lasthour_wait";
+        take.set_quest = "lasthour"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Это не мой бой."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "lasthour_wait";
+        n.text = "— Он на правом крыле, где всегда стоял.\n"
+                 "\n"
+                 "И вот что: он не враг тебе. Он вообще уже никому не враг.\n"
+                 "Просто держит древко.";
+        n.options.push_back(bye("Найду."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "lasthour_reward";
+        n.text = "Ратмир берёт обрывок, разглаживает на колене и смотрит на запад\n"
+                 "ещё раз — уже по-другому, как смотрят не на срок, а просто так.\n"
+                 "\n"
+                 "— Темнеет.\n"
+                 "\n"
+                 "Он говорит это спокойно, будто отмечает погоду. Потом встаёт,\n"
+                 "выдёргивает меч из земли и подаёт его тебе рукоятью вперёд.\n"
+                 "\n"
+                 "— Держи. Мне до вечера всё равно не понадобится, а вечер вот он.\n"
+                 "\n"
+                 "— Ребятам скажу, что подмога пришла. Ты ведь и есть подмога,\n"
+                 "просто опоздала. Ничего. Все опаздывают.";
+        DlgOption take;
+        take.text = "Принять клинок. [1000 опыта]";
+        take.set_quest = "lasthour"; take.set_stage = QUEST_DONE;
+        take.take_item = "torn_banner"; take.take_count = 1;
+        take.give_item = "hour_blade"; take.give_count = 1;
+        take.give_gold = 500; take.give_exp = 1000;
+        n.options.push_back(take);
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "lasthour_after";
+        n.text = "— Стемнело. Сидим.\n"
+                 "\n"
+                 "Оказалось, после последнего часа ничего особенного не бывает.\n"
+                 "Просто следующий. Мы уж и забыли, что так можно.";
+        n.options.push_back(bye("Доброй ночи."));
+        add(n);
+    }
+
+    // --- Ерофей: тот, кто остался в роще ---
+    {
+        DlgNode n; n.id = "grovekeeper_root";
+        n.text = "Человек сидит под деревом, привалившись к стволу, и щурится\n"
+                 "на свет, который не меняется.\n"
+                 "— Садись. Отдых тут даром, а это редкость.";
+
+        DlgOption rest;
+        rest.text = "Посидеть у дерева.";
+        rest.next = "grove_rest";
+        rest.rest = true;
+        n.options.push_back(rest);
+
+        DlgOption why;
+        why.text = "Почему ты не уходишь?";
+        why.next = "grove_why";
+        n.options.push_back(why);
+
+        DlgOption marks;
+        marks.text = "Я видел зарубки на стволе.";
+        marks.next = "grove_marks";
+        marks.req_note = "marks";
+        n.options.push_back(marks);
+
+        n.options.push_back(bye("Пойду."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "grove_rest";
+        n.text = "Ты садишься, и усталость уходит сразу вся, без остатка,\n"
+                 "как будто её вынули. Свет не сдвинулся ни на палец.";
+        n.options.push_back(bye("Хорошо тут."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "grove_why";
+        n.text = "— А куда? Везде хуже.\n"
+                 "\n"
+                 "Тут не темнеет, не холодает, не хочется есть. Раны заживают\n"
+                 "к тому времени, как соберёшься их перевязать.\n"
+                 "\n"
+                 "Он поводит рукой вокруг.\n"
+                 "\n"
+                 "— Одна беда: раз ничего не проходит, то и ничего не проходит.\n"
+                 "Понимаешь? Ни боль, ни ожидание, ни то, чего стыдно.\n"
+                 "Всё как было в первый день, так и есть.\n"
+                 "\n"
+                 "Я тут не отдыхаю, чужак. Я тут стою на месте, и мне это подают\n"
+                 "как отдых.";
+        n.options.push_back(bye("Невесело."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "grove_marks";
+        n.text = "— Сто четыре. Резал каждое утро, пока не понял, что утра нет:\n"
+                 "есть я, который решил, что пора резать.\n"
+                 "\n"
+                 "Сто четыре моих решения, а не сто четыре дня.\n"
+                 "\n"
+                 "После этого бросил. Считать себя — последнее дело.";
+        n.options.push_back(bye("Береги себя."));
+        add(n);
+    }
+
+    // --- Тихон: единственная надёжная дорога ---
+    {
+        DlgNode n; n.id = "pathkeeper_root";
+        n.text = "На тропе стоит человек с мешком и палкой и смотрит, как ты идёшь.\n"
+                 "— Идёшь правильно. Это уже много: тут почти все идут неправильно.";
+
+        DlgOption why;
+        why.text = "Куда ведёт эта тропа?";
+        why.next = "path_why";
+        n.options.push_back(why);
+
+        DlgOption drift;
+        drift.text = "Здесь все знают, что дрейфуют?";
+        drift.next = "path_drift";
+        n.options.push_back(drift);
+
+        DlgOption trade;
+        trade.text = "Что в мешке?";
+        trade.open_shop = true;
+        n.options.push_back(trade);
+
+        n.options.push_back(bye("Пойду дальше."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "path_why";
+        n.text = "— Домой. Единственная отсюда, которая правда домой.\n"
+                 "\n"
+                 "Остальные тоже куда-то ведут, и по ним даже приходят. Только\n"
+                 "приходят не туда, откуда вышли, а в похожее место. Разница\n"
+                 "маленькая: у кого дом на две ступени выше, у кого жена чуть\n"
+                 "добрее. Живут потом и не жалуются.\n"
+                 "\n"
+                 "Я так не хочу. Я хочу в свой дом, даже если он хуже.";
+        n.options.push_back(bye("Понимаю."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "path_drift";
+        n.text = "— Кто-то догадывается. Из здешних — я один.\n"
+                 "\n"
+                 "Остальным незачем. Улита ждёт утра, десятник держит до темноты,\n"
+                 "Ерофей отдыхает. Скажи им — и что? Утро не придёт быстрее.\n"
+                 "\n"
+                 "Он поправляет мешок.\n"
+                 "\n"
+                 "— Я не добрый. Я просто пробовал говорить. Двоим сказал.\n"
+                 "Один пошёл к Краю и шагнул, второй остался и перестал есть.\n"
+                 "Больше не говорю.\n"
+                 "\n"
+                 "А ты говори, если считаешь нужным. Ты уйдёшь, а мне тут жить.";
+        n.options.push_back(bye("Никому не скажу."));
         add(n);
     }
 

@@ -28,4 +28,5 @@ spawn 12 8 node_guard 2 4
 spawn 36 9 node_guard 2 4
 exit 24 15 node2 37 4
 exit 8 12 grave 24 15
+exit 24 4 meadow 24 14 quest=node3q:100 deny=В разрыв тянет сквозняком. Шагнуть туда, не зная куда, — значит уйти совсем.
 end

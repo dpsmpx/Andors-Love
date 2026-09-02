@@ -35,4 +35,5 @@ spawn 35 13 wraith 2 4
 spawn 42 9 keeper 1 2
 exit 2 9 ruins 44 9
 exit 31 9 vault 3 9 key=seam_key quest=seam:1 deny=Северная грань алтаря глухая. Здесь что-то есть, но не для тебя — пока.
+exit 15 16 homepath 44 9 quest=driftway:2 deny=Южная ниша глухая. По тропе, которой ты не прошёл, обратно не ходят.
 end
