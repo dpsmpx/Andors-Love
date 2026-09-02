@@ -69,6 +69,7 @@ void Game::new_game(const std::string& name, const std::string& race,
 
     if (const Location* l = here()) spawn_initial(*l);
     chests_.clear();
+    notes_.clear();
     {
         const RaceDef* r  = c.race(plr_.race);
         const SpecDef* sp = c.spec(plr_.spec);
@@ -608,6 +609,113 @@ void Game::move_mobs() {
     }
 }
 
+// ------------------------------------------------------ книги и записки
+
+Book* Game::book(const std::string& id) {
+    for (Book& b : plr_.books)
+        if (b.id == id) return &b;
+    return nullptr;
+}
+
+const Book* Game::book(const std::string& id) const {
+    for (const Book& b : plr_.books)
+        if (b.id == id) return &b;
+    return nullptr;
+}
+
+bool Game::start_book(const std::string& title) {
+    if (static_cast<int>(plr_.books.size()) >= BOOK_MAX_COUNT) {
+        msg("Библиотека переполнена: больше " + to_str(BOOK_MAX_COUNT) + " не унести.");
+        return false;
+    }
+    if (count_item("book_blank") <= 0) { msg("Нужна чистая книга."); return false; }
+    remove_item("book_blank", 1);
+
+    Book b;
+    b.id    = "b" + to_str(plr_.next_book++);
+    b.title = trunc(title.empty() ? "Без названия" : title, BOOK_TITLE_MAX);
+    b.lines.push_back("");
+    plr_.books.push_back(b);
+    msg("Начата книга «" + b.title + "». Библиотека — клавиша B.");
+    return true;
+}
+
+bool Game::delete_book(const std::string& id) {
+    for (std::size_t i = 0; i < plr_.books.size(); ++i) {
+        if (plr_.books[i].id != id) continue;
+        const std::string title = plr_.books[i].title;
+        plr_.books.erase(plr_.books.begin() + static_cast<long>(i));
+        msg("Выброшено: «" + title + "».");
+        return true;
+    }
+    return false;
+}
+
+bool Game::book_set_title(const std::string& id, const std::string& title) {
+    Book* b = book(id);
+    if (!b || b->readonly) return false;
+    b->title = trunc(title.empty() ? "Без названия" : title, BOOK_TITLE_MAX);
+    return true;
+}
+
+bool Game::book_set_line(const std::string& id, int index, const std::string& text) {
+    Book* b = book(id);
+    if (!b || b->readonly) return false;
+    if (index < 0 || index >= static_cast<int>(b->lines.size())) return false;
+    b->lines[static_cast<std::size_t>(index)] = trunc(text, BOOK_MAX_CHARS);
+    return true;
+}
+
+bool Game::book_insert_line(const std::string& id, int index, const std::string& text) {
+    Book* b = book(id);
+    if (!b || b->readonly) return false;
+    if (static_cast<int>(b->lines.size()) >= BOOK_MAX_LINES) {
+        msg("В книге больше " + to_str(BOOK_MAX_LINES) + " строк не помещается.");
+        return false;
+    }
+    if (index < 0) index = 0;
+    if (index > static_cast<int>(b->lines.size())) index = static_cast<int>(b->lines.size());
+    b->lines.insert(b->lines.begin() + index, trunc(text, BOOK_MAX_CHARS));
+    return true;
+}
+
+bool Game::book_remove_line(const std::string& id, int index) {
+    Book* b = book(id);
+    if (!b || b->readonly) return false;
+    if (index < 0 || index >= static_cast<int>(b->lines.size())) return false;
+    if (b->lines.size() <= 1) { b->lines[0].clear(); return true; }  // последнюю чистим
+    b->lines.erase(b->lines.begin() + index);
+    return true;
+}
+
+bool Game::note_taken(const std::string& loc_id, int index) const {
+    return notes_.count(loc_id + ":" + to_str(index)) != 0;
+}
+
+bool Game::take_note(int index) {
+    const Location* loc = here();
+    if (!loc || index < 0 || index >= static_cast<int>(loc->notes.size())) return false;
+    if (note_taken(loc->id, index)) return false;
+
+    const MapNote& mn = loc->notes[static_cast<std::size_t>(index)];
+    const NoteDef* nd = Content::get().note(mn.note_id);
+    if (!nd) { msg("Листок рассыпался в руках."); notes_.insert(loc->id + ":" + to_str(index)); return false; }
+
+    notes_.insert(loc->id + ":" + to_str(index));
+
+    Book b;
+    b.id       = "n_" + nd->id;
+    b.title    = nd->title;
+    b.lines    = nd->lines;
+    b.readonly = true;
+    if (!book(b.id)) plr_.books.push_back(b);
+
+    // Счётчик позволяет требовать находку в диалоге.
+    plr_.counters["note_" + nd->id] = 1;
+    msg("Найдена записка: «" + nd->title + "». Читать — клавиша B.");
+    return true;
+}
+
 bool Game::chest_opened(const std::string& loc_id, int index) const {
     return chests_.count(loc_id + ":" + to_str(index)) != 0;
 }
@@ -777,6 +885,9 @@ Bump Game::try_move(int dx, int dy) {
         }
     }
 
+    int ni = loc->note_index_at(np);
+    if (ni >= 0 && !note_taken(loc->id, ni)) { take_note(ni); return Bump::Note; }
+
     int idx = loc->item_index_at(np);
     if (idx >= 0) {
         const std::string key = loc->id + ":" + to_str(idx);
@@ -815,6 +926,10 @@ bool Game::option_available(const DlgOption& o) const {
         int c = (it == plr_.counters.end()) ? 0 : it->second;
         if (o.req_counter_min >= 0 && c < o.req_counter_min) return false;
         if (o.req_counter_max >= 0 && c > o.req_counter_max) return false;
+    }
+    if (!o.req_note.empty()) {
+        auto it = plr_.counters.find("note_" + o.req_note);
+        if (it == plr_.counters.end() || it->second <= 0) return false;
     }
     if (!o.req_item.empty() && count_item(o.req_item) < o.req_item_count) return false;
     return true;
@@ -856,7 +971,7 @@ void Game::apply_option(const DlgOption& o, const std::string& npc_shop,
         msg("Открыт навык «Мастер нулевой точки»: теперь ты умеешь ставить порталы (P).");
     }
     if (o.give_exp > 0) grant_exp(o.give_exp);
-    if (o.open_shop && shop_out) *shop_out = npc_shop;
+    if (o.open_shop && shop_out) *shop_out = o.shop_id.empty() ? npc_shop : o.shop_id;
     if (o.open_enchant && enchant_out) *enchant_out = true;
 }
 

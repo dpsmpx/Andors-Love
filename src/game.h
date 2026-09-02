@@ -38,6 +38,9 @@ struct Player {
     std::vector<Portal>       portals;
     bool                      portal_master = false;
 
+    std::vector<Book>         books;          // библиотека героя
+    int                       next_book = 1;  // счётчик для кодов книг
+
     std::array<std::string, static_cast<std::size_t>(Slot::Count)> equipped;
     std::vector<ItemStack>    inv;
     std::map<std::string,int> skills;    // id навыка -> ранг
@@ -80,7 +83,7 @@ constexpr int AP_ITEM_COST  = 3;
 constexpr int RESPAWN_TURNS = 40;
 
 enum class Bump {
-    Moved, Blocked, Npc, Sign, Bed, Exit, Item, Combat, Chest, Portal
+    Moved, Blocked, Npc, Sign, Bed, Exit, Item, Combat, Chest, Portal, Note
 };
 
 constexpr int PORTAL_LIMIT = 4;
@@ -124,6 +127,23 @@ public:
     // which == "*" — снять все вредные; иначе конкретный эффект.
     static int  cure_effects(std::vector<ActiveEffect>& list, const std::string& which);
     static std::string effects_line(const std::vector<ActiveEffect>& list);
+
+    // --- книги и записки ---
+    const std::vector<Book>& books() const { return plr_.books; }
+    Book*       book(const std::string& id);
+    const Book* book(const std::string& id) const;
+    // Тратит чистую книгу и заводит новую запись в библиотеке.
+    bool  start_book(const std::string& title);
+    bool  delete_book(const std::string& id);
+    // Правки идут через игру, а не напрямую по указателю: здесь же
+    // проверяются пределы длины и запрет на правку найденных записок.
+    bool  book_set_title(const std::string& id, const std::string& title);
+    bool  book_set_line(const std::string& id, int index, const std::string& text);
+    bool  book_insert_line(const std::string& id, int index, const std::string& text);
+    bool  book_remove_line(const std::string& id, int index);
+
+    bool  note_taken(const std::string& loc_id, int index) const;
+    bool  take_note(int index);          // записка в текущей локации
 
     // --- сундуки ---
     bool chest_opened(const std::string& loc_id, int index) const;
@@ -224,6 +244,7 @@ private:
     int                      respawn_left_ = RESPAWN_TURNS;
     std::set<std::string>    taken_;      // "локация:индекс" подобранных предметов
     std::set<std::string>    chests_;     // "локация:индекс" вскрытых сундуков
+    std::set<std::string>    notes_;      // "локация:индекс" подобранных записок
     std::set<std::string>    visited_;    // локации, где уже расставлены мобы
     std::vector<std::string> log_;
     mutable std::string      err_;

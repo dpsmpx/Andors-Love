@@ -52,6 +52,12 @@ const MapNpc* Location::npc_at(Vec2 p) const {
     return nullptr;
 }
 
+int Location::note_index_at(Vec2 p) const {
+    for (std::size_t i = 0; i < notes.size(); ++i)
+        if (notes[i].pos == p) return static_cast<int>(i);
+    return -1;
+}
+
 int Location::chest_index_at(Vec2 p) const {
     for (std::size_t i = 0; i < chests.size(); ++i)
         if (chests[i].pos == p) return static_cast<int>(i);
@@ -183,6 +189,12 @@ bool World::parse(std::istream& in, const std::string& id, const std::string& sr
                 ch.items.push_back(ItemStack(entry.substr(0, colon), n));
             }
             loc.chests.push_back(ch);
+
+        } else if (key == "note") {
+            MapNote nt;
+            if (!(ls >> nt.pos.x >> nt.pos.y >> nt.note_id))
+                return fail("note <x> <y> <код записки>");
+            loc.notes.push_back(nt);
 
         } else if (key == "bed") {
             Vec2 b;

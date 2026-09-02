@@ -49,6 +49,7 @@ constexpr char ITEM   = '*';
 constexpr char BED    = '&';
 constexpr char CHEST  = 'C';   // сундук
 constexpr char PORTAL = 'O';   // портал, поставленный игроком
+constexpr char NOTE   = '?';   // записка, лежащая в мире
 } // namespace glyph
 
 char tile_glyph(Tile t);
@@ -85,7 +86,7 @@ inline Stats operator+(Stats a, const Stats& b) { a += b; return a; }
 
 // ---------- предметы ----------
 
-enum class ItemKind { Misc, Weapon, Armor, Helmet, Shield, Ring, Consumable };
+enum class ItemKind { Misc, Weapon, Armor, Helmet, Shield, Ring, Consumable, Book };
 
 enum class Slot { Weapon = 0, Armor, Helmet, Shield, Ring, Count };
 
@@ -136,6 +137,23 @@ struct ItemStack {
     ItemStack() = default;
     ItemStack(const std::string& i, int c) : id(i), count(c) {}
 };
+
+// ---------- книги и записки ----------
+// Книга живёт не в сумке, а в библиотеке героя: у каждой свой текст, а сумка
+// хранит стопки одинаковых предметов и такого не выдержала бы. Найденные
+// записки попадают туда же, но только для чтения.
+
+struct Book {
+    std::string              id;
+    std::string              title;
+    std::vector<std::string> lines;
+    bool                     readonly = false;
+};
+
+constexpr int BOOK_MAX_COUNT = 24;   // книг в библиотеке
+constexpr int BOOK_MAX_LINES = 40;   // строк в книге
+constexpr int BOOK_MAX_CHARS = 56;   // видимых символов в строке
+constexpr int BOOK_TITLE_MAX = 28;
 
 // ---------- порталы ----------
 // Игрок ставит их сам, получив соответствующий навык. Шаг на портал

@@ -30,6 +30,7 @@ sign 12 6 Ольховка. Восточные ворота ведут в Оль
 sign 44 9 За воротами начинается лес. Волки выходят к самой тропе.
 item 11 16 bread 2
 item 30 16 torch 1
+note 30 2 child
 chest 44 3 40 - bread:2 herb_potion:1
 spawn 20 15 rat 2 4
 spawn 44 15 rat 1 3

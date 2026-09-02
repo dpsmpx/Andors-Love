@@ -64,6 +64,7 @@ const char* kind_name(ItemKind k) {
         case ItemKind::Shield:     return "щит";
         case ItemKind::Ring:       return "кольцо";
         case ItemKind::Consumable: return "расходник";
+        case ItemKind::Book:       return "книга";
         default:                   return "разное";
     }
 }

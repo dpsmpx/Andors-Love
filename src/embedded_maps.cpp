@@ -34,6 +34,8 @@ item 8 13 glow_moss 1
 item 27 4 glow_moss 1
 item 31 14 glow_moss 1
 item 12 12 torch 1
+note 13 12 miner
+note 38 7 proto
 chest 11 4 60 - antidote:2 frost_shard:1
 chest 40 14 120 - ember:1 elixir_guard:1
 spawn 8 6 spider 2 4
@@ -73,6 +75,12 @@ sign 23 15 Старая дорога на юг, к развалинам заст
 item 8 13 herb_potion 1
 item 33 16 bread 1
 item 15 4 torch 1
+item 10 7 oak_gall 1
+item 28 12 oak_gall 1
+item 35 15 oak_gall 1
+item 18 2 oak_gall 1
+note 12 3 ink
+note 26 4 hermit
 chest 8 3 25 - herb_potion:1 whetstone:1
 spawn 12 6 wolf 3 5
 spawn 30 11 wolf 3 5
@@ -109,6 +117,7 @@ objects
 sign 24 5 Застава сожжена давно. Сейчас тут живут не солдаты.
 item 8 10 bread 2
 item 38 6 whetstone 1
+note 15 6 watch
 chest 18 10 90 - elixir_might:1 ember:1
 chest 34 12 300 rusty_key plate_armor:1 rune_stone:1
 spawn 12 9 brigand 3 4
@@ -145,6 +154,7 @@ sign 5 9 Стены гладкие, будто их не строили, а вы
 sign 27 4 Здесь сходятся линии. Нулевая точка близко.
 item 15 3 rune_stone 1
 item 15 15 frost_shard 1
+note 15 4 zero
 chest 43 9 250 - rune_stone:1 elixir_haste:1 portal_stone:1
 chest 10 13 140 - antidote:2 salve:1
 spawn 14 6 wraith 2 4
@@ -187,6 +197,7 @@ sign 12 6 Ольховка. Восточные ворота ведут в Оль
 sign 44 9 За воротами начинается лес. Волки выходят к самой тропе.
 item 11 16 bread 2
 item 30 16 torch 1
+note 30 2 child
 chest 44 3 40 - bread:2 herb_potion:1
 spawn 20 15 rat 2 4
 spawn 44 15 rat 1 3

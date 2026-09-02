@@ -14,6 +14,7 @@ struct MapNpc  { Vec2 pos; std::string npc_id; };
 struct MapItem { Vec2 pos; std::string item_id; int count = 1; };
 struct MapExit { Vec2 pos; std::string target; Vec2 dest; };
 struct MapSign { Vec2 pos; std::string text; };
+struct MapNote { Vec2 pos; std::string note_id; };
 
 // Сундук: содержимое задаётся картой, факт вскрытия — состояние игры.
 struct MapChest {
@@ -40,6 +41,7 @@ struct Location {
     std::vector<MapItem>   items;
     std::vector<MapExit>   exits;
     std::vector<MapSign>   signs;
+    std::vector<MapNote>   notes;
     std::vector<Vec2>      beds;
     std::vector<MapChest>  chests;
     std::vector<SpawnZone> zones;
@@ -62,6 +64,7 @@ struct Location {
     // Индекс предмета в списке items или -1. Индекс служит стабильным
     // идентификатором в сохранении.
     int            item_index_at(Vec2 p) const;
+    int            note_index_at(Vec2 p) const;
 };
 
 class World {

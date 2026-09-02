@@ -9,7 +9,7 @@
 namespace {
 
 constexpr const char* MAGIC   = "andors-love-save";
-constexpr int         VERSION = 2;
+constexpr int         VERSION = 3;
 
 void write_stats(std::ostream& os, const char* key, const Stats& s) {
     os << key << ' ' << s.max_hp << ' ' << s.max_ap << ' ' << s.attack << ' '
@@ -74,6 +74,17 @@ bool Game::save_to(const std::string& path) const {
         out << "taken " << t << '\n';
     for (const std::string& ch : chests_)
         out << "chest " << ch << '\n';
+    for (const std::string& nt : notes_)
+        out << "note " << nt << '\n';
+
+    out << "nextbook " << plr_.next_book << '\n';
+    // Строки книги пишутся сразу за её заголовком: при чтении они попадают
+    // в последнюю объявленную книгу, порядок сохраняется.
+    for (const Book& b : plr_.books) {
+        out << "book " << b.id << ' ' << (b.readonly ? 1 : 0) << ' ' << b.title << '\n';
+        for (const std::string& line : b.lines)
+            out << "bookline " << b.id << ' ' << line << '\n';
+    }
     for (const std::string& v : visited_)
         out << "visited " << v << '\n';
     for (const Mob& m : mobs_) {
@@ -124,10 +135,11 @@ bool Game::load_from(const std::string& path) {
     p.effects.clear();
     p.enchants.clear();
     p.portals.clear();
+    p.books.clear();
     for (std::string& e : p.equipped) e.clear();
 
     std::vector<Mob>      mobs;
-    std::set<std::string> taken, visited, chests;
+    std::set<std::string> taken, visited, chests, notes;
     int      turn = 0, respawn = RESPAWN_TURNS, next_uid = 1;
     unsigned long long seed = 0;
 
@@ -179,6 +191,33 @@ bool Game::load_from(const std::string& path) {
         else if (key == "counter") { std::string id; int v = 0; if (ls >> id >> v) p.counters[id] = v; }
         else if (key == "taken")   { std::string t; if (ls >> t) taken.insert(t); }
         else if (key == "chest")   { std::string t; if (ls >> t) chests.insert(t); }
+        else if (key == "note")    { std::string t; if (ls >> t) notes.insert(t); }
+        else if (key == "nextbook") ls >> p.next_book;
+        else if (key == "book") {
+            Book b;
+            int ro = 0;
+            if (ls >> b.id >> ro) {
+                b.readonly = (ro != 0);
+                std::getline(ls, b.title);
+                if (!b.title.empty() && b.title[0] == ' ') b.title.erase(0, 1);
+                p.books.push_back(b);
+            }
+        }
+        else if (key == "bookline") {
+            std::string id;
+            if (ls >> id) {
+                std::string text;
+                std::getline(ls, text);
+                // Ровно один разделительный пробел, остальное — часть строки:
+                // пустые строки и отступы в книге должны сохраняться как есть.
+                if (!text.empty() && text[0] == ' ') text.erase(0, 1);
+                for (std::size_t bi = p.books.size(); bi-- > 0;) {
+                    if (p.books[bi].id != id) continue;
+                    p.books[bi].lines.push_back(text);
+                    break;
+                }
+            }
+        }
         else if (key == "effect") {
             std::string id; int t = 0, pw = 1;
             if ((ls >> id >> t >> pw) && t > 0) p.effects.push_back(ActiveEffect(id, t, pw));
@@ -233,6 +272,7 @@ bool Game::load_from(const std::string& path) {
     mobs_         = mobs;
     taken_        = taken;
     chests_       = chests;
+    notes_        = notes;
     visited_      = visited;
     turn_         = turn;
     respawn_left_ = respawn > 0 ? respawn : RESPAWN_TURNS;
@@ -247,6 +287,7 @@ bool Game::load_from(const std::string& path) {
     if (plr_.ap > t.max_ap) plr_.ap = t.max_ap;
     if (plr_.hp < 0) plr_.hp = 0;
 
+    if (plr_.next_book < 1) plr_.next_book = 1;
     visited_.insert(plr_.loc);
     msg("Игра загружена: " + plr_.name + ", уровень " + to_str(plr_.level) + ".");
     return true;

@@ -4,6 +4,7 @@
 #include "../src/world.h"
 
 #include "../src/embedded_maps.h"
+#include "../src/ui.h"
 #include "../src/platform.h"
 
 #include <cstdio>
@@ -669,7 +670,8 @@ void test_content_integrity() {
                            "trader_root","trader_talk",
                            "hermit_root","hermit_rest","hermit_hint",
                            "zp_offer","zp_wait","zp_reward","zp_after",
-                           "ench_root","ench_about","ench_offer","ench_wait","ench_reward"};
+                           "ench_root","ench_about","ench_offer","ench_wait","ench_reward",
+                           "books_offer","books_wait","books_reward"};
     for (const char* nid : nodes) {
         const DlgNode* n = c.node(nid);
         check(n != nullptr, std::string("узел ") + nid + " существует");
@@ -684,6 +686,12 @@ void test_content_integrity() {
             if (!o.take_item.empty())
                 check(c.item(o.take_item) != nullptr,
                       std::string(nid) + ": требуемый '" + o.take_item + "' есть в базе");
+            if (!o.req_note.empty())
+                check(c.note(o.req_note) != nullptr,
+                      std::string(nid) + ": записка '" + o.req_note + "' есть в базе");
+            if (!o.shop_id.empty())
+                check(c.shop(o.shop_id) != nullptr,
+                      std::string(nid) + ": магазин '" + o.shop_id + "' существует");
             if (!o.req_quest.empty())
                 check(c.quest(o.req_quest) != nullptr,
                       std::string(nid) + ": квест '" + o.req_quest + "' существует");
@@ -720,6 +728,17 @@ void test_content_integrity() {
         for (const MapNpc& n : loc->npcs)
             check(c.npc(n.npc_id) != nullptr,
                   std::string(lid) + ": NPC на карте '" + n.npc_id + "' есть в базе");
+        for (const MapNote& nt : loc->notes)
+            check(c.note(nt.note_id) != nullptr,
+                  std::string(lid) + ": записка на карте '" + nt.note_id + "' есть в базе");
+        for (const MapChest& ch : loc->chests) {
+            if (!ch.key.empty())
+                check(c.item(ch.key) != nullptr,
+                      std::string(lid) + ": ключ сундука '" + ch.key + "' есть в базе");
+            for (const ItemStack& st : ch.items)
+                check(c.item(st.id) != nullptr,
+                      std::string(lid) + ": содержимое сундука '" + st.id + "' есть в базе");
+        }
     }
 
     // Амулет должен быть добываем — иначе квест Лады непроходим.
@@ -1243,6 +1262,212 @@ void test_portals() {
 // механикой, предметы поднимаются с карты, переходы — через реальные выходы.
 // Подкручиваются только здоровье и очки действия героя: тест про проходимость
 // контента, а не про баланс.
+void test_books_and_notes() {
+    section("книги и записки");
+    const Content& c = Content::get();
+
+    // --- записки в базе ---
+    const char* note_ids[] = {"ink", "miner", "watch", "zero", "child", "proto", "hermit"};
+    for (const char* id : note_ids) {
+        const NoteDef* n = c.note(id);
+        check(n != nullptr, std::string("записка ") + id + " описана");
+        if (!n) continue;
+        check(!n->title.empty(), std::string("у записки ") + id + " есть заголовок");
+        check(!n->lines.empty(), std::string("у записки ") + id + " есть текст");
+    }
+    check(c.note("нет-такой") == nullptr, "несуществующая записка не выдумывается");
+
+    // --- книги ---
+    Game g;
+    g.new_game("Писарь", "human", "swordsman");
+    check(g.books().empty(), "библиотека пуста на старте");
+    check(!g.start_book("Дневник"), "без чистой книги начать нечего");
+
+    g.add_item("book_blank", 2);
+    check(g.start_book("Дневник"), "книга начата");
+    eq(static_cast<int>(g.books().size()), 1, "книга появилась в библиотеке");
+    eq(g.count_item("book_blank"), 1, "чистая книга израсходована");
+
+    const std::string bid = g.books()[0].id;
+    const Book* b = g.book(bid);
+    check(b != nullptr, "книга находится по коду");
+    if (!b) return;
+    eqs(b->title, "Дневник", "название сохранено");
+    check(!b->readonly, "своя книга доступна для правки");
+
+    // Правка строк.
+    check(g.book_set_line(bid, 0, "Первая строка"), "строка записана");
+    eqs(g.book(bid)->lines[0], "Первая строка", "текст на месте");
+    check(g.book_insert_line(bid, 1, "Вторая"), "строка добавлена");
+    eq(static_cast<int>(g.book(bid)->lines.size()), 2, "строк стало две");
+    check(g.book_insert_line(bid, 1, ""), "пустая строка тоже добавляется");
+    eqs(g.book(bid)->lines[1], "", "пустая строка пуста");
+
+    check(!g.book_set_line(bid, 99, "мимо"), "правка несуществующей строки отклонена");
+    check(!g.book_set_line("нет-такой-книги", 0, "мимо"), "правка чужого кода отклонена");
+
+    // Пределы длины.
+    std::string longline;
+    for (int i = 0; i < BOOK_MAX_CHARS + 30; ++i) longline += "я";
+    g.book_set_line(bid, 0, longline);
+    eq(static_cast<int>(utf8_len(g.book(bid)->lines[0])), BOOK_MAX_CHARS,
+       "слишком длинная строка обрезается по видимым символам");
+
+    std::string longtitle;
+    for (int i = 0; i < BOOK_TITLE_MAX + 20; ++i) longtitle += "ю";
+    g.book_set_title(bid, longtitle);
+    eq(static_cast<int>(utf8_len(g.book(bid)->title)), BOOK_TITLE_MAX,
+       "слишком длинное название обрезается");
+
+    // Предел числа строк.
+    int added = 0;
+    for (int i = 0; i < BOOK_MAX_LINES + 20; ++i)
+        if (g.book_insert_line(bid, 0, "строка")) ++added;
+    eq(static_cast<int>(g.book(bid)->lines.size()), BOOK_MAX_LINES,
+       "строк не больше предела");
+
+    // Удаление строк: последняя не исчезает, а очищается.
+    while (g.book(bid)->lines.size() > 1) g.book_remove_line(bid, 0);
+    eq(static_cast<int>(g.book(bid)->lines.size()), 1, "осталась одна строка");
+    check(g.book_remove_line(bid, 0), "удаление последней строки допустимо");
+    eq(static_cast<int>(g.book(bid)->lines.size()), 1, "но книга не остаётся без строк");
+    eqs(g.book(bid)->lines[0], "", "последняя строка просто очищается");
+
+    // Предел числа книг.
+    g.add_item("book_blank", BOOK_MAX_COUNT + 5);
+    int made = 1;
+    for (int i = 0; i < BOOK_MAX_COUNT + 5; ++i)
+        if (g.start_book("Книга " + to_str(i))) ++made;
+    eq(static_cast<int>(g.books().size()), BOOK_MAX_COUNT, "книг не больше предела");
+
+    // Удаление книги.
+    const std::string victim = g.books().back().id;
+    check(g.delete_book(victim), "книга выбрасывается");
+    check(g.book(victim) == nullptr, "и исчезает из библиотеки");
+    check(!g.delete_book("нет-такой"), "выбросить несуществующую нельзя");
+
+    // --- записки подбираются с карты ---
+    Game g2;
+    g2.new_game("Искатель", "human", "swordsman");
+    const Location* forest = g2.world().location("forest");
+    check(forest != nullptr && !forest->notes.empty(), "в лесу есть записки");
+    if (!forest || forest->notes.empty()) return;
+
+    g2.player().loc = "forest";
+    const MapNote& mn = forest->notes[0];
+    check(!g2.note_taken("forest", 0), "записка изначально не подобрана");
+
+    // Подходим к записке настоящим шагом.
+    const int dxs[] = {1, -1, 0, 0}, dys[] = {0, 0, 1, -1};
+    bool picked = false;
+    for (int k = 0; k < 4 && !picked; ++k) {
+        Vec2 from(mn.pos.x - dxs[k], mn.pos.y - dys[k]);
+        if (!forest->walkable(from)) continue;
+        g2.player().pos = from;
+        if (g2.try_move(dxs[k], dys[k]) == Bump::Note) picked = true;
+    }
+    check(picked, "шаг на записку её подбирает");
+    check(g2.note_taken("forest", 0), "записка помечена подобранной");
+
+    const Book* nb = g2.book("n_" + mn.note_id);
+    check(nb != nullptr, "записка попала в библиотеку");
+    if (nb) {
+        check(nb->readonly, "найденная записка доступна только для чтения");
+        check(!nb->lines.empty(), "и содержит текст");
+        check(!g2.book_set_line(nb->id, 0, "правка"), "переписать записку нельзя");
+        check(!g2.book_set_title(nb->id, "другое"), "и переименовать нельзя");
+    }
+    eq(g2.player().counters["note_" + mn.note_id], 1, "находка отмечена счётчиком");
+
+    // Повторно та же записка не появляется.
+    int books_before = static_cast<int>(g2.books().size());
+    check(!g2.take_note(0), "повторно записка не подбирается");
+    eq(static_cast<int>(g2.books().size()), books_before, "и дубликата в библиотеке нет");
+}
+
+void test_book_save_roundtrip() {
+    section("сохранение библиотеки");
+    const char* path = "saves/test_books.sav";
+    platform::make_dir("saves");
+
+    Game a;
+    a.new_game("Летописец", "elf", "mage");
+    a.add_item("book_blank", 3);
+    a.start_book("Путевые заметки");
+    const std::string id = a.books()[0].id;
+
+    // Нарочно кладём то, на чём построчный формат мог бы сломаться:
+    // пустые строки, отступы, кириллицу и знаки-разделители.
+    a.book_set_line(id, 0, "Первый день пути");
+    a.book_insert_line(id, 1, "");
+    a.book_insert_line(id, 2, "    отступ в четыре пробела");
+    a.book_insert_line(id, 3, "знаки: : = # ~ | > * & 0 1 2");
+    a.book_insert_line(id, 4, "ёжик, «кавычки» и тире —");
+    a.book_insert_line(id, 5, "");
+
+    a.start_book("Вторая книга");
+    a.book_set_line(a.books()[1].id, 0, "текст второй книги");
+
+    // И найденная записка.
+    a.player().counters["note_ink"] = 1;
+    Book note;
+    note.id = "n_ink"; note.title = "Рецепт чернил"; note.readonly = true;
+    note.lines.push_back("строка записки");
+    a.player().books.push_back(note);
+
+    const std::vector<Book> before = a.books();
+    check(a.save_to(path), "сохранение записано: " + a.error());
+
+    Game b;
+    b.new_game("Другой", "orc", "ninja");
+    check(b.load_from(path), "сохранение прочитано: " + b.error());
+
+    eq(static_cast<int>(b.books().size()), static_cast<int>(before.size()),
+       "число книг совпадает");
+    bool all_same = true;
+    for (std::size_t i = 0; i < before.size() && i < b.books().size(); ++i) {
+        const Book& x = before[i];
+        const Book& y = b.books()[i];
+        if (x.id != y.id || x.title != y.title || x.readonly != y.readonly) all_same = false;
+        if (x.lines.size() != y.lines.size()) { all_same = false; continue; }
+        for (std::size_t j = 0; j < x.lines.size(); ++j)
+            if (x.lines[j] != y.lines[j]) all_same = false;
+    }
+    check(all_same, "текст всех книг восстановлен посимвольно");
+
+    const Book* restored = b.book(id);
+    check(restored != nullptr, "первая книга на месте");
+    if (restored && restored->lines.size() > 5) {
+        eqs(restored->lines[0], "Первый день пути", "обычная строка цела");
+        eqs(restored->lines[1], "", "пустая строка осталась пустой");
+        eqs(restored->lines[2], "    отступ в четыре пробела", "отступ не съеден");
+        eqs(restored->lines[3], "знаки: : = # ~ | > * & 0 1 2", "разделители не сломали разбор");
+        eqs(restored->lines[4], "ёжик, «кавычки» и тире —", "кириллица и знаки целы");
+        eqs(restored->lines[5], "", "последняя пустая строка на месте");
+    }
+    const Book* rn = b.book("n_ink");
+    check(rn != nullptr && rn->readonly, "записка восстановлена как «только чтение»");
+    eq(b.player().counters["note_ink"], 1, "счётчик находки восстановлен");
+
+    std::remove(path);
+}
+
+void test_no_escape_needed() {
+    section("управление без Escape");
+    // Из любого списка должен быть выход обычными клавишами: на экранной
+    // клавиатуре Android Escape набирается сочетанием и требовать его нельзя.
+    // Проверяем сам контракт: choose трактует Q и 0 как отмену.
+    check(ui::CHOOSE_CANCEL == -1, "код отмены не пересекается с индексами");
+    check(ui::CHOOSE_HOTKEY == -2, "код горячей клавиши отличается от отмены");
+
+    // И что коды Escape и конца ввода — разные значения: раньше одиночный
+    // Escape и закрытый ввод были неотличимы, из-за чего игра зависала.
+    check(platform::KEY_ESC != platform::KEY_EOF, "Escape и конец ввода различаются");
+    check(platform::KEY_EOF != platform::KEY_UP &&
+          platform::KEY_EOF != platform::KEY_DOWN,
+          "конец ввода не совпадает со стрелками");
+}
+
 void test_playthrough() {
     section("сквозное прохождение: все квесты");
     Game g;
@@ -1287,6 +1512,25 @@ void test_playthrough() {
             }
         }
         return got;
+    };
+
+    // Подобрать записку с карты настоящим шагом.
+    auto gather_note = [&](const std::string& note_id) {
+        const Location* loc = g.here();
+        if (!loc) return false;
+        for (std::size_t i = 0; i < loc->notes.size(); ++i) {
+            if (loc->notes[i].note_id != note_id) continue;
+            if (g.note_taken(loc->id, static_cast<int>(i))) return true;
+            const Vec2 t = loc->notes[i].pos;
+            const int dx[] = {1, -1, 0, 0}, dy[] = {0, 0, 1, -1};
+            for (int k = 0; k < 4; ++k) {
+                Vec2 from(t.x - dx[k], t.y - dy[k]);
+                if (!loc->walkable(from)) continue;
+                g.player().pos = from;
+                if (g.try_move(dx[k], dy[k]) == Bump::Note) return true;
+            }
+        }
+        return false;
     };
 
     // Победить противника честной боевой механикой.
@@ -1337,6 +1581,11 @@ void test_playthrough() {
     }
     check(g.count_item("wolf_pelt") >= 3, "три шкуры собраны");
 
+    // Пока в лесу — собираем всё для квеста Гурия.
+    check(gather_note("ink"), "рецепт чернил найден в лесу");
+    check(g.book("n_ink") != nullptr, "записка попала в библиотеку");
+    check(gather("oak_gall") >= 3, "чернильные орешки собраны");
+
     // --- сдаём первую тройку квестов ---
     g.apply_option(c.node("elder_reward")->options[0], "", &shop);
     g.apply_option(c.node("herb_reward")->options[0],  "", &shop);
@@ -1353,6 +1602,27 @@ void test_playthrough() {
             if (o.next == target && g.option_available(o)) return true;
         return false;
     };
+    check(visible("trader_root", "books_offer"), "Гурий открыл квест о бумаге");
+    g.apply_option(c.node("books_offer")->options[0], "", &shop);
+    check(visible("trader_root", "books_reward"),
+          "с рецептом и орешками Гурий готов принять работу");
+    g.apply_option(c.node("books_reward")->options[0], "", &shop);
+    eq(g.player().quests["books"], QUEST_DONE, "квест о бумаге закрыт");
+    eq(g.count_item("book_blank"), 1, "первая чистая книга выдана");
+
+    // Книжная лавка открылась, и в ней действительно книги.
+    bool book_shop = false;
+    for (const DlgOption& o : c.node("trader_root")->options)
+        if (o.open_shop && o.shop_id == "shop_books" && g.option_available(o)) book_shop = true;
+    check(book_shop, "книжная лавка стала доступна");
+
+    // Книгу можно начать и в неё писать.
+    check(g.start_book("Хроника похода"), "книга начата из выданной чистой");
+    const std::string diary = g.books().back().id;
+    check(g.book_set_line(diary, 0, "Волки, амулет и три шкуры."), "первая запись сделана");
+    check(g.book_insert_line(diary, 1, "Дальше — пещера."), "вторая запись сделана");
+    eq(static_cast<int>(g.book(diary)->lines.size()), 2, "в книге две строки");
+
     check(visible("elder_root", "elder_queen_offer"), "Мирон открыл квест на матку");
     check(visible("herbalist_root", "moss_offer"),    "Лада открыла квест на мох");
     check(visible("smith_root", "outpost_offer"),     "Бран открыл квест на заставу");
@@ -1442,10 +1712,14 @@ void test_playthrough() {
     check(g.total().attack > atk_before, "зачарование подняло меткость");
 
     // --- итог ---
-    const char* all_quests[] = {"wolves", "amulet", "pelts", "moss",
+    const char* all_quests[] = {"wolves", "amulet", "pelts", "moss", "books",
                                 "queen", "outpost", "zero_point", "enchanter"};
     for (const char* q : all_quests)
         eq(g.player().quests[q], QUEST_DONE, std::string("квест ") + q + " пройден");
+
+    // Записки-пасхалки лежат по всем локациям и находятся по ходу дела.
+    check(g.books().size() >= 2, "библиотека наполнилась находками и своими книгами");
+    check(g.book(diary) != nullptr, "своя книга дожила до конца прохождения");
 
     check(g.player().level >= 8, "к концу всех квестов герой заметно вырос");
     std::cout << "  (итог: уровень " << g.player().level
@@ -1479,6 +1753,9 @@ int main() {
     test_chests();
     test_enchanting();
     test_portals();
+    test_books_and_notes();
+    test_book_save_roundtrip();
+    test_no_escape_needed();
     test_content_integrity();
     test_playthrough();
 

@@ -80,6 +80,8 @@ std::vector<std::string> render_map(Game& g, const Location& loc, int vw, int vh
                 if (loc.sign_at(p)) ch = glyph::SIGN;
                 int ii = loc.item_index_at(p);
                 if (ii >= 0 && !g.item_taken(loc.id, ii)) ch = glyph::ITEM;
+                int ni = loc.note_index_at(p);
+                if (ni >= 0 && !g.note_taken(loc.id, ni)) ch = glyph::NOTE;
                 if (g.mob_at(p, g.player().loc)) ch = glyph::MOB;
                 if (loc.npc_at(p))               ch = glyph::NPC;
                 if (p == g.player().pos)         ch = glyph::PLAYER;
@@ -221,7 +223,9 @@ int choose(const std::string& title, const std::vector<std::string>& items,
                 sel = (sel + 1) % static_cast<int>(items.size()); break;
             case platform::KEY_ENTER: case '\r': case platform::KEY_SPACE: return sel;
             case platform::KEY_EOF:
-            case platform::KEY_ESC: case 'q': case 'Q': return CHOOSE_CANCEL;
+            case platform::KEY_ESC:
+            case '0':                       // «назад» с цифровой раскладки
+            case 'q': case 'Q': return CHOOSE_CANCEL;
             default:
                 if (k >= '1' && k <= '9') {
                     int idx = k - '1';
@@ -285,6 +289,47 @@ bool screen_create_hero(std::string* name, std::string* race, std::string* spec)
     return true;
 }
 
+bool edit_line(const std::string& title, const std::string& hint,
+               std::string* text, std::size_t max_len) {
+    if (!text) return false;
+    std::string buf = *text;
+
+    for (;;) {
+        const Layout L = layout();
+        const std::size_t w = static_cast<std::size_t>(L.cols);
+        platform::clear_screen();
+        for (const std::string& t : wrap(title, w)) out(t);
+        rule(L.rule);
+        // Показываем хвост строки, если она длиннее экрана: курсор всегда виден.
+        std::string shown = buf;
+        if (utf8_len(shown) > w - 3) {
+            std::size_t drop = utf8_len(shown) - (w - 3);
+            std::size_t i = 0, seen = 0;
+            for (; i < shown.size() && seen < drop; ++i)
+                if ((static_cast<unsigned char>(shown[i]) & 0xC0) != 0x80) ++seen;
+            shown = shown.substr(i);
+        }
+        out("> " + shown + "_");
+        rule(L.rule);
+        out(trunc("  " + to_str(static_cast<int>(utf8_len(buf))) + "/" +
+                  to_str(static_cast<int>(max_len)) + "  " + hint, w));
+        out(trunc("  Enter — принять, Backspace — стереть", w));
+        std::cout.flush();
+
+        int k = platform::read_key();
+        if (k == platform::KEY_ENTER || k == '\r') { *text = buf; return true; }
+        if (k == platform::KEY_EOF) return false;
+        if (k == 127 || k == 8) {
+            // Стираем целый UTF-8 символ, а не байт: иначе кириллица бьётся.
+            while (!buf.empty() && (static_cast<unsigned char>(buf.back()) & 0xC0) == 0x80)
+                buf.pop_back();
+            if (!buf.empty()) buf.pop_back();
+            continue;
+        }
+        if (k >= 32 && k < 1000 && utf8_len(buf) < max_len) buf += static_cast<char>(k);
+    }
+}
+
 void message_box(const std::string& title, const std::string& body) {
     const Layout L = layout();
     platform::clear_screen();
@@ -301,10 +346,13 @@ void help_screen() {
     message_box("Управление",
         "  Стрелки или WASD — идти\n"
         "  C — герой        I — сумка       Q — квесты      K — навыки\n"
-        "  F — эффекты      P — порталы\n"
+        "  F — эффекты      P — порталы     B — библиотека\n"
+        "  M — меню: сохранить, загрузить, выйти\n"
         "  1 2 3            — стойка: осторожная / ровная / яростная\n"
         "  ?                — эта справка\n"
-        "  Esc              — пауза: сохранить, загрузить, выйти\n"
+        "\n"
+        "Escape не нужен нигде: в любом списке назад — Q или 0.\n"
+        "Если он у тебя есть, работает тоже.\n"
         "\n"
         "В бою:\n"
         "  A — атака        P — мощный удар (кураж " + to_str(MOMENTUM_COST) + ")\n"
@@ -315,7 +363,7 @@ void help_screen() {
         "  @ ты        N житель — шаг к нему заводит разговор\n"
         "  X враг      шаг к нему начинает бой\n"
         "  > переход   ! табличка   * предмет   & лежанка\n"
-        "  C сундук    O портал (поставленный тобой)\n"
+        "  C сундук    O портал (поставленный тобой)   ? записка\n"
         "  # стена     T дерево     ~ вода      . , = земля\n"
         "\n"
         "Все враги показаны одним знаком, все жители — другим:\n"
@@ -395,6 +443,7 @@ void screen_inventory(Game& g) {
         std::vector<std::string> acts;
         std::vector<int> codes;
         if (d->kind == ItemKind::Consumable) { acts.push_back("Применить"); codes.push_back(0); }
+        if (d->kind == ItemKind::Book) { acts.push_back("Начать книгу"); codes.push_back(5); }
         if (slot_for(d->kind) != Slot::Count) { acts.push_back("Надеть");   codes.push_back(1); }
         acts.push_back("Осмотреть"); codes.push_back(2);
         acts.push_back("Выбросить"); codes.push_back(3);
@@ -424,6 +473,12 @@ void screen_inventory(Game& g) {
                 break;
             }
             case 3: g.drop_item(key); break;
+            case 5: {
+                std::string title = "Дневник";
+                if (edit_line("Как назвать книгу?", "название", &title, BOOK_TITLE_MAX))
+                    g.start_book(title);
+                break;
+            }
             default: break;
         }
     }
@@ -584,6 +639,111 @@ void screen_portals(Game& g) {
         if (sel < 0 || sel == 2) return;
         if (sel == 0) g.place_portal();
         if (sel == 1) g.remove_portal_here();
+    }
+}
+
+void screen_book(Game& g, const std::string& book_id) {
+    for (;;) {
+        const Book* b = g.book(book_id);
+        if (!b) return;
+        const Layout L = layout();
+
+        std::vector<std::string> rows;
+        for (std::size_t i = 0; i < b->lines.size(); ++i) {
+            std::string num = to_str(static_cast<int>(i) + 1);
+            while (num.size() < 2) num = " " + num;
+            const std::string& text = b->lines[i];
+            rows.push_back(num + " " + (text.empty() ? "·" : text));
+        }
+        if (rows.empty()) rows.push_back(" 1 ·");
+
+        const std::string title = "«" + b->title + "»" +
+                                  (b->readonly ? "  (только чтение)" : "") +
+                                  "\nстрок: " + to_str(static_cast<int>(b->lines.size())) +
+                                  " из " + to_str(BOOK_MAX_LINES);
+        const std::string foot = b->readonly
+            ? "  ^v листать · Q назад"
+            : (L.side ? "  ^v строка · Enter правка · A добавить · D удалить · T название · Q назад"
+                      : "  Enter правка · A доб · D удал · T назв · Q назад");
+
+        int hk = 0;
+        int sel = choose(title, rows, foot,
+                         {'a', 'A', 'd', 'D', 't', 'T', 'e', 'E'}, &hk);
+
+        if (sel == CHOOSE_CANCEL) return;
+        if (b->readonly) continue;            // найденные записки не правятся
+
+        if (sel == CHOOSE_HOTKEY) {
+            if (hk == 't' || hk == 'T') {
+                std::string t = b->title;
+                if (edit_line("Название книги", "название", &t, BOOK_TITLE_MAX))
+                    g.book_set_title(book_id, t);
+            } else if (hk == 'a' || hk == 'A') {
+                std::string t;
+                if (edit_line("Новая строка", "текст строки", &t, BOOK_MAX_CHARS))
+                    g.book_insert_line(book_id, static_cast<int>(b->lines.size()), t);
+            } else if (hk == 'd' || hk == 'D') {
+                g.book_remove_line(book_id, static_cast<int>(b->lines.size()) - 1);
+            } else {
+                std::string t = b->lines.empty() ? std::string() : b->lines[0];
+                if (edit_line("Строка 1", "текст строки", &t, BOOK_MAX_CHARS))
+                    g.book_set_line(book_id, 0, t);
+            }
+            continue;
+        }
+
+        // Выбор строки — правка именно её.
+        std::string t = b->lines[static_cast<std::size_t>(sel)];
+        if (edit_line("Строка " + to_str(sel + 1) + " из «" + b->title + "»",
+                      "текст строки", &t, BOOK_MAX_CHARS))
+            g.book_set_line(book_id, sel, t);
+    }
+}
+
+void screen_library(Game& g) {
+    for (;;) {
+        std::vector<std::string> rows, ids;
+        for (const Book& b : g.books()) {
+            rows.push_back(std::string(b.readonly ? "[записка] " : "[книга]   ") +
+                           pad(b.title, 24) + to_str(static_cast<int>(b.lines.size())) + " стр.");
+            ids.push_back(b.id);
+        }
+        const int blanks = g.count_item("book_blank");
+        if (rows.empty())
+            rows.push_back(blanks > 0 ? "(пусто — нажми N, чтобы начать книгу)" : "(пусто)");
+
+        int hk = 0;
+        int sel = choose("Библиотека · чистых книг: " + to_str(blanks),
+                         rows, "  Enter открыть · N начать книгу · X выбросить · Q назад",
+                         {'n', 'N', 'x', 'X'}, &hk);
+
+        if (sel == CHOOSE_CANCEL) return;
+
+        if (sel == CHOOSE_HOTKEY) {
+            if (hk == 'n' || hk == 'N') {
+                if (blanks <= 0) {
+                    message_box("Библиотека",
+                                "  Чистых книг нет.\n"
+                                "  Их возит Гурий — после того, как найдёшь\n"
+                                "  ему рецепт чернил.");
+                    continue;
+                }
+                std::string title = "Дневник";
+                if (edit_line("Как назвать книгу?", "название", &title, BOOK_TITLE_MAX))
+                    g.start_book(title);
+            } else if (!ids.empty()) {
+                // Выбрасываем последнюю выбранную — подтверждаем явно.
+                std::vector<std::string> yn;
+                yn.push_back("Оставить");
+                yn.push_back("Выбросить безвозвратно");
+                if (choose("Выбросить «" + g.books().back().title + "»?", yn) == 1)
+                    g.delete_book(g.books().back().id);
+            }
+            continue;
+        }
+
+        if (sel < static_cast<int>(ids.size()))
+            screen_book(g, ids[static_cast<std::size_t>(sel)]);
     }
 }
 

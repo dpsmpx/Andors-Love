@@ -26,6 +26,8 @@ item 8 13 glow_moss 1
 item 27 4 glow_moss 1
 item 31 14 glow_moss 1
 item 12 12 torch 1
+note 13 12 miner
+note 38 7 proto
 chest 11 4 60 - antidote:2 frost_shard:1
 chest 40 14 120 - ember:1 elixir_guard:1
 spawn 8 6 spider 2 4

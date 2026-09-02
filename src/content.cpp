@@ -18,6 +18,7 @@ const Content& Content::get() {
 
 Content::Content() {
     build_effects();
+    build_notes();
     build_races();
     build_specs();
     build_items();
@@ -185,6 +186,14 @@ void Content::build_items() {
                              "Ставится на землю и связывается с другими такими же.");
     add(pstone);
 
+    ItemDef gall = mk_item("oak_gall", "Чернильный орешек", ItemKind::Misc, 12,
+                           "Из таких варят чернила. Растут на дубовых листьях.");
+    add(gall);
+
+    ItemDef blank = mk_item("book_blank", "Чистая книга", ItemKind::Book, 140,
+                            "Переплёт и полсотни страниц. Применить, чтобы начать её.");
+    add(blank);
+
     // ключи и квестовое
     add(mk_item("rusty_key",  "Ржавый ключ", ItemKind::Misc, 0,
                 "От сундука на старой заставе."));
@@ -257,6 +266,94 @@ void Content::build_effects() {
     e.per_power.crit = 6; e.per_power.attack = 4;
     e.desc = "Слабое место само бросается в глаза.";
     add(e);
+}
+
+// ----------------------------------------------------------------- записки
+
+void Content::build_notes() {
+    auto add = [&](const std::string& id, const std::string& title,
+                   const std::vector<std::string>& lines) {
+        NoteDef n; n.id = id; n.title = title; n.lines = lines;
+        notes_[id] = n;
+    };
+
+    add("ink", "Рецепт чернил", {
+        "Писано рукой торговца, неровно:",
+        "",
+        "Орешек чернильный истолочь, три штуки",
+        "на кружку. Залить дождевой водой, держать",
+        "в тепле три дня. Прибавить сажи на кончике",
+        "ножа и капнуть смолы, чтобы не выцветало.",
+        "",
+        "Без орешка не выйдет ничего. Проверено."
+    });
+
+    add("miner", "Записка рудокопа", {
+        "Уголь тут пустой, зря лезли. Но глубже",
+        "нашли ход, и там паутина в руку толщиной.",
+        "",
+        "Семён сунулся первым. Больше не выходил.",
+        "Уходим налегке, бросаем инструмент.",
+        "",
+        "Кто прочтёт — не ходи один."
+    });
+
+    add("watch", "Последний рапорт", {
+        "Пост три, ночь. Обоза не будет, дорога",
+        "перерезана. Нас осталось семеро.",
+        "",
+        "Казну заперли, ключ у десятника. Если",
+        "падём — искать при нём, больше негде.",
+        "",
+        "Держимся до утра."
+    });
+
+    add("zero", "Обрывок из святилища", {
+        "…и тогда стало ясно, что расстояние —",
+        "не свойство мира, а свойство идущего.",
+        "",
+        "Там, где линии сходятся, шаг из одной",
+        "точки кончается в другой. Нужен только",
+        "камень и тот, кто помнит дорогу.",
+        "",
+        "Стражи не злы. Они просто не пускают."
+    });
+
+    add("child", "Детский листок", {
+        "Каракули, углём:",
+        "",
+        "«У старосты борода как метла",
+        "у кузнеца руки как лопаты",
+        "а у Лады пахнет мятой и она добрая»",
+        "",
+        "Внизу нарисован волк. Или собака."
+    });
+
+    add("proto", "Странный обрывок", {
+        "Бумага не здешняя, слишком ровная.",
+        "Список, зачёркнутый наполовину:",
+        "",
+        "  TODO:",
+        "  1. отрисовка карты",
+        "  не забыть, что игровые файлы в другой папке",
+        "",
+        "  toolate:",
+        "  СУНДУКИ! toolate…",
+        "",
+        "Последняя строка обведена дважды."
+    });
+
+    add("hermit", "Страница из дневника", {
+        "Двадцать лет назад я тоже думал, что",
+        "сила решает. Ходил в ярости, бил первым.",
+        "",
+        "Потом понял: удар копит удар. Тот, кто",
+        "не пропускает, бьёт втрое. Тот, кто лезет",
+        "напролом, устаёт первым.",
+        "",
+        "Стойка — это не про плечи. Это про то,",
+        "готов ли ты ждать."
+    });
 }
 
 // -------------------------------------------------------------------- расы
@@ -552,6 +649,14 @@ void Content::build_quests() {
     quests_.push_back(q);
 
     q = QuestDef();
+    q.id = "books"; q.name = "Слово и бумага";
+    q.stages = {
+        QuestStageDef(1, "Гурию нужен рецепт чернил и 3 чернильных орешка из леса."),
+        QuestStageDef(QUEST_DONE, "Гурий начал возить чистые книги.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
     q.id = "enchanter"; q.name = "Ремесло Вельда";
     q.stages = {
         QuestStageDef(1, "Вельду нужен рунный камень из святилища."),
@@ -585,6 +690,12 @@ void Content::build_shops() {
     s.goods = {"bread", "torch", "herb_potion", "ap_tonic", "antidote",
                "salve", "ring_hp", "ring_crit", "portal_stone"};
     s.buy_pct = 115; s.sell_pct = 40;    // перекупщик берёт своё
+    shops_[s.id] = s;
+
+    s = ShopDef();
+    s.id = "shop_books"; s.name = "Книжный угол Гурия";
+    s.goods = {"book_blank", "oak_gall"};
+    s.buy_pct = 100; s.sell_pct = 45;
     shops_[s.id] = s;
 
     s = ShopDef();
@@ -1023,6 +1134,35 @@ void Content::build_dialogues() {
         talk.text = "Почему у тебя дороже, чем у Лады?";
         talk.next = "trader_talk";
         n.options.push_back(talk);
+
+        DlgOption b_offer;
+        b_offer.text = "Бумагой не торгуешь?";
+        b_offer.next = "books_offer";
+        b_offer.req_quest  = "books";  b_offer.req_stage_min  = QUEST_NONE; b_offer.req_stage_max  = QUEST_NONE;
+        b_offer.req_quest2 = "amulet"; b_offer.req_stage2_min = QUEST_DONE; b_offer.req_stage2_max = QUEST_DONE;
+        n.options.push_back(b_offer);
+
+        DlgOption b_done;
+        b_done.text = "Рецепт и орешки у меня.";
+        b_done.next = "books_reward";
+        b_done.req_quest = "books"; b_done.req_stage_min = 1; b_done.req_stage_max = 1;
+        b_done.req_item = "oak_gall"; b_done.req_item_count = 3;
+        b_done.req_note = "ink";
+        n.options.push_back(b_done);
+
+        DlgOption b_wait;
+        b_wait.text = "Ещё собираю.";
+        b_wait.next = "books_wait";
+        b_wait.req_quest = "books"; b_wait.req_stage_min = 1; b_wait.req_stage_max = 1;
+        n.options.push_back(b_wait);
+
+        DlgOption b_shop;
+        b_shop.text = "Показывай книги.";
+        b_shop.open_shop = true;
+        b_shop.shop_id = "shop_books";
+        b_shop.req_quest = "books"; b_shop.req_stage_min = QUEST_DONE; b_shop.req_stage_max = QUEST_DONE;
+        n.options.push_back(b_shop);
+
         n.options.push_back(bye("В другой раз."));
         add(n);
     }
@@ -1031,6 +1171,43 @@ void Content::build_dialogues() {
         n.text = "— У Лады травы свои, а я их везу. Дорога денег стоит.\n"
                  "Зато у меня и кольца бывают, а у неё — мята да мята.";
         n.options.push_back(bye("Логично."));
+        add(n);
+    }
+
+    {
+        DlgNode n; n.id = "books_offer";
+        n.text = "Гурий оживляется.\n"
+                 "— Бумагой? Да я бы рад. Переплёты привезти нетрудно, а вот\n"
+                 "чернила надо варить на месте, и рецепт я посеял где-то в лесу.\n"
+                 "Найди листок и добудь три чернильных орешка — и будут тебе книги.";
+        DlgOption take;
+        take.text = "Поищу.";
+        take.next = "books_wait";
+        take.set_quest = "books"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Мне и без книг неплохо."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "books_wait";
+        n.text = "— Листок с рецептом, три орешка. Орешки на дубовых листьях,\n"
+                 "в лесу их полно, если под ноги смотреть.\n"
+                 "Найденное читается в библиотеке — у тебя же есть куда складывать?";
+        n.options.push_back(bye("Разберусь."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "books_reward";
+        n.text = "Гурий читает рецепт, шевеля губами, и хлопает по прилавку.\n"
+                 "— Он самый! Ну всё, с завтрашнего дня вожу переплёты.\n"
+                 "Вот тебе первая, за находку. Пиши что хочешь — бумага стерпит.";
+        DlgOption take;
+        take.text = "Принять книгу. [120 опыта]";
+        take.set_quest = "books"; take.set_stage = QUEST_DONE;
+        take.take_item = "oak_gall"; take.take_count = 3;
+        take.give_item = "book_blank"; take.give_count = 1;
+        take.give_exp = 120;
+        n.options.push_back(take);
         add(n);
     }
 
@@ -1252,6 +1429,10 @@ const SpecDef* Content::spec(const std::string& id) const {
 const EnemyDef* Content::enemy(const std::string& id) const {
     auto it = enemies_.find(id);
     return it == enemies_.end() ? nullptr : &it->second;
+}
+const NoteDef* Content::note(const std::string& id) const {
+    auto it = notes_.find(id);
+    return it == notes_.end() ? nullptr : &it->second;
 }
 const NpcDef* Content::npc(const std::string& id) const {
     auto it = npcs_.find(id);

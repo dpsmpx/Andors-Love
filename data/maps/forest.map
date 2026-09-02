@@ -27,6 +27,12 @@ sign 23 15 Старая дорога на юг, к развалинам заст
 item 8 13 herb_potion 1
 item 33 16 bread 1
 item 15 4 torch 1
+item 10 7 oak_gall 1
+item 28 12 oak_gall 1
+item 35 15 oak_gall 1
+item 18 2 oak_gall 1
+note 12 3 ink
+note 26 4 hermit
 chest 8 3 25 - herb_potion:1 whetstone:1
 spawn 12 6 wolf 3 5
 spawn 30 11 wolf 3 5

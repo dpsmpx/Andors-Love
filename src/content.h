@@ -28,6 +28,7 @@ struct DlgOption {
     int         req_stage2_min = -1;
     int         req_stage2_max = -1;
     std::string req_counter;
+    std::string req_note;                // требуется найденная записка
     int         req_counter_min = -1;
     int         req_counter_max = -1;
     std::string req_item;
@@ -43,6 +44,7 @@ struct DlgOption {
     int         give_gold  = 0;
     int         give_exp   = 0;
     bool        open_shop    = false;
+    std::string shop_id;                 // если задан, открывается именно он
     bool        open_enchant = false;
     bool        portal_gift  = false;   // выдаёт умение ставить порталы
     bool        rest       = false;   // восстановить HP/AP
@@ -102,6 +104,18 @@ struct EnchantDef {
     int         price = 0;
     std::string reagent;          // предмет-реагент, нужен вдобавок к золоту
     int         reagent_count = 0;
+};
+
+// ---------- записки ----------
+// Небольшие тексты, разбросанные по миру: часть — просто находки, часть
+// нужна по квесту. Подобранная записка попадает в библиотеку только для
+// чтения и поднимает счётчик "note_<id>", по которому её можно требовать
+// в диалоге.
+
+struct NoteDef {
+    std::string              id;
+    std::string              title;
+    std::vector<std::string> lines;
 };
 
 // ---------- существа и NPC ----------
@@ -182,6 +196,7 @@ public:
 
     const ItemDef*   item(const std::string& id)   const;
     const EffectDef* effect(const std::string& id) const;
+    const NoteDef*   note(const std::string& id)   const;
     const RaceDef*   race(const std::string& id)   const;
     const SpecDef*   spec(const std::string& id)   const;
     const EnchantDef* enchant(const std::string& id) const;
@@ -205,6 +220,7 @@ private:
     Content();
     void build_items();
     void build_effects();
+    void build_notes();
     void build_races();
     void build_specs();
     void build_enchants();
@@ -221,6 +237,7 @@ private:
     std::map<std::string, ShopDef>  shops_;
     std::map<std::string, DlgNode>  nodes_;
     std::map<std::string, EffectDef>  effects_;
+    std::map<std::string, NoteDef>    notes_;
     std::map<std::string, EnchantDef>  enchant_map_;
     std::vector<QuestDef>             quests_;
     std::vector<SkillDef>             skills_;

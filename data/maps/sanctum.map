@@ -24,6 +24,7 @@ sign 5 9 Стены гладкие, будто их не строили, а вы
 sign 27 4 Здесь сходятся линии. Нулевая точка близко.
 item 15 3 rune_stone 1
 item 15 15 frost_shard 1
+note 15 4 zero
 chest 43 9 250 - rune_stone:1 elixir_haste:1 portal_stone:1
 chest 10 13 140 - antidote:2 salve:1
 spawn 14 6 wraith 2 4

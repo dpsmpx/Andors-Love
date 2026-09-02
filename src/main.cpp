@@ -111,6 +111,7 @@ void play(Game& g) {
             case 'k': case 'K': ui::screen_skills(g);    continue;
             case 'f': case 'F': ui::screen_effects(g);   continue;
             case 'p': case 'P': ui::screen_portals(g);   continue;
+            case 'b': case 'B': ui::screen_library(g);   continue;
             case '?':           ui::help_screen();       continue;
 
             case '1': g.combat_set_stance(Stance::Cautious);
@@ -120,6 +121,9 @@ void play(Game& g) {
             case '3': g.combat_set_stance(Stance::Fierce);
                       g.msg("Стойка: яростная.");   continue;
 
+            // Меню открывается и буквой: на экранной клавиатуре Android
+            // Escape набирается сочетанием клавиш, требовать его неудобно.
+            case 'm': case 'M':
             case platform::KEY_ESC: {
                 std::vector<std::string> opts{"Вернуться в игру", "Сохранить игру",
                                               "Загрузить сохранение",
