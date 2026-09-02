@@ -175,6 +175,34 @@ struct QuestDef {
     std::string                id;
     std::string                name;
     std::vector<QuestStageDef> stages;
+    // Тайна не выдаётся ни одним NPC: она открывается сама, от события.
+    // В журнале помечается отдельно.
+    bool                       secret = false;
+};
+
+// ---------- события, открывающие квесты ----------
+// Квест не обязан начинаться с разговора. Находка, добыча, вход в место или
+// закрытие другого квеста тоже могут его открыть — так игрок натыкается на
+// тайны сам, а не получает их списком у старосты.
+
+enum class TriggerKind {
+    NoteTaken,        // подобрана записка (key — её код)
+    MobKilled,        // счётчик убийств достиг count (key — код счётчика)
+    ItemGained,       // предметов на руках не меньше count (key — код предмета)
+    LocationEntered,  // впервые вошёл в локацию (key — её код)
+    QuestStage        // другой квест дошёл до этапа count (key — его код)
+};
+
+struct QuestTrigger {
+    TriggerKind kind  = TriggerKind::NoteTaken;
+    std::string key;
+    int         count = 1;
+    std::string quest;          // какой квест открыть
+    int         stage = 1;      // на каком этапе
+    // Срабатывает, только если квест уже дошёл до min_stage. Без этого
+    // цепочку можно пройти с конца: добыть ключ раньше, чем узнать, зачем он.
+    int         min_stage = 0;
+    std::string message;        // что сказать игроку
 };
 
 // ---------- навыки ----------
@@ -214,7 +242,8 @@ public:
     const std::vector<QuestDef>&   quests()   const { return quests_; }
     const std::vector<RaceDef>&    races()    const { return races_; }
     const std::vector<SpecDef>&    specs()    const { return specs_; }
-    const std::vector<EnchantDef>& enchants() const { return enchants_; }
+    const std::vector<EnchantDef>&   enchants() const { return enchants_; }
+    const std::vector<QuestTrigger>& triggers() const { return triggers_; }
 
 private:
     Content();
@@ -227,6 +256,7 @@ private:
     void build_enemies();
     void build_skills();
     void build_quests();
+    void build_triggers();
     void build_shops();
     void build_npcs();
     void build_dialogues();
@@ -244,4 +274,5 @@ private:
     std::vector<RaceDef>              races_;
     std::vector<SpecDef>              specs_;
     std::vector<EnchantDef>           enchants_;
+    std::vector<QuestTrigger>         triggers_;
 };

@@ -29,6 +29,7 @@ Content::Content() {
     build_shops();
     build_npcs();
     build_dialogues();
+    build_triggers();
 }
 
 // ------------------------------------------------------------------ предметы
@@ -194,6 +195,14 @@ void Content::build_items() {
                             "Переплёт и полсотни страниц. Применить, чтобы начать её.");
     add(blank);
 
+    ItemDef seal = mk_item("order_seal", "Печать Ордена", ItemKind::Ring, 700,
+                           "Узел из серебра. Тёплая, будто её только что держали.");
+    seal.bonus.max_hp = 12; seal.bonus.attack = 5; seal.bonus.armor = 2; seal.bonus.crit = 4;
+    add(seal);
+
+    add(mk_item("seam_key", "Ключ шва", ItemKind::Misc, 0,
+                "Не ключ даже — узел из чёрного металла. Страж носил его в себе."));
+
     // ключи и квестовое
     add(mk_item("rusty_key",  "Ржавый ключ", ItemKind::Misc, 0,
                 "От сундука на старой заставе."));
@@ -341,6 +350,61 @@ void Content::build_notes() {
         "  СУНДУКИ! toolate…",
         "",
         "Последняя строка обведена дважды."
+    });
+
+    add("seam", "Заметка на полях", {
+        "Приписка чужой рукой поверх старого чертежа:",
+        "",
+        "«Зал сходится к алтарю, но алтарь — не конец.",
+        "За северной гранью шов, заложенный изнутри.",
+        "Открывается ключом самого стража: он и есть",
+        "замок, пока стоит.»",
+        "",
+        "Ниже, торопливо: «Никому. Особенно Ордену.»"
+    });
+
+    add("cinch", "Отчёт о Стяжении", {
+        "Лист плотный, с водяным знаком в виде узла.",
+        "",
+        "«День сорок первый. Сеть не порвалась.",
+        "Она затянулась. Мы полагали, что связываем",
+        "точки; на деле мы стягивали расстояние,",
+        "и оно поддалось.",
+        "",
+        "Заставу с южной дороги принесло к лесу,",
+        "которого от неё было двенадцать дней пути.",
+        "Половину Верхнего Города не нашли вовсе.",
+        "",
+        "Хуже другое: узел продолжает тянуть. Медленно,",
+        "но мы измерили — за поколение на локоть.",
+        "Значит, Стяжение не кончилось. Оно идёт.",
+        "",
+        "Остановить может тот, кто помнит дорогу.",
+        "Мы таких больше не делаем.»"
+    });
+
+    add("order", "Устав, лист девятый", {
+        "«…и потому послушник, вошедший в узел,",
+        "не выходит прежним. Отсюда правило:",
+        "в узел — только вдвоём, и второй остаётся",
+        "снаружи, чтобы было кому вспомнить.",
+        "",
+        "Стражи ставятся не против людей. Стражи",
+        "ставятся против того, что идёт по линиям",
+        "с той стороны.»",
+        "",
+        "Дальше вырвано."
+    });
+
+    add("double", "Жалоба на межевание", {
+        "«…а хутор Двоеданный оттого так и зовут,",
+        "что дворов там два, а хутор один. Стоят",
+        "друг против друга, и в каждом свой Прохор,",
+        "и оба божатся, что настоящий.",
+        "",
+        "Староста наш ездил разбирать и вернулся",
+        "мрачный. Сказал только: межу не проведёшь",
+        "там, где земля сама себя догнала.»"
     });
 
     add("hermit", "Страница из дневника", {
@@ -558,10 +622,22 @@ void Content::build_enemies() {
     keeper.stats.armor = 6;    keeper.stats.ap_atk = 4;
     keeper.exp = 220; keeper.gold_min = 90; keeper.gold_max = 160;
     keeper.drops = { Drop("focus_node", 100), Drop("rune_stone", 100),
-                     Drop("plate_armor", 40) };
+                     Drop("seam_key", 100), Drop("plate_armor", 40) };
     keeper.detect = 8; keeper.kill_counter = "kill_keeper";
     keeper.on_hit_effect = "slow"; keeper.on_hit_chance = 35; keeper.on_hit_power = 1;
     add(keeper);
+
+    EnemyDef archivist;
+    archivist.id = "archivist"; archivist.name = "Архивариус Ордена";
+    archivist.stats.max_hp = 150; archivist.stats.max_ap = 12; archivist.stats.attack = 88;
+    archivist.stats.dmg_min = 9; archivist.stats.dmg_max = 18; archivist.stats.block = 22;
+    archivist.stats.armor = 7;    archivist.stats.ap_atk = 4;
+    archivist.exp = 300; archivist.gold_min = 120; archivist.gold_max = 220;
+    archivist.drops = { Drop("order_seal", 100), Drop("rune_stone", 100),
+                        Drop("portal_stone", 100) };
+    archivist.detect = 8; archivist.kill_counter = "kill_archivist";
+    archivist.on_hit_effect = "weaken"; archivist.on_hit_chance = 45; archivist.on_hit_power = 2;
+    add(archivist);
 
     // Вожак носит амулет Лады — цель квеста, а не случайная добыча.
     EnemyDef alpha;
@@ -657,6 +733,26 @@ void Content::build_quests() {
     quests_.push_back(q);
 
     q = QuestDef();
+    q.id = "seam"; q.name = "Шов за алтарём"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "Заметка говорит о шве за северной гранью алтаря. "
+                         "Открывает его ключ самого стража."),
+        QuestStageDef(2, "Ключ шва у тебя. Осталось найти сам шов — он в святилище."),
+        QuestStageDef(QUEST_DONE, "Схрон Ордена открыт.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "cinch"; q.name = "Стяжение не кончилось"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "Отчёт Ордена: сеть не порвалась, а затянулась — и тянет до сих пор. "
+                         "Отшельник должен знать больше."),
+        QuestStageDef(QUEST_DONE, "Отшельник рассказал, чем всё это кончится. "
+                                  "И чем может кончиться иначе.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
     q.id = "enchanter"; q.name = "Ремесло Вельда";
     q.stages = {
         QuestStageDef(1, "Вельду нужен рунный камень из святилища."),
@@ -721,6 +817,37 @@ void Content::build_npcs() {
     add("trader",    "Торговец Гурий",   "trader_root",    "shop_general");
     add("hermit",    "Отшельник Свет",   "hermit_root",    "");
     add("enchanter", "Зачарователь Вельд", "ench_root",    "");
+}
+
+// ---------------------------------------------------------------- события
+
+void Content::build_triggers() {
+    auto add = [&](TriggerKind k, const std::string& key, int count,
+                   const std::string& quest, int stage, int min_stage,
+                   const std::string& message) {
+        QuestTrigger t;
+        t.kind = k; t.key = key; t.count = count;
+        t.quest = quest; t.stage = stage; t.min_stage = min_stage; t.message = message;
+        triggers_.push_back(t);
+    };
+
+    // Тайна открывается находкой, а не разговором.
+    add(TriggerKind::NoteTaken, "seam", 1, "seam", 1, 0,
+        "Заметка на полях говорит о шве за алтарём. Открыта тайна: «Шов за алтарём».");
+
+    // Ключ добывается со стража — сам факт добычи двигает квест.
+    // Ключ двигает тайну только тому, кто уже прочёл заметку: иначе цепочку
+    // можно пройти с конца, добыв ключ и не разгадав ничего.
+    add(TriggerKind::ItemGained, "seam_key", 1, "seam", 2, 1,
+        "Ключ шва у тебя. Теперь понятно, о каком замке писали на полях.");
+
+    // Вход в схрон закрывает квест: дошёл — значит, разгадал.
+    add(TriggerKind::LocationEntered, "vault", 1, "seam", QUEST_DONE, 1,
+        "Схрон Ордена открыт. Тайна «Шов за алтарём» разгадана.");
+
+    // Отчёт в схроне открывает следующую тайну.
+    add(TriggerKind::NoteTaken, "cinch", 1, "cinch", 1, 0,
+        "Отчёт о Стяжении меняет всё. Открыта тайна: «Стяжение не кончилось».");
 }
 
 // ----------------------------------------------------------------- диалоги
@@ -1328,6 +1455,12 @@ void Content::build_dialogues() {
         zp_wait.req_quest = "zero_point"; zp_wait.req_stage_min = 1; zp_wait.req_stage_max = 1;
         n.options.push_back(zp_wait);
 
+        DlgOption cinch_ask;
+        cinch_ask.text = "Я нашёл отчёт Ордена. Стяжение идёт до сих пор.";
+        cinch_ask.next = "cinch_talk";
+        cinch_ask.req_quest = "cinch"; cinch_ask.req_stage_min = 1; cinch_ask.req_stage_max = 1;
+        n.options.push_back(cinch_ask);
+
         DlgOption zp_after;
         zp_after.text = "Расскажи ещё про нулевую точку.";
         zp_after.next = "zp_after";
@@ -1390,6 +1523,29 @@ void Content::build_dialogues() {
                  "в кольцо, и каждый поведёт к следующему.\n"
                  "Камни продаёт Гурий, если сам не найдёшь.";
         n.options.push_back(bye("Спасибо."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "cinch_talk";
+        n.text = "Отшельник долго смотрит на лист, потом кладёт его в огонь.\n"
+                 "— Значит, дошёл. Ладно.\n"
+                 "Сеть строили, чтобы отменить расстояние. Она согласилась —\n"
+                 "и с тех пор тянет. Медленно. За твою жизнь Ольховка сойдётся\n"
+                 "с заставой, а через три — с тем, что за ней.\n"
+                 "\n"
+                 "Кончится это одним из трёх. Либо кто-то дотянет узел до конца,\n"
+                 "и всё станет одной точкой — Орден этого и хотел. Либо кто-то\n"
+                 "разрежет сеть, и мир снова станет огромным: до Лады будет\n"
+                 "полгода пути, и она об этом не узнает. Либо кто-то удержит\n"
+                 "как есть — и это труднее всего, потому что держать надо вечно.\n"
+                 "\n"
+                 "Я держу двадцать лет. Я устал.";
+        DlgOption take;
+        take.text = "Я подумаю, что с этим делать. [300 опыта]";
+        take.set_quest = "cinch"; take.set_stage = QUEST_DONE;
+        take.give_exp = 300;
+        take.give_item = "portal_stone"; take.give_count = 2;
+        n.options.push_back(take);
         add(n);
     }
     {

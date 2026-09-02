@@ -12,7 +12,21 @@
 
 struct MapNpc  { Vec2 pos; std::string npc_id; };
 struct MapItem { Vec2 pos; std::string item_id; int count = 1; };
-struct MapExit { Vec2 pos; std::string target; Vec2 dest; };
+// Условие прохода. Пустые поля не проверяются. Ключ не тратится — он именно
+// ключ, а не пропуск: потеряв его, игрок не запирает себя снаружи навсегда.
+struct Gate {
+    std::string key;                 // предмет, который нужно иметь при себе
+    std::string req_quest;           // квест не ниже этапа
+    int         req_stage = 0;
+    std::string req_counter;         // счётчик не ниже значения
+    int         req_counter_min = 0;
+    std::string denied;              // что сказать, если не пускает
+    bool empty() const {
+        return key.empty() && req_quest.empty() && req_counter.empty();
+    }
+};
+
+struct MapExit { Vec2 pos; std::string target; Vec2 dest; Gate gate; };
 struct MapSign { Vec2 pos; std::string text; };
 struct MapNote { Vec2 pos; std::string note_id; };
 

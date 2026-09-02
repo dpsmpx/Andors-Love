@@ -282,10 +282,15 @@ int Game::count_item(const std::string& id) const {
 
 void Game::add_item(const std::string& id, int n) {
     if (n <= 0) return;
+    bool merged = false;
     for (ItemStack& s : plr_.inv) {
-        if (s.id == id) { s.count += n; return; }
+        if (s.id != id) continue;
+        s.count += n;
+        merged = true;
+        break;
     }
-    plr_.inv.push_back(ItemStack{id, n});
+    if (!merged) plr_.inv.push_back(ItemStack(id, n));
+    fire_event(TriggerKind::ItemGained, id);
 }
 
 bool Game::remove_item(const std::string& id, int n) {
@@ -413,6 +418,7 @@ void Game::fill_mob_inventory(Mob& m, const EnemyDef& e) {
 void Game::spawn_initial(const Location& loc) {
     if (visited_.count(loc.id)) return;
     visited_.insert(loc.id);
+    fire_event(TriggerKind::LocationEntered, loc.id);
     for (std::size_t z = 0; z < loc.zones.size(); ++z) {
         const SpawnZone& zone = loc.zones[z];
         for (int i = 0; i < zone.max_count; ++i) {
@@ -713,6 +719,7 @@ bool Game::take_note(int index) {
     // Счётчик позволяет требовать находку в диалоге.
     plr_.counters["note_" + nd->id] = 1;
     msg("Найдена записка: «" + nd->title + "». Читать — клавиша B.");
+    fire_event(TriggerKind::NoteTaken, nd->id);
     return true;
 }
 
@@ -855,6 +862,27 @@ Bump Game::try_move(int dx, int dy) {
     if (!loc->walkable(np)) return Bump::Blocked;
 
     if (const MapExit* ex = loc->exit_at(np)) {
+        if (!ex->gate.empty()) {
+            const Gate& gt = ex->gate;
+            bool pass = true;
+            if (!gt.key.empty() && count_item(gt.key) <= 0) pass = false;
+            if (!gt.req_quest.empty() && quest_stage(gt.req_quest) < gt.req_stage) pass = false;
+            if (!gt.req_counter.empty()) {
+                auto it = plr_.counters.find(gt.req_counter);
+                int have = (it == plr_.counters.end()) ? 0 : it->second;
+                if (have < gt.req_counter_min) pass = false;
+            }
+            if (!pass) {
+                if (!gt.denied.empty()) msg(gt.denied);
+                else if (!gt.key.empty()) {
+                    const ItemDef* kd = Content::get().item(gt.key);
+                    msg("Заперто. Нужен ключ: " + std::string(kd ? kd->name : gt.key) + ".");
+                } else {
+                    msg("Проход закрыт.");
+                }
+                return Bump::Blocked;
+            }
+        }
         const Location* dst = world_.location(ex->target);
         if (!dst) { msg("Дорога обрывается: " + world_.last_error()); return Bump::Blocked; }
         plr_.loc = dst->id;
@@ -906,6 +934,74 @@ Bump Game::try_move(int dx, int dy) {
     return Bump::Moved;
 }
 
+// -------------------------------------------------- события и триггеры
+
+int Game::quest_stage(const std::string& id) const {
+    auto it = plr_.quests.find(id);
+    return it == plr_.quests.end() ? QUEST_NONE : it->second;
+}
+
+void Game::recheck_state_triggers() {
+    const Content& c = Content::get();
+    // Несколько проходов: одно сработавшее условие может открыть следующее.
+    for (int pass = 0; pass < 8; ++pass) {
+        bool changed = false;
+        for (const QuestTrigger& t : c.triggers()) {
+            if (t.kind != TriggerKind::ItemGained && t.kind != TriggerKind::MobKilled) continue;
+            const int cur = quest_stage(t.quest);
+            if (cur < t.min_stage || cur >= t.stage) continue;
+
+            int have = 0;
+            if (t.kind == TriggerKind::ItemGained) {
+                have = count_item(t.key);
+            } else {
+                auto it = plr_.counters.find(t.key);
+                have = (it == plr_.counters.end()) ? 0 : it->second;
+            }
+            if (have < t.count) continue;
+
+            plr_.quests[t.quest] = t.stage;
+            if (!t.message.empty()) msg(t.message);
+            changed = true;
+        }
+        if (!changed) return;
+    }
+}
+
+void Game::fire_event(TriggerKind kind, const std::string& key) {
+    const Content& c = Content::get();
+    bool advanced = false;
+    for (const QuestTrigger& t : c.triggers()) {
+        if (t.kind != kind || t.key != key) continue;
+
+        // Порог события: сколько убито, сколько предметов на руках, какой этап.
+        int have = 1;
+        if (kind == TriggerKind::MobKilled) {
+            auto it = plr_.counters.find(key);
+            have = (it == plr_.counters.end()) ? 0 : it->second;
+        } else if (kind == TriggerKind::ItemGained) {
+            have = count_item(key);
+        } else if (kind == TriggerKind::QuestStage) {
+            have = quest_stage(key);
+        }
+        if (have < t.count) continue;
+
+        const int cur = quest_stage(t.quest);
+        if (cur < t.min_stage) continue;    // цепочку нельзя пройти с конца
+        if (cur >= t.stage) continue;       // назад квест не откатываем
+
+        plr_.quests[t.quest] = t.stage;
+        const QuestDef* q = c.quest(t.quest);
+        if (!t.message.empty()) msg(t.message);
+        else if (q) msg((q->secret ? "Открыта тайна: «" : "Новый след: «") + q->name + "».");
+        advanced = true;
+    }
+    // Продвинувшийся квест мог сделать выполнимым условие, которое игрок
+    // закрыл давно — например, ключ добыт задолго до того, как стало ясно,
+    // от чего он.
+    if (advanced) recheck_state_triggers();
+}
+
 // ------------------------------------------------------------- диалоги
 
 bool Game::option_available(const DlgOption& o) const {
@@ -941,6 +1037,8 @@ void Game::apply_option(const DlgOption& o, const std::string& npc_shop,
 
     if (!o.set_quest.empty()) {
         plr_.quests[o.set_quest] = o.set_stage;
+        fire_event(TriggerKind::QuestStage, o.set_quest);
+        recheck_state_triggers();
         const QuestDef* q = c.quest(o.set_quest);
         const std::string qname = q ? q->name : o.set_quest;
         if (o.set_stage == QUEST_DONE) msg("Квест завершён: «" + qname + "».");
@@ -1240,7 +1338,10 @@ void Game::kill_mob(Mob& m) {
         msg("Добыча: " + std::string(def ? def->name : st.id) +
             (st.count > 1 ? " x" + to_str(st.count) : "") + ".");
     }
-    if (!e->kill_counter.empty()) ++plr_.counters[e->kill_counter];
+    if (!e->kill_counter.empty()) {
+        ++plr_.counters[e->kill_counter];
+        fire_event(TriggerKind::MobKilled, e->kill_counter);
+    }
 
     int uid = m.uid;
     for (std::size_t i = 0; i < mobs_.size(); ++i) {

@@ -494,7 +494,8 @@ void screen_quests(Game& g) {
         int st = (it == g.player().quests.end()) ? QUEST_NONE : it->second;
         if (st == QUEST_NONE) continue;
         any = true;
-        s += (st == QUEST_DONE ? "  [x] " : "  [ ] ") + q.name + "\n";
+        s += (st == QUEST_DONE ? "  [x] " : "  [ ] ") +
+             (q.secret ? std::string("Тайна: ") : std::string()) + q.name + "\n";
         std::string txt = c.quest_stage_text(q.id, st);
         if (!txt.empty()) s += "      " + txt + "\n";
         if (q.id == "wolves" && st != QUEST_DONE) {

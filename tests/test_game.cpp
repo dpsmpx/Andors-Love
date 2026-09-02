@@ -137,7 +137,7 @@ void test_maps() {
     // Граф мира: каждый переход ведёт в существующую локацию на проходимую
     // клетку, и все локации достижимы из деревни. Ошибка здесь означает
     // локацию, куда нельзя попасть или откуда нельзя выйти.
-    const char* all[] = {"village", "forest", "cave", "ruins", "sanctum"};
+    const char* all[] = {"village", "forest", "cave", "ruins", "sanctum", "vault"};
     const int   nloc  = static_cast<int>(sizeof(all) / sizeof(all[0]));
 
     for (int i = 0; i < nloc; ++i) {
@@ -204,7 +204,7 @@ void test_maps() {
 void test_embedded_maps() {
     section("вшитые карты");
 
-    for (const char* id : {"village", "forest", "cave", "ruins", "sanctum"}) {
+    for (const char* id : {"village", "forest", "cave", "ruins", "sanctum", "vault"}) {
         const char* emb = embedded_map(id);
         check(emb != nullptr, std::string("карта ") + id + " вшита в бинарник");
         if (!emb) continue;
@@ -671,7 +671,7 @@ void test_content_integrity() {
                            "hermit_root","hermit_rest","hermit_hint",
                            "zp_offer","zp_wait","zp_reward","zp_after",
                            "ench_root","ench_about","ench_offer","ench_wait","ench_reward",
-                           "books_offer","books_wait","books_reward"};
+                           "books_offer","books_wait","books_reward","cinch_talk"};
     for (const char* nid : nodes) {
         const DlgNode* n = c.node(nid);
         check(n != nullptr, std::string("узел ") + nid + " существует");
@@ -703,7 +703,8 @@ void test_content_integrity() {
 
     // Добыча врагов должна ссылаться на существующие предметы.
     const char* mobs[] = {"rat", "wolf", "bandit", "wolf_alpha", "spider", "bat",
-                          "spider_queen", "brigand", "bandit_chief", "wraith", "keeper"};
+                          "spider_queen", "brigand", "bandit_chief", "wraith", "keeper",
+                          "archivist"};
     for (const char* mid : mobs) {
         const EnemyDef* e = c.enemy(mid);
         check(e != nullptr, std::string("враг ") + mid + " существует");
@@ -716,7 +717,7 @@ void test_content_integrity() {
 
     // Зоны спавна на картах должны ссылаться на существующих врагов.
     World w("data/maps");
-    for (const char* lid : {"village", "forest", "cave", "ruins", "sanctum"}) {
+    for (const char* lid : {"village", "forest", "cave", "ruins", "sanctum", "vault"}) {
         const Location* loc = w.location(lid);
         if (!loc) continue;
         for (const SpawnZone& z : loc->zones)
@@ -1262,12 +1263,134 @@ void test_portals() {
 // механикой, предметы поднимаются с карты, переходы — через реальные выходы.
 // Подкручиваются только здоровье и очки действия героя: тест про проходимость
 // контента, а не про баланс.
+void test_gates_and_secret_quests() {
+    section("запертые проходы и тайные квесты");
+    const Content& c = Content::get();
+    World w("data/maps");
+
+    // Схрон должен быть закрыт: единственный вход в него — с условием.
+    const Location* sanct = w.location("sanctum");
+    check(sanct != nullptr, "святилище загружается");
+    if (!sanct) return;
+    const MapExit* to_vault = nullptr;
+    for (const MapExit& e : sanct->exits)
+        if (e.target == "vault") to_vault = &e;
+    check(to_vault != nullptr, "из святилища есть проход в схрон");
+    if (!to_vault) return;
+    check(!to_vault->gate.empty(), "проход в схрон под условием");
+    eqs(to_vault->gate.key, "seam_key", "нужен ключ шва");
+    eqs(to_vault->gate.req_quest, "seam", "и открытая тайна");
+    check(!to_vault->gate.denied.empty(), "отказ объясняется словами, а не молчанием");
+
+    // Каждое условие врат должно ссылаться на существующие вещи.
+    for (const char* lid : {"village", "forest", "cave", "ruins", "sanctum", "vault"}) {
+        const Location* loc = w.location(lid);
+        if (!loc) continue;
+        for (const MapExit& e : loc->exits) {
+            if (!e.gate.key.empty())
+                check(c.item(e.gate.key) != nullptr,
+                      std::string(lid) + ": ключ врат '" + e.gate.key + "' есть в базе");
+            if (!e.gate.req_quest.empty())
+                check(c.quest(e.gate.req_quest) != nullptr,
+                      std::string(lid) + ": квест врат '" + e.gate.req_quest + "' есть в базе");
+        }
+    }
+
+    // --- поведение врат ---
+    Game g;
+    g.new_game("Взломщик", "human", "swordsman");
+    g.player().loc = "sanctum";
+
+    const int dxs[] = {1, -1, 0, 0}, dys[] = {0, 0, 1, -1};
+    auto try_enter = [&]() {
+        for (int k = 0; k < 4; ++k) {
+            Vec2 from(to_vault->pos.x - dxs[k], to_vault->pos.y - dys[k]);
+            if (!sanct->walkable(from)) continue;
+            g.player().loc = "sanctum";
+            g.player().pos = from;
+            if (g.try_move(dxs[k], dys[k]) == Bump::Exit) return true;
+        }
+        return false;
+    };
+
+    check(!try_enter(), "без ключа и без тайны в схрон не войти");
+    eqs(g.player().loc, "sanctum", "игрок остался на месте");
+
+    g.add_item("seam_key", 1);
+    check(!try_enter(), "одного ключа мало: нужно ещё знать, что искать");
+
+    // Тайна открывается находкой заметки, а не разговором.
+    eq(g.quest_stage("seam"), QUEST_NONE, "тайна ещё не открыта");
+    g.fire_event(TriggerKind::NoteTaken, "seam");
+    check(g.quest_stage("seam") >= 1, "находка заметки открыла тайну");
+
+    check(try_enter(), "с ключом и открытой тайной проход пускает");
+    eqs(g.player().loc, "vault", "игрок в схроне");
+    eq(g.quest_stage("seam"), QUEST_DONE, "вход в схрон закрыл тайну");
+
+    // --- квесты от событий ---
+    Game g2;
+    g2.new_game("Следопыт", "human", "swordsman");
+    eq(g2.quest_stage("seam"), QUEST_NONE, "тайна не выдана на старте");
+
+    // Добыча ключа двигает квест сама, без разговоров.
+    g2.fire_event(TriggerKind::NoteTaken, "seam");
+    eq(g2.quest_stage("seam"), 1, "этап 1 от находки");
+    g2.add_item("seam_key", 1);          // add_item сам поднимает событие
+    eq(g2.quest_stage("seam"), 2, "этап 2 от добычи предмета");
+
+    // Событие не откатывает квест назад.
+    g2.fire_event(TriggerKind::NoteTaken, "seam");
+    eq(g2.quest_stage("seam"), 2, "повторное событие не сбрасывает прогресс");
+
+    // Вторая тайна начинается с чтения отчёта.
+    eq(g2.quest_stage("cinch"), QUEST_NONE, "вторая тайна закрыта");
+    g2.fire_event(TriggerKind::NoteTaken, "cinch");
+    eq(g2.quest_stage("cinch"), 1, "отчёт открыл вторую тайну");
+
+    // Убийство тоже умеет открывать квесты.
+    bool has_kill_trigger = false, has_loc_trigger = false, has_item_trigger = false;
+    for (const QuestTrigger& t : c.triggers()) {
+        if (t.kind == TriggerKind::MobKilled)       has_kill_trigger = true;
+        if (t.kind == TriggerKind::LocationEntered) has_loc_trigger  = true;
+        if (t.kind == TriggerKind::ItemGained)      has_item_trigger = true;
+        check(c.quest(t.quest) != nullptr, "триггер ссылается на существующий квест " + t.quest);
+        if (t.kind == TriggerKind::NoteTaken)
+            check(c.note(t.key) != nullptr, "триггер ссылается на существующую записку " + t.key);
+        if (t.kind == TriggerKind::ItemGained)
+            check(c.item(t.key) != nullptr, "триггер ссылается на существующий предмет " + t.key);
+    }
+    check(has_loc_trigger,  "есть квест, открывающийся входом в локацию");
+    check(has_item_trigger, "есть квест, открывающийся добычей предмета");
+    (void)has_kill_trigger;
+
+    // Тайные квесты помечены и не выдаются NPC.
+    int secrets = 0;
+    for (const QuestDef& q : c.quests()) if (q.secret) ++secrets;
+    check(secrets >= 2, "тайных квестов не меньше двух");
+    for (const QuestDef& q : c.quests()) {
+        if (!q.secret) continue;
+        bool offered = false;
+        for (const NpcDef* npc : std::vector<const NpcDef*>{
+                 c.npc("elder"), c.npc("herbalist"), c.npc("smith"),
+                 c.npc("trader"), c.npc("hermit"), c.npc("enchanter")}) {
+            if (!npc) continue;
+            const DlgNode* root = c.node(npc->root);
+            if (!root) continue;
+            for (const DlgOption& o : root->options)
+                if (o.set_quest == q.id && o.set_stage == 1) offered = true;
+        }
+        check(!offered, "тайну «" + q.name + "» никто не выдаёт в разговоре");
+    }
+}
+
 void test_books_and_notes() {
     section("книги и записки");
     const Content& c = Content::get();
 
     // --- записки в базе ---
-    const char* note_ids[] = {"ink", "miner", "watch", "zero", "child", "proto", "hermit"};
+    const char* note_ids[] = {"ink", "miner", "watch", "zero", "child", "proto", "hermit",
+                              "seam", "cinch", "order", "double"};
     for (const char* id : note_ids) {
         const NoteDef* n = c.note(id);
         check(n != nullptr, std::string("записка ") + id + " описана");
@@ -1670,7 +1793,28 @@ void test_playthrough() {
     check(g.count_item("focus_node") >= 3, "третий фокус добыт");
     check(g.count_item("rune_stone") >= 1, "рунный камень добыт");
 
+    // --- тайная цепочка: заметка -> ключ -> шов -> схрон ---
+    check(gather_note("seam"), "заметка на полях найдена в святилище");
+    check(g.quest_stage("seam") >= 1, "находка открыла тайну сама, без разговора");
+    check(g.count_item("seam_key") >= 1, "ключ шва снят со стража");
+    eq(g.quest_stage("seam"), 2, "добыча ключа продвинула тайну");
+
+    check(travel("vault"), "шов за алтарём пропустил с ключом и разгадкой");
+    eqs(g.player().loc, "vault", "герой в схроне Ордена");
+    eq(g.quest_stage("seam"), QUEST_DONE, "тайна «Шов за алтарём» закрыта входом");
+
+    check(hunt("archivist", 1) == 1, "архивариус повержен");
+    check(g.count_item("order_seal") >= 1, "печать Ордена добыта");
+    check(gather_note("cinch"), "отчёт о Стяжении найден");
+    eq(g.quest_stage("cinch"), 1, "отчёт открыл вторую тайну");
+
+    check(travel("sanctum"), "из схрона есть обратный путь");
+
     // --- отшельник: порталы ---
+    check(visible("hermit_root", "cinch_talk"), "отшельник готов говорить о Стяжении");
+    g.apply_option(c.node("cinch_talk")->options[0], "", &shop);
+    eq(g.quest_stage("cinch"), QUEST_DONE, "тайна «Стяжение не кончилось» закрыта разговором");
+
     check(visible("hermit_root", "zp_offer"), "отшельник открыл квест о нулевой точке");
     g.apply_option(c.node("zp_offer")->options[0], "", &shop);
     check(visible("hermit_root", "zp_reward"), "с тремя фокусами награда доступна");
@@ -1713,7 +1857,8 @@ void test_playthrough() {
 
     // --- итог ---
     const char* all_quests[] = {"wolves", "amulet", "pelts", "moss", "books",
-                                "queen", "outpost", "zero_point", "enchanter"};
+                                "queen", "outpost", "zero_point", "enchanter",
+                                "seam", "cinch"};
     for (const char* q : all_quests)
         eq(g.player().quests[q], QUEST_DONE, std::string("квест ") + q + " пройден");
 
@@ -1753,6 +1898,7 @@ int main() {
     test_chests();
     test_enchanting();
     test_portals();
+    test_gates_and_secret_quests();
     test_books_and_notes();
     test_book_save_roundtrip();
     test_no_escape_needed();

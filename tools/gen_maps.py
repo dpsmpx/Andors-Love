@@ -78,6 +78,7 @@ village.objects = [
     "item 11 16 bread 2",
     "item 30 16 torch 1",
     "note 30 2 child",
+    "note 2 16 double",
     "chest 44 3 40 - bread:2 herb_potion:1",
     "spawn 20 15 rat 2 4",
     "spawn 44 15 rat 1 3",
@@ -141,6 +142,7 @@ cave.objects = [
     "item 12 12 torch 1",
     "note 13 12 miner",
     "note 38 7 proto",
+    "note 30 13 order",
     "chest 11 4 60 - antidote:2 frost_shard:1",
     "chest 40 14 120 - ember:1 elixir_guard:1",
     "spawn 8 6 spider 2 4",
@@ -189,7 +191,7 @@ sanctum.rect(8, 4, 20, 14, ".")         # первый зал
 sanctum.rect(21, 8, 26, 10, ".")        # переход
 sanctum.rect(24, 3, 38, 15, ".")        # главный зал
 sanctum.rect(29, 7, 33, 11, "#")        # алтарь в центре
-sanctum.rect(31, 7, 31, 7, ".")
+sanctum.rect(31, 7, 31, 9, ".")   # ход внутрь алтаря, к шву
 sanctum.rect(39, 8, 45, 10, ".")        # ниша
 sanctum.rect(14, 2, 16, 4, ".")
 sanctum.rect(14, 14, 16, 16, ".")
@@ -199,6 +201,7 @@ sanctum.objects = [
     "item 15 3 rune_stone 1",
     "item 15 15 frost_shard 1",
     "note 15 4 zero",
+    "note 35 4 seam",
     "chest 43 9 250 - rune_stone:1 elixir_haste:1 portal_stone:1",
     "chest 10 13 140 - antidote:2 salve:1",
     "spawn 14 6 wraith 2 4",
@@ -207,9 +210,34 @@ sanctum.objects = [
     "spawn 35 13 wraith 2 4",
     "spawn 42 9 keeper 1 2",
     "exit 2 9 ruins 44 9",
+    "exit 31 9 vault 3 9 key=seam_key quest=seam:1 "
+    "deny=Северная грань алтаря глухая. Здесь что-то есть, но не для тебя — пока.",
 ]
 
-MAPS = [village, forest, cave, ruins, sanctum]
+# ------------------------------------------------------------ СХРОН ОРДЕНА
+# Попасть можно только через шов за алтарём святилища: нужен ключ стража
+# и найденная заметка, открывающая тайну. Обычным путём сюда не выйти.
+vault = Map("vault", "Схрон Ордена", "#")
+vault.rect(2, 8, 10, 10, ".")        # входной коридор от шва
+vault.rect(10, 5, 20, 13, ".")       # приёмный зал
+vault.rect(20, 8, 26, 10, ".")       # перемычка
+vault.rect(26, 4, 40, 14, ".")       # хранилище
+vault.rect(31, 8, 35, 10, "#")       # стеллажи посередине
+vault.rect(41, 8, 45, 10, ".")       # дальняя ниша
+vault.objects = [
+    "sign 4 9 Воздух стоячий, но не затхлый. Здесь двести лет никто не дышал.",
+    "note 34 12 cinch",
+    "item 12 6 rune_stone 1",
+    "chest 14 12 200 - antidote:3 salve:2",
+    "chest 38 5 400 - elixir_haste:1 rune_stone:1 portal_stone:1",
+    "chest 44 9 600 - plate_armor:1 ember:1 frost_shard:1",
+    "spawn 16 9 wraith 2 4",
+    "spawn 33 6 wraith 2 4",
+    "spawn 37 12 archivist 1 2",
+    "exit 2 9 sanctum 31 6",
+]
+
+MAPS = [village, forest, cave, ruins, sanctum, vault]
 
 # --------------------------------------------------------------- проверки
 def reachable(m, start):
@@ -230,7 +258,7 @@ def check():
     ok = True
     by_id = {m.id: m for m in MAPS}
     entries = {"village": (5, 8), "forest": (2, 8), "cave": (3, 9),
-               "ruins": (24, 3), "sanctum": (3, 9)}
+               "ruins": (24, 3), "sanctum": (3, 9), "vault": (3, 9)}
 
     for m in MAPS:
         start = entries[m.id]
