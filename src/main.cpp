@@ -2,6 +2,7 @@
 #include "platform.h"
 #include "ui.h"
 
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -9,8 +10,43 @@
 
 namespace {
 
-const char* SAVE_DIR  = "saves";
-const char* SAVE_FILE = "saves/hero.sav";
+// Каталог сохранений выбирается один раз при старте: внутри APK рабочий
+// каталог может оказаться недоступным для записи, и молча терять прогресс
+// нельзя.
+std::string g_save_dir  = "saves";
+std::string g_save_file = "saves/hero.sav";
+
+// Каталог годится, только если в него удаётся создать и записать файл.
+bool dir_writable(const std::string& dir) {
+    if (dir.empty()) return false;
+    if (!platform::make_dir(dir)) return false;
+    const std::string probe = dir + "/.write-test";
+    {
+        std::ofstream out(probe);
+        if (!out) return false;
+        out << 'x';
+        if (!out) return false;
+    }
+    std::remove(probe.c_str());
+    return true;
+}
+
+std::string find_save_dir() {
+    if (const char* env = std::getenv("ANDORS_LOVE_SAVE"))
+        if (dir_writable(env)) return env;
+
+    if (dir_writable("saves")) return "saves";
+
+    if (const char* home = std::getenv("HOME")) {
+        const std::string d = std::string(home) + "/.andors-love";
+        if (dir_writable(d)) return d;
+    }
+    if (const char* tmp = std::getenv("TMPDIR")) {
+        const std::string d = std::string(tmp) + "/andors-love";
+        if (dir_writable(d)) return d;
+    }
+    return "saves";   // не нашли — оставим привычный путь ради понятной ошибки
+}
 
 bool has_maps(const std::string& dir) {
     if (dir.empty()) return false;
@@ -32,10 +68,6 @@ std::string find_data_root(const char* argv0) {
     if (!exe.empty() && has_maps(exe + "/data/maps")) return exe + "/data/maps";
 
     return "data/maps";     // вернём привычный путь, чтобы текст ошибки был понятным
-}
-
-void ensure_save_dir() {
-    platform::make_dir(SAVE_DIR);   // неудачу разберём при попытке записи
 }
 
 // Возвращает false, если игрок вышел в главное меню.
@@ -84,11 +116,11 @@ void play(Game& g) {
                                               "Выйти в главное меню"};
                 int s = ui::choose("Пауза", opts);
                 if (s == 1) {
-                    ensure_save_dir();
-                    if (g.save_to(SAVE_FILE)) g.msg("Игра сохранена: " + std::string(SAVE_FILE));
+                    platform::make_dir(g_save_dir);
+                    if (g.save_to(g_save_file)) g.msg("Игра сохранена: " + g_save_file);
                     else ui::message_box("Ошибка сохранения", "  " + g.error());
                 } else if (s == 2) {
-                    if (!g.load_from(SAVE_FILE))
+                    if (!g.load_from(g_save_file))
                         ui::message_box("Ошибка загрузки", "  " + g.error());
                 } else if (s == 3) {
                     return;
@@ -134,6 +166,9 @@ int main(int argc, char** argv) {
     platform::RawMode raw;
     platform::hide_cursor();
 
+    g_save_dir  = find_save_dir();
+    g_save_file = g_save_dir + "/hero.sav";
+
     Game g(find_data_root(argc > 0 ? argv[0] : nullptr));
     while (!platform::input_closed()) {
         std::vector<std::string> items{
@@ -158,7 +193,7 @@ int main(int argc, char** argv) {
             }
             play(g);
         } else if (sel == 1) {
-            if (!g.load_from(SAVE_FILE)) {
+            if (!g.load_from(g_save_file)) {
                 ui::message_box("Загрузка не удалась", "  " + g.error());
                 continue;
             }
