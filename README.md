@@ -48,8 +48,8 @@ make clean
 `make embed`.
 
 Каталог сохранений выбирается так же по очереди: `ANDORS_LOVE_SAVE`, `saves/`
-в рабочем каталоге, `$HOME/.andors-love`, `$TMPDIR/andors-love` — первый, куда
-удаётся записать.
+в рабочем каталоге, `$HOME/.andors-love`, `saves/` рядом с бинарником,
+`$TMPDIR/andors-love` — первый, куда удаётся записать.
 
 **На смартфоне** (Termux или C4Droid) — см. [`docs/android.md`](docs/android.md).
 Интерфейс подстраивается под ширину терминала: от 28 колонок и выше.

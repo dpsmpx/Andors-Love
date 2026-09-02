@@ -31,7 +31,7 @@ bool dir_writable(const std::string& dir) {
     return true;
 }
 
-std::string find_save_dir() {
+std::string find_save_dir(const char* argv0) {
     if (const char* env = std::getenv("ANDORS_LOVE_SAVE"))
         if (dir_writable(env)) return env;
 
@@ -39,6 +39,14 @@ std::string find_save_dir() {
 
     if (const char* home = std::getenv("HOME")) {
         const std::string d = std::string(home) + "/.andors-love";
+        if (dir_writable(d)) return d;
+    }
+    // Рядом с самим бинарником. Внутри APK это приватный каталог приложения —
+    // он доступен для записи, тогда как рабочий каталог может быть любым,
+    // а HOME и TMPDIR вообще не заданы.
+    const std::string exe = platform::exe_dir(argv0);
+    if (!exe.empty()) {
+        const std::string d = exe + "/saves";
         if (dir_writable(d)) return d;
     }
     if (const char* tmp = std::getenv("TMPDIR")) {
@@ -166,7 +174,7 @@ int main(int argc, char** argv) {
     platform::RawMode raw;
     platform::hide_cursor();
 
-    g_save_dir  = find_save_dir();
+    g_save_dir  = find_save_dir(argc > 0 ? argv[0] : nullptr);
     g_save_file = g_save_dir + "/hero.sav";
 
     Game g(find_data_root(argc > 0 ? argv[0] : nullptr));
