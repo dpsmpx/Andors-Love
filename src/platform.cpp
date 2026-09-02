@@ -120,6 +120,14 @@ void term_size(int* cols, int* rows) {
     if (rows) *rows = r;
 }
 
+std::string exe_dir(const char* argv0) {
+    if (!argv0) return std::string();
+    std::string p(argv0);
+    std::size_t slash = p.find_last_of("/\\");
+    if (slash == std::string::npos) return std::string();
+    return p.substr(0, slash);
+}
+
 bool make_dir(const std::string& path) {
 #if defined(_WIN32)
     return CreateDirectoryA(path.c_str(), nullptr) ||

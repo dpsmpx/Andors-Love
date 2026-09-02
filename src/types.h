@@ -7,6 +7,10 @@
 struct Vec2 {
     int x = 0;
     int y = 0;
+    Vec2() = default;
+    // Конструктор нужен ради C++11: поля с инициализаторами лишают структуру
+    // статуса агрегата, и запись Vec2{1, 2} без него не собирается.
+    Vec2(int nx, int ny) : x(nx), y(ny) {}
 };
 inline bool operator==(const Vec2& a, const Vec2& b) { return a.x == b.x && a.y == b.y; }
 
@@ -85,6 +89,8 @@ struct ItemDef {
 struct ItemStack {
     std::string id;
     int         count = 0;
+    ItemStack() = default;
+    ItemStack(const std::string& i, int c) : id(i), count(c) {}
 };
 
 // ---------- стойки ----------

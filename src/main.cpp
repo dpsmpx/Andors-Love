@@ -2,6 +2,8 @@
 #include "platform.h"
 #include "ui.h"
 
+#include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <string>
 
@@ -9,6 +11,28 @@ namespace {
 
 const char* SAVE_DIR  = "saves";
 const char* SAVE_FILE = "saves/hero.sav";
+
+bool has_maps(const std::string& dir) {
+    if (dir.empty()) return false;
+    std::ifstream probe(dir + "/village.map");
+    return static_cast<bool>(probe);
+}
+
+// Каталог карт ищем по очереди: переменная окружения, рабочий каталог, рядом
+// с исполняемым файлом. На Android каталог проекта часто лежит на /sdcard,
+// откуда запускать бинарники нельзя, поэтому «рядом с бинарником» и явная
+// переменная — не роскошь, а рабочий сценарий.
+std::string find_data_root(const char* argv0) {
+    if (const char* env = std::getenv("ANDORS_LOVE_DATA"))
+        if (has_maps(env)) return env;
+
+    if (has_maps("data/maps")) return "data/maps";
+
+    const std::string exe = platform::exe_dir(argv0);
+    if (!exe.empty() && has_maps(exe + "/data/maps")) return exe + "/data/maps";
+
+    return "data/maps";     // вернём привычный путь, чтобы текст ошибки был понятным
+}
 
 void ensure_save_dir() {
     platform::make_dir(SAVE_DIR);   // неудачу разберём при попытке записи
@@ -106,11 +130,11 @@ void play(Game& g) {
 
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
     platform::RawMode raw;
     platform::hide_cursor();
 
-    Game g;
+    Game g(find_data_root(argc > 0 ? argv[0] : nullptr));
     while (!platform::input_closed()) {
         std::vector<std::string> items{
             "Новая игра", "Продолжить (загрузить сохранение)", "Справка", "Выход"
@@ -125,8 +149,11 @@ int main() {
             g.new_game(name);
             if (!g.here()) {
                 ui::message_box("Не удалось начать игру",
-                                "  " + g.world().last_error() +
-                                "\n\n  Запускай игру из корня проекта:\n  ./andors-love");
+                                "  " + g.world().last_error() + "\n\n"
+                                "  Карты ищутся в data/maps рядом с рабочим\n"
+                                "  каталогом или с самим бинарником. Запусти\n"
+                                "  игру из корня проекта либо укажи путь явно:\n"
+                                "  ANDORS_LOVE_DATA=/путь/к/data/maps ./andors-love");
                 continue;
             }
             play(g);
