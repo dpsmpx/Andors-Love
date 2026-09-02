@@ -1,0 +1,45 @@
+#pragma once
+#include <string>
+
+// Тонкий слой над платформозависимым вводом/выводом.
+// Всё, что знает про termios/conio/ANSI, живёт только здесь.
+namespace platform {
+
+// Коды клавиш выше диапазона ASCII, чтобы не конфликтовать с символами.
+enum Key {
+    KEY_UP    = 1000,
+    KEY_DOWN  = 1001,
+    KEY_LEFT  = 1002,
+    KEY_RIGHT = 1003,
+    KEY_ESC   = 27,
+    KEY_EOF   = 1004,   // ввод закончился (пайп, Ctrl-D) — не то же, что Esc
+    KEY_ENTER = 10,
+    KEY_SPACE = 32
+};
+
+// Переводит терминал в raw-режим на время жизни объекта и возвращает обратно
+// в деструкторе — в том числе при исключении.
+class RawMode {
+public:
+    RawMode();
+    ~RawMode();
+    RawMode(const RawMode&) = delete;
+    RawMode& operator=(const RawMode&) = delete;
+};
+
+// Блокирующее чтение одной клавиши. Стрелки разворачиваются в KEY_*.
+// При закрытом вводе возвращает KEY_EOF — иначе цикл, ждущий клавишу,
+// крутился бы вечно.
+int read_key();
+
+// true, если ввод закончился. Циклы экранов обязаны это проверять и выходить.
+bool input_closed();
+
+// Очистка экрана управляющей последовательностью, без запуска оболочки.
+void clear_screen();
+
+// Скрыть/показать курсор.
+void hide_cursor();
+void show_cursor();
+
+} // namespace platform
