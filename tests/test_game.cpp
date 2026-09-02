@@ -36,6 +36,17 @@ void eqs(const std::string& got, const std::string& want, const std::string& wha
 
 void section(const char* name) { std::cout << "\n== " << name << " ==\n"; }
 
+// Полный список локаций мира. Держится в одном месте: тесты обходят его
+// целиком, и новая локация не может тихо выпасть из проверок.
+const char* const ALL_LOCATIONS[] = {
+    "village", "forest", "cave", "ruins", "sanctum", "vault",
+    "goatpath", "glassfield", "mill", "market", "bridge", "saltmines",
+    "caravanserai", "doubled",
+    "halfcity", "endless", "foundry", "canal", "counter", "archive",
+    "ordergate", "gatehouse", "library", "drafting", "cells", "furnace",
+    "refusalhall", "node2", "node3", "grave"};
+const int N_LOCATIONS = static_cast<int>(sizeof(ALL_LOCATIONS) / sizeof(ALL_LOCATIONS[0]));
+
 // ------------------------------------------------------------------ тесты
 
 void test_text_helpers() {
@@ -137,8 +148,8 @@ void test_maps() {
     // Граф мира: каждый переход ведёт в существующую локацию на проходимую
     // клетку, и все локации достижимы из деревни. Ошибка здесь означает
     // локацию, куда нельзя попасть или откуда нельзя выйти.
-    const char* all[] = {"village", "forest", "cave", "ruins", "sanctum", "vault", "goatpath", "glassfield", "mill", "market", "bridge", "saltmines", "caravanserai", "doubled", "halfcity", "endless", "foundry", "canal", "counter", "archive"};
-    const int   nloc  = static_cast<int>(sizeof(all) / sizeof(all[0]));
+    const char* const* all  = ALL_LOCATIONS;
+    const int          nloc = N_LOCATIONS;
 
     for (int i = 0; i < nloc; ++i) {
         const Location* loc = w.location(all[i]);
@@ -204,7 +215,7 @@ void test_maps() {
 void test_embedded_maps() {
     section("вшитые карты");
 
-    for (const char* id : {"village", "forest", "cave", "ruins", "sanctum", "vault", "goatpath", "glassfield", "mill", "market", "bridge", "saltmines", "caravanserai", "doubled", "halfcity", "endless", "foundry", "canal", "counter", "archive"}) {
+    for (const char* id : ALL_LOCATIONS) {
         const char* emb = embedded_map(id);
         check(emb != nullptr, std::string("карта ") + id + " вшита в бинарник");
         if (!emb) continue;
@@ -641,7 +652,8 @@ void test_content_integrity() {
 
     // Каждая ссылка на предмет/врага/узел из контента должна разрешаться.
     const char* shops[] = {"shop_smith", "shop_general", "shop_herbs", "shop_books",
-                           "shop_glass", "shop_market", "shop_foundry", "shop_ferry"};
+                           "shop_glass", "shop_market", "shop_foundry", "shop_ferry",
+                           "shop_order"};
     for (const char* sid : shops) {
         const ShopDef* s = c.shop(sid);
         check(s != nullptr, std::string("магазин ") + sid + " существует");
@@ -652,7 +664,8 @@ void test_content_integrity() {
 
     const char* npcs[] = {"elder", "herbalist", "smith", "trader", "hermit", "enchanter",
                           "glazier", "miller", "warden", "digger", "prohor_l", "prohor_r",
-                          "survivor", "founder", "counter", "scribe", "ferryman"};
+                          "survivor", "founder", "counter", "scribe", "ferryman",
+                          "gatekeeper", "librarian", "draftsman", "stoker", "recorder"};
     for (const char* nid : npcs) {
         const NpcDef* n = c.npc(nid);
         check(n != nullptr, std::string("NPC ") + nid + " существует");
@@ -689,7 +702,14 @@ void test_content_integrity() {
                            "founder_root","foundry_offer","foundry_wait","foundry_reward",
                            "counter_root","counter_view","counting_offer","counting_wait","counting_reward",
                            "scribe_root","lists_offer","lists_wait","lists_reward",
-                           "ferry_root","ferry_why","ferry_token_talk"};
+                           "ferry_root","ferry_why","ferry_token_talk",
+                           "orderway_offer",
+                           "gatekeeper_root","watch4_offer","watch4_wait","watch4_reward","watch4_after",
+                           "librarian_root","librarian_box","librarian_read","unsealed_talk",
+                           "draftsman_root","charts_offer","charts_wait","charts_reward",
+                           "stoker_root","ovens_offer","ovens_wait","ovens_reward",
+                           "recorder_root","refusal_offer","refusal_master","refusal_council",
+                           "refusal_after_m","refusal_after_c","keepsake_talk"};
     for (const char* nid : nodes) {
         const DlgNode* n = c.node(nid);
         check(n != nullptr, std::string("узел ") + nid + " существует");
@@ -725,7 +745,10 @@ void test_content_integrity() {
                           "archivist", "stray", "glass_hound", "mill_rat", "salt_ghoul",
                           "caravan_shade", "salt_mother", "bridge_walker",
                           "city_rat", "cut_man", "mad_clerk", "slag_thing",
-                          "canal_walker", "archive_moth", "half_warden", "slag_master"};
+                          "canal_walker", "archive_moth", "half_warden", "slag_master",
+                          "acolyte", "gate_guard", "page_swarm", "draft_shade",
+                          "cell_dweller", "furnace_born", "refusal_echo",
+                          "node_guard", "node_heart", "master_shadow"};
     for (const char* mid : mobs) {
         const EnemyDef* e = c.enemy(mid);
         check(e != nullptr, std::string("враг ") + mid + " существует");
@@ -738,7 +761,7 @@ void test_content_integrity() {
 
     // Зоны спавна на картах должны ссылаться на существующих врагов.
     World w("data/maps");
-    for (const char* lid : {"village", "forest", "cave", "ruins", "sanctum", "vault", "goatpath", "glassfield", "mill", "market", "bridge", "saltmines", "caravanserai", "doubled", "halfcity", "endless", "foundry", "canal", "counter", "archive"}) {
+    for (const char* lid : ALL_LOCATIONS) {
         const Location* loc = w.location(lid);
         if (!loc) continue;
         for (const SpawnZone& z : loc->zones)
@@ -1304,7 +1327,7 @@ void test_gates_and_secret_quests() {
     check(!to_vault->gate.denied.empty(), "отказ объясняется словами, а не молчанием");
 
     // Каждое условие врат должно ссылаться на существующие вещи.
-    for (const char* lid : {"village", "forest", "cave", "ruins", "sanctum", "vault", "goatpath", "glassfield", "mill", "market", "bridge", "saltmines", "caravanserai", "doubled", "halfcity", "endless", "foundry", "canal", "counter", "archive"}) {
+    for (const char* lid : ALL_LOCATIONS) {
         const Location* loc = w.location(lid);
         if (!loc) continue;
         for (const MapExit& e : loc->exits) {
@@ -1315,6 +1338,20 @@ void test_gates_and_secret_quests() {
                 check(c.quest(e.gate.req_quest) != nullptr,
                       std::string(lid) + ": квест врат '" + e.gate.req_quest + "' есть в базе");
         }
+    }
+
+    // Ключом может быть носимая вещь: надетое кольцо не должно запирать
+    // дверь, которую само открывает.
+    {
+        Game gk;
+        gk.new_game("Носитель", "human", "swordsman");
+        gk.add_item("ring_hp", 1);
+        eq(gk.carries_item("ring_hp"), 1, "в сумке предмет считается");
+        gk.equip("ring_hp");
+        eq(gk.count_item("ring_hp"), 0, "надетого нет в сумке");
+        eq(gk.carries_item("ring_hp"), 1, "но при игроке оно есть");
+        gk.add_item("ring_hp", 2);
+        eq(gk.carries_item("ring_hp"), 3, "сумка и надетое складываются");
     }
 
     // --- поведение врат ---
@@ -1415,7 +1452,10 @@ void test_books_and_notes() {
                               "goat", "glass", "mill", "market", "prohor",
                               "caravan", "salt", "bridge",
                               "cityhalf", "endless", "deadwater", "counting",
-                              "lists", "foundry", "halves", "lastclerk"};
+                              "lists", "foundry", "halves", "lastclerk",
+                              "gates", "watchwrit", "read", "unsealed", "charts",
+                              "novice", "keepsake", "ovens", "refusal",
+                              "secondnode", "thirdnode", "emptygrave"};
     for (const char* id : note_ids) {
         const NoteDef* n = c.note(id);
         check(n != nullptr, std::string("записка ") + id + " описана");
@@ -1467,12 +1507,15 @@ void test_books_and_notes() {
     eq(static_cast<int>(utf8_len(g.book(bid)->title)), BOOK_TITLE_MAX,
        "слишком длинное название обрезается");
 
-    // Предел числа строк.
+    // Предел числа строк: лишние вставки не просто игнорируются — они
+    // честно отвечают «нет», и их ровно столько, сколько влезло.
+    const int lines_before = static_cast<int>(g.book(bid)->lines.size());
     int added = 0;
     for (int i = 0; i < BOOK_MAX_LINES + 20; ++i)
         if (g.book_insert_line(bid, 0, "строка")) ++added;
     eq(static_cast<int>(g.book(bid)->lines.size()), BOOK_MAX_LINES,
        "строк не больше предела");
+    eq(added, BOOK_MAX_LINES - lines_before, "вставка отказывает ровно на пределе");
 
     // Удаление строк: последняя не исчезает, а очищается.
     while (g.book(bid)->lines.size() > 1) g.book_remove_line(bid, 0);
@@ -1483,10 +1526,12 @@ void test_books_and_notes() {
 
     // Предел числа книг.
     g.add_item("book_blank", BOOK_MAX_COUNT + 5);
-    int made = 1;
+    const int had_books = static_cast<int>(g.books().size());
+    int made = 0;
     for (int i = 0; i < BOOK_MAX_COUNT + 5; ++i)
         if (g.start_book("Книга " + to_str(i))) ++made;
     eq(static_cast<int>(g.books().size()), BOOK_MAX_COUNT, "книг не больше предела");
+    eq(made, BOOK_MAX_COUNT - had_books, "начать книгу сверх предела не дают");
 
     // Удаление книги.
     const std::string victim = g.books().back().id;
@@ -2117,6 +2162,161 @@ void test_playthrough() {
     g.apply_option(c.node("counting_reward")->options[0], "", &shop);
     eq(g.quest_stage("counting"), QUEST_DONE, "квест «Две сажени в год» закрыт");
 
+    // ================= Регион IV: Обитель Ордена =================
+
+    // --- Ворота: печать пускает, отсутствие печати — нет ---
+    check(visible("counter_root", "orderway_offer"),
+          "закрыв счёт, Аким рассказывает про стены на севере");
+    g.apply_option(c.node("orderway_offer")->options[0], "", &shop);
+    eq(g.quest_stage("orderway"), 1, "путь к обители открыт разговором");
+
+    check(g.count_item("order_seal") >= 1, "печать Ордена снята с архивариуса ещё в схроне");
+    g.remove_item("order_seal", g.count_item("order_seal"));
+    check(!travel("ordergate"), "без печати ворота не пускают");
+    eqs(g.player().loc, "counter", "и герой остаётся на башне");
+
+    // Печать на пальце — тоже печать: надетое кольцо открывает те же ворота.
+    g.add_item("order_seal", 1);
+    check(g.equip("order_seal"), "печать надевается как кольцо");
+    eq(g.count_item("order_seal"), 0, "в сумке её больше нет");
+    check(travel("ordergate"), "надетая печать открывает ворота");
+    eqs(g.player().loc, "ordergate", "герой у обители");
+    eq(g.quest_stage("orderway"), QUEST_DONE, "приход к воротам закрыл квест сам");
+    check(gather_note("gates"), "надпись на воротах прочитана");
+
+    // --- Привратная: Севир стоит двести лет ---
+    check(travel("gatehouse"), "переход в привратную");
+    check(gather_note("watchwrit"), "черновик приказа найден");
+    check(visible("gatekeeper_root", "watch4_offer"), "Севир объясняет, почему стоит");
+    g.apply_option(c.node("watch4_offer")->options[0], "", &shop);
+    eq(g.quest_stage("watch4"), 1, "квест о смене караула взят");
+    check(!visible("gatekeeper_root", "watch4_reward"),
+          "без приказа пост не снять");
+
+    // --- Библиотека: ящик для недоставленного и вырванный лист ---
+    check(travel("library"), "переход в библиотеку");
+    check(visible("librarian_root", "librarian_box"), "Аврелий помнит про ящик");
+    g.apply_option(c.node("librarian_box")->options[0], "", &shop);
+    check(g.count_item("order_writ") >= 1, "приказ о смене найден в ящике");
+
+    check(gather_note("read"), "выписка книжника найдена");
+    check(gather_note("unsealed"), "вырванный лист найден");
+    eq(g.quest_stage("unsealed"), 1, "лист открыл тайну «То, что вырвали»");
+    gather("torn_page");
+    guard = 0;
+    while (g.count_item("torn_page") < 1 && guard++ < 60) {
+        if (hunt("page_swarm", 1) == 0) g.world_turn();
+    }
+    check(visible("librarian_root", "unsealed_talk"), "есть с чем идти к Аврелию");
+    g.apply_option(c.node("unsealed_talk")->options[0], "", &shop);
+    eq(g.quest_stage("unsealed"), QUEST_DONE, "тайна «То, что вырвали» разгадана");
+
+    // --- Чертёжная: карта сети без спиц ---
+    check(travel("drafting"), "переход в чертёжную");
+    check(gather_note("charts"), "заметка о спицах найдена");
+    check(visible("draftsman_root", "charts_offer"), "Гордей просит обрывки");
+    g.apply_option(c.node("charts_offer")->options[0], "", &shop);
+    eq(g.quest_stage("charts"), 1, "квест о карте сети взят");
+    gather("chart_piece");
+    guard = 0;
+    while (g.count_item("chart_piece") < 4 && guard++ < 90) {
+        if (hunt("draft_shade", 1) == 0) g.world_turn();
+    }
+    check(g.count_item("chart_piece") >= 4, "четыре обрывка чертежа собраны");
+    g.apply_option(c.node("charts_reward")->options[0], "", &shop);
+    eq(g.quest_stage("charts"), QUEST_DONE, "квест «Карта сети» закрыт");
+
+    // --- Приказ доставлен ---
+    g.player().loc = "gatehouse";
+    check(visible("gatekeeper_root", "watch4_reward"), "с приказом пост снимается");
+    g.apply_option(c.node("watch4_reward")->options[0], "", &shop);
+    eq(g.quest_stage("watch4"), QUEST_DONE, "квест «Смена караула» закрыт");
+    eq(g.count_item("order_writ"), 0, "приказ отдан Севиру");
+    check(visible("gatekeeper_root", "watch4_after"), "Севиру теперь есть что сказать");
+
+    // --- Кельи: солдатик заводит квест сам, без разговора ---
+    check(travel("cells"), "переход в кельи");
+    check(gather_note("novice"), "запись послушника найдена");
+    check(gather_note("keepsake"), "наказ настоятеля найден");
+    eq(g.quest_stage("keepsake"), QUEST_NONE, "записка сама по себе квеста не даёт");
+    check(gather("keepsake") >= 1, "оловянный солдатик подобран");
+    eq(g.quest_stage("keepsake"), 1, "находка открыла квест без единого слова");
+
+    // --- Печь: обмен без возврата ---
+    check(travel("furnace"), "спуск к печам");
+    check(gather_note("ovens"), "правило истопника найдено");
+    check(visible("stoker_root", "ovens_offer"), "Фома объясняет, что берёт печь");
+    g.apply_option(c.node("ovens_offer")->options[0], "", &shop);
+    eq(g.quest_stage("ovens"), 1, "квест «Печь берёт» взят");
+    check(!visible("stoker_root", "ovens_reward"), "без шести листов печь не топят");
+
+    g.player().loc = "library";
+    guard = 0;
+    while (g.count_item("torn_page") < 6 && guard++ < 120) {
+        gather("torn_page");
+        if (hunt("page_swarm", 1) == 0) g.world_turn();
+    }
+    check(g.count_item("torn_page") >= 6, "шесть вырванных листов собраны");
+    g.player().loc = "furnace";
+    g.apply_option(c.node("ovens_reward")->options[0], "", &shop);
+    eq(g.quest_stage("ovens"), QUEST_DONE, "квест «Печь берёт» закрыт");
+    eq(g.count_item("torn_page"), 0, "печь забрала листы без остатка");
+    check(g.count_item("order_plate") >= 1, "и отдала то, чего в них не было");
+
+    // --- Зал Отказа: развилка, после которой второго ответа нет ---
+    g.player().loc = "refusalhall";
+    check(gather_note("refusal"), "стенограмма Зала найдена");
+    check(visible("recorder_root", "refusal_offer"), "Никон рассказывает о заседании");
+    g.apply_option(c.node("refusal_offer")->options[0], "", &shop);
+    eq(g.quest_stage("refusal"), 1, "протокол ждёт последней записи");
+    check(visible("recorder_root", "refusal_master"), "можно сказать, что прав Мастер");
+    check(visible("recorder_root", "refusal_council"), "и что прав Совет — тоже");
+
+    {
+        const DlgNode* rec = c.node("recorder_root");
+        const DlgOption* say_master = 0;
+        for (const DlgOption& o : rec->options)
+            if (o.next == "refusal_master") say_master = &o;
+        check(say_master != nullptr, "ответ в пользу Мастера есть в узле");
+        if (say_master) g.apply_option(*say_master, "", &shop);
+    }
+    eq(g.quest_stage("refusal"), QUEST_DONE, "заседание закрыто");
+    eq(g.player().counters["refusal_choice"], 1, "выбор записан в протокол");
+    check(g.count_item("master_ring") >= 1, "кольцо Мастера снято со стола");
+    check(!visible("recorder_root", "refusal_master"), "переписать ответ уже нельзя");
+    check(!visible("recorder_root", "refusal_council"), "и второй вариант закрыт");
+    check(visible("recorder_root", "refusal_after_m"),
+          "Никон отвечает по тому ответу, который дали");
+    check(!visible("recorder_root", "refusal_after_c"),
+          "и не по тому, которого не давали");
+
+    // --- Узел Второй: держит ---
+    check(travel("node2"), "переход к Второму узлу");
+    eq(g.quest_stage("node2q"), 1, "сам приход открыл тайну «Второй держит»");
+    check(gather_note("secondnode"), "отметка о Втором узле найдена");
+    check(hunt("node_heart", 1) == 1, "Сердце Узла остановлено");
+    eq(g.quest_stage("node2q"), QUEST_DONE, "тайна «Второй держит» разгадана");
+
+    // --- Узел Третий: открыт ---
+    check(travel("node3"), "переход к Третьему узлу");
+    eq(g.quest_stage("node3q"), 1, "тайна «Третий открыт» открылась приходом");
+    check(gather_note("thirdnode"), "отметка о Третьем узле найдена");
+    eq(g.quest_stage("node3q"), QUEST_DONE, "через Третий уходят в Дрейф");
+
+    // --- Пустая могила: тот, кто ещё ходит ---
+    check(travel("grave"), "переход к могиле Первого Мастера");
+    check(gather_note("emptygrave"), "приписка углём найдена");
+    eq(g.quest_stage("firstmaster"), 1, "тайна «Он ещё ходит» открыта");
+    check(hunt("master_shadow", 1) == 1, "тень Первого Мастера повержена");
+    eq(g.quest_stage("firstmaster"), QUEST_DONE, "тайна «Он ещё ходит» разгадана");
+
+    // --- Солдатик возвращается тому, кто его положил ---
+    g.player().loc = "forest";
+    check(visible("hermit_root", "keepsake_talk"), "отшельнику есть что сказать о солдатике");
+    g.apply_option(c.node("keepsake_talk")->options[0], "", &shop);
+    eq(g.quest_stage("keepsake"), QUEST_DONE, "квест «Оловянный солдатик» закрыт");
+    eq(g.count_item("keepsake"), 0, "солдатик остался у Игната");
+
     // --- итог ---
     const char* all_quests[] = {"wolves", "amulet", "pelts", "moss", "books",
                                 "queen", "outpost", "zero_point", "enchanter",
@@ -2124,7 +2324,9 @@ void test_playthrough() {
                                 "goatpath", "glass", "mill", "market", "doubled",
                                 "caravan", "salt", "bridge",
                                 "cityroad", "foundry", "counting", "lists",
-                                "endless", "deadwater", "halves"};
+                                "endless", "deadwater", "halves",
+                                "orderway", "watch4", "charts", "keepsake", "ovens",
+                                "refusal", "unsealed", "node2q", "node3q", "firstmaster"};
     for (const char* q : all_quests)
         eq(g.player().quests[q], QUEST_DONE, std::string("квест ") + q + " пройден");
 
@@ -2132,7 +2334,7 @@ void test_playthrough() {
     check(g.books().size() >= 2, "библиотека наполнилась находками и своими книгами");
     check(g.book(diary) != nullptr, "своя книга дожила до конца прохождения");
 
-    check(g.player().level >= 16, "к концу трёх регионов герой заметно вырос");
+    check(g.player().level >= 20, "к концу четырёх регионов герой заметно вырос");
     std::cout << "  (итог: уровень " << g.player().level
               << ", золота " << g.player().gold
               << ", квестов пройдено " << (sizeof(all_quests) / sizeof(all_quests[0]))

@@ -280,6 +280,13 @@ int Game::count_item(const std::string& id) const {
     return 0;
 }
 
+int Game::carries_item(const std::string& id) const {
+    int n = count_item(id);
+    for (const std::string& worn : plr_.equipped)
+        if (worn == id) ++n;
+    return n;
+}
+
 void Game::add_item(const std::string& id, int n) {
     if (n <= 0) return;
     bool merged = false;
@@ -734,7 +741,8 @@ bool Game::open_chest(int index) {
 
     if (chest_opened(loc->id, index)) { msg("Сундук уже пуст."); return false; }
 
-    if (!ch.key.empty() && count_item(ch.key) <= 0) {
+    // Ключ считается так же, как во вратах: надетое кольцо остаётся ключом.
+    if (!ch.key.empty() && carries_item(ch.key) <= 0) {
         const ItemDef* kd = Content::get().item(ch.key);
         msg("Заперто. Нужен ключ: " + std::string(kd ? kd->name : ch.key) + ".");
         return false;
@@ -865,7 +873,7 @@ Bump Game::try_move(int dx, int dy) {
         if (!ex->gate.empty()) {
             const Gate& gt = ex->gate;
             bool pass = true;
-            if (!gt.key.empty() && count_item(gt.key) <= 0) pass = false;
+            if (!gt.key.empty() && carries_item(gt.key) <= 0) pass = false;
             if (!gt.req_quest.empty() && quest_stage(gt.req_quest) < gt.req_stage) pass = false;
             if (!gt.req_counter.empty()) {
                 auto it = plr_.counters.find(gt.req_counter);

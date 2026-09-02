@@ -287,6 +287,53 @@ void Content::build_items() {
     tea.heal_ap = 6; tea.effect = "clarity"; tea.effect_turns = 8; tea.effect_power = 2;
     add(tea);
 
+    // --- Регион IV: Орден ---
+    add(mk_item("chart_piece", "Обрывок чертежа", ItemKind::Misc, 55,
+                "Линии сходятся к точке за краем листа."));
+    add(mk_item("torn_page", "Вырванный лист", ItemKind::Misc, 34,
+                "Из устава. Вырвано ровно там, где начиналось важное."));
+    add(mk_item("order_writ", "Приказ о смене караула", ItemKind::Misc, 0,
+                "Подписан, скреплён и не доставлен. Двести лет пролежал в ящике."));
+    add(mk_item("keepsake", "Оловянный солдатик", ItemKind::Misc, 0,
+                "Краска стёрлась там, где его держали пальцами."));
+    add(mk_item("node_core", "Ядро узла", ItemKind::Misc, 0,
+                "Не тяжёлое и не лёгкое. Вес зависит от того, как держать."));
+    add(mk_item("furnace_ash", "Зола Ордена", ItemKind::Misc, 48,
+                "Не пачкает рук. Печь берёт вещь и отдаёт вот это."));
+
+    ItemDef halberd = mk_item("gate_halberd", "Привратная алебарда", ItemKind::Weapon, 780,
+                              "Древко в рост человека. Ею не бьют — ею не пускают.");
+    halberd.bonus.dmg_min = 11; halberd.bonus.dmg_max = 20;
+    halberd.bonus.attack = 8; halberd.bonus.block = 6; halberd.bonus.ap_atk = 1;
+    add(halberd);
+
+    ItemDef oplate = mk_item("order_plate", "Доспех Ордена", ItemKind::Armor, 900,
+                             "Узел вычеканен на груди. Внутри подбой из чужой шерсти.");
+    oplate.bonus.armor = 9; oplate.bonus.block = 7; oplate.bonus.max_hp = 10;
+    add(oplate);
+
+    ItemDef ahood = mk_item("acolyte_hood", "Куколь послушника", ItemKind::Helmet, 610,
+                            "В таких ходили парами. Второй куколь всегда оставался снаружи.");
+    ahood.bonus.armor = 3; ahood.bonus.max_ap = 2; ahood.bonus.attack = 5;
+    add(ahood);
+
+    ItemDef nshield = mk_item("node_shield", "Щит узлового стража", ItemKind::Shield, 820,
+                              "Держит удар так, будто удара и не было.");
+    nshield.bonus.block = 18; nshield.bonus.armor = 5; nshield.bonus.attack = -4;
+    add(nshield);
+
+    ItemDef mring = mk_item("master_ring", "Кольцо Первого Мастера", ItemKind::Ring, 1200,
+                            "Он снял его в Зале Отказа и больше не надевал.");
+    mring.bonus.max_hp = 16; mring.bonus.attack = 8; mring.bonus.crit = 8;
+    mring.bonus.armor = 3;
+    add(mring);
+
+    ItemDef odraught = mk_item("order_draught", "Настой Ордена", ItemKind::Consumable, 130,
+                               "Готовили перед входом в узел. Держит и тело, и голову.");
+    odraught.heal_hp = 55; odraught.heal_ap = 4;
+    odraught.effect = "guard"; odraught.effect_turns = 10; odraught.effect_power = 2;
+    add(odraught);
+
     ItemDef seal = mk_item("order_seal", "Печать Ордена", ItemKind::Ring, 700,
                            "Узел из серебра. Тёплая, будто её только что держали.");
     seal.bonus.max_hp = 12; seal.bonus.attack = 5; seal.bonus.armor = 2; seal.bonus.crit = 4;
@@ -720,6 +767,175 @@ void Content::build_notes() {
         "уже двести лет как нет.»"
     });
 
+    // --- Регион IV: Орден ---
+
+    add("gates", "Табличка у ворот", {
+        "«Входящий предъявляет печать.",
+        "Печать не выдаётся, а передаётся: от того,",
+        "кто выходит, тому, кто входит.",
+        "",
+        "Если ты держишь печать и не помнишь, кто",
+        "тебе её передал, — значит, тот не вышел.",
+        "Входи и помни об этом.»"
+    });
+
+    add("watchwrit", "Приказ, который не дошёл", {
+        "«Караулу привратной башни.",
+        "",
+        "Пост снять. Смену не высылать. Обитель",
+        "закрывается на неопределённый срок.",
+        "",
+        "Подписано: настоятель. Скреплено печатью.",
+        "",
+        "Приписка гонца: не донёс. Дороги нет —",
+        "ни туда, ни обратно. Оставляю в ящике,",
+        "может, кто прочтёт.",
+        "",
+        "Прочли. Через двести лет.»"
+    });
+
+    add("read", "Каталог, полка первая", {
+        "«О расстоянии как о свойстве.",
+        "О расстоянии как о веществе.",
+        "О расстоянии как о привычке.",
+        "",
+        "Ниже, другой рукой:",
+        "«Все три ошибочны. Расстояние — это",
+        "согласие. Мир согласен быть большим,",
+        "пока его об этом не переспрашивают.",
+        "",
+        "Мы переспросили.»"
+    });
+
+    add("unsealed", "То, что вырвали", {
+        "Лист совпадает с обрывом в уставе, листе",
+        "девятом. Его вырвали, но не сожгли.",
+        "",
+        "«…и потому связывать последний узел",
+        "запрещается, доколе не будет найден способ",
+        "развязать.",
+        "",
+        "Мы такого способа не имеем. Мы имеем лишь",
+        "уверенность, что он существует, а это не",
+        "одно и то же.",
+        "",
+        "Первый Мастер настаивал на внесении сего",
+        "в устав. Совет внёс. Совет же и вырвал,",
+        "когда Мастер ушёл.»"
+    });
+
+    add("charts", "Пояснение к чертежу", {
+        "«Сеть на листе выглядит колесом: узлы",
+        "по ободу, спицы к середине.",
+        "",
+        "Это неверно. Спиц нет. Узлы связаны",
+        "не с серединой, а друг с другом, и середина",
+        "образуется сама, когда связей становится",
+        "достаточно.",
+        "",
+        "Мы не строили Точку Ноль. Мы её получили.»"
+    });
+
+    add("novice", "Письмо домой, не отправленное", {
+        "«Матушка, у нас тут кормят хорошо и учат",
+        "многому, только я почти ничего не понимаю.",
+        "",
+        "Завтра первый раз в узел. Пойдём вдвоём",
+        "с Игнатом: правило такое — в узел вдвоём,",
+        "и один остаётся снаружи, чтобы было кому",
+        "вспомнить.",
+        "",
+        "Игнат остаётся. Он говорит, что в другой",
+        "раз поменяемся.",
+        "",
+        "Другого раза не было.»"
+    });
+
+    add("keepsake", "Опись имущества кельи", {
+        "«Келья одиннадцатая. Послушник Игнат.",
+        "",
+        "Плащ шерстяной — один.",
+        "Обувь — одна пара.",
+        "Солдатик оловянный — один.",
+        "",
+        "Помета настоятеля: солдатика не выбрасывать.",
+        "Игнат просил сохранить и передать, если",
+        "кто-нибудь когда-нибудь придёт.",
+        "",
+        "Он ждал сорок лет и ушёл сам. Куда — не",
+        "сказал. Сказал только: буду сидеть у огня.»"
+    });
+
+    add("ovens", "Правило печи", {
+        "«Печь не плавит. Печь берёт.",
+        "",
+        "Кладёшь вещь — получаешь золу и то, чего",
+        "в вещи не было. Обратно вещь не достаётся:",
+        "печь не хранилище, печь — обмен.",
+        "",
+        "Клали книги, кольца, однажды человека.",
+        "После человека печь молчала полгода,",
+        "и настоятель запретил.",
+        "",
+        "Запрет висит до сих пор. Печь до сих пор",
+        "тёплая.»"
+    });
+
+    add("refusal", "Стенограмма Зала", {
+        "«Совет: последний узел готов к связыванию.",
+        "Первый Мастер: не связывайте.",
+        "Совет: основание?",
+        "Первый Мастер: у нас нет способа развязать.",
+        "Совет: он не потребуется.",
+        "Первый Мастер: это и есть основание.",
+        "",
+        "Голосование: одиннадцать за, один против.",
+        "",
+        "Первый Мастер снял кольцо, положил на стол",
+        "и вышел. В протокол внесено, что он был",
+        "не в себе.",
+        "",
+        "Через пять лет случилось Стяжение.»"
+    });
+
+    add("secondnode", "Отметка на Втором", {
+        "«Узел Второй держит. Проверено сего числа.",
+        "",
+        "Держать — это не стоять. Это тянуть в другую",
+        "сторону ровно с той силой, с какой тянет",
+        "сеть. Устанешь — стянется.",
+        "",
+        "Второй тянет двести лет. Мы не знаем чем.»"
+    });
+
+    add("thirdnode", "Отметка на Третьем", {
+        "«Узел Третий сломан.",
+        "",
+        "Не разрушен — именно сломан, как ломается",
+        "счёт, если сбиться. Он не держит и не тянет.",
+        "Он просто открыт.",
+        "",
+        "Через него уходит то, что не пристаёт ни",
+        "к чему: обрывки земли, дома, люди. Уходит",
+        "и дрейфует.",
+        "",
+        "Если искать пропавших — искать там.»"
+    });
+
+    add("emptygrave", "Надпись на пустой могиле", {
+        "«Здесь не лежит Первый Мастер.",
+        "",
+        "Он не умер в обители и не вернулся в неё.",
+        "Могилу вырыли на случай, если вернётся",
+        "и умрёт, — так у нас положено.",
+        "",
+        "Место осталось свободным. Мы оставили",
+        "камень, чтобы кто-нибудь однажды дописал.»",
+        "",
+        "Ниже, недавно, углём и другой рукой:",
+        "«Не дописывайте. Я ещё хожу.»"
+    });
+
     add("hermit", "Страница из дневника", {
         "Двадцать лет назад я тоже думал, что",
         "сила решает. Ходил в ярости, бил первым.",
@@ -1121,6 +1337,119 @@ void Content::build_enemies() {
     archivist.on_hit_effect = "weaken"; archivist.on_hit_chance = 45; archivist.on_hit_power = 2;
     add(archivist);
 
+    // --- Регион IV: Орден ---
+
+    EnemyDef acolyte;
+    acolyte.id = "acolyte"; acolyte.name = "Послушник, не вышедший";
+    acolyte.stats.max_hp = 95; acolyte.stats.max_ap = 11; acolyte.stats.attack = 84;
+    acolyte.stats.dmg_min = 7; acolyte.stats.dmg_max = 14; acolyte.stats.block = 18;
+    acolyte.stats.armor = 4;   acolyte.stats.ap_atk = 4;
+    acolyte.exp = 115; acolyte.gold_min = 14; acolyte.gold_max = 44;
+    acolyte.drops = { Drop("torn_page", 40), Drop("order_draught", 35) };
+    acolyte.detect = 7; acolyte.kill_counter = "kill_acolyte";
+    acolyte.on_hit_effect = "weaken"; acolyte.on_hit_chance = 35; acolyte.on_hit_power = 2;
+    add(acolyte);
+
+    EnemyDef gguard;
+    gguard.id = "gate_guard"; gguard.name = "Привратный страж";
+    gguard.stats.max_hp = 115; gguard.stats.max_ap = 11; gguard.stats.attack = 86;
+    gguard.stats.dmg_min = 9; gguard.stats.dmg_max = 16; gguard.stats.block = 24;
+    gguard.stats.armor = 8;   gguard.stats.ap_atk = 4;
+    gguard.exp = 145; gguard.gold_min = 20; gguard.gold_max = 60;
+    gguard.drops = { Drop("gate_halberd", 25), Drop("scrap_iron", 45) };
+    gguard.detect = 7; gguard.kill_counter = "kill_gguard";
+    add(gguard);
+
+    EnemyDef pages;
+    pages.id = "page_swarm"; pages.name = "Ворох листов";
+    pages.stats.max_hp = 72; pages.stats.max_ap = 13; pages.stats.attack = 82;
+    pages.stats.dmg_min = 5; pages.stats.dmg_max = 11; pages.stats.block = 28;
+    pages.stats.armor = 1;   pages.stats.ap_atk = 3;
+    pages.exp = 92; pages.gold_min = 4; pages.gold_max = 22;
+    pages.drops = { Drop("torn_page", 55), Drop("ledger_page", 40) };
+    pages.detect = 8; pages.kill_counter = "kill_pages";
+    add(pages);
+
+    EnemyDef dshade;
+    dshade.id = "draft_shade"; dshade.name = "Тень чертёжника"; dshade.female = true;
+    dshade.stats.max_hp = 105; dshade.stats.max_ap = 11; dshade.stats.attack = 86;
+    dshade.stats.dmg_min = 8; dshade.stats.dmg_max = 15; dshade.stats.block = 22;
+    dshade.stats.armor = 3;   dshade.stats.ap_atk = 4;
+    dshade.exp = 135; dshade.gold_min = 16; dshade.gold_max = 52;
+    dshade.drops = { Drop("chart_piece", 55), Drop("torn_page", 30) };
+    dshade.detect = 8; dshade.kill_counter = "kill_dshade";
+    dshade.on_hit_effect = "slow"; dshade.on_hit_chance = 40; dshade.on_hit_power = 2;
+    add(dshade);
+
+    EnemyDef celld;
+    celld.id = "cell_dweller"; celld.name = "Жилец кельи";
+    celld.stats.max_hp = 88; celld.stats.max_ap = 10; celld.stats.attack = 82;
+    celld.stats.dmg_min = 7; celld.stats.dmg_max = 13; celld.stats.block = 20;
+    celld.stats.armor = 3;   celld.stats.ap_atk = 4;
+    celld.exp = 108; celld.gold_min = 10; celld.gold_max = 38;
+    celld.drops = { Drop("acolyte_hood", 25), Drop("order_draught", 40) };
+    celld.detect = 6; celld.kill_counter = "kill_celld";
+    add(celld);
+
+    EnemyDef fborn;
+    fborn.id = "furnace_born"; fborn.name = "Рождённый печью";
+    fborn.stats.max_hp = 135; fborn.stats.max_ap = 10; fborn.stats.attack = 84;
+    fborn.stats.dmg_min = 10; fborn.stats.dmg_max = 18; fborn.stats.block = 12;
+    fborn.stats.armor = 9;   fborn.stats.ap_atk = 4;
+    fborn.exp = 185; fborn.gold_min = 18; fborn.gold_max = 56;
+    fborn.drops = { Drop("furnace_ash", 70), Drop("ember", 45) };
+    fborn.detect = 7; fborn.kill_counter = "kill_fborn";
+    fborn.on_hit_effect = "burn"; fborn.on_hit_chance = 45; fborn.on_hit_power = 3;
+    add(fborn);
+
+    EnemyDef recho;
+    recho.id = "refusal_echo"; recho.name = "Эхо Отказа"; recho.female = true;
+    recho.stats.max_hp = 125; recho.stats.max_ap = 12; recho.stats.attack = 88;
+    recho.stats.dmg_min = 8; recho.stats.dmg_max = 16; recho.stats.block = 26;
+    recho.stats.armor = 4;   recho.stats.ap_atk = 4;
+    recho.exp = 175; recho.gold_min = 20; recho.gold_max = 64;
+    recho.drops = { Drop("order_draught", 50), Drop("torn_page", 40) };
+    recho.detect = 8; recho.kill_counter = "kill_recho";
+    recho.on_hit_effect = "weaken"; recho.on_hit_chance = 45; recho.on_hit_power = 3;
+    add(recho);
+
+    EnemyDef nguard;
+    nguard.id = "node_guard"; nguard.name = "Узловой страж";
+    nguard.stats.max_hp = 165; nguard.stats.max_ap = 12; nguard.stats.attack = 90;
+    nguard.stats.dmg_min = 11; nguard.stats.dmg_max = 19; nguard.stats.block = 24;
+    nguard.stats.armor = 8;    nguard.stats.ap_atk = 4;
+    nguard.exp = 245; nguard.gold_min = 40; nguard.gold_max = 100;
+    nguard.drops = { Drop("node_core", 40), Drop("rune_stone", 55) };
+    nguard.detect = 8; nguard.kill_counter = "kill_nguard";
+    nguard.on_hit_effect = "slow"; nguard.on_hit_chance = 40; nguard.on_hit_power = 2;
+    add(nguard);
+
+    EnemyDef nheart;
+    nheart.id = "node_heart"; nheart.name = "Сердце Узла"; nheart.female = true;
+    nheart.stats.max_hp = 265; nheart.stats.max_ap = 13; nheart.stats.attack = 92;
+    nheart.stats.dmg_min = 13; nheart.stats.dmg_max = 23; nheart.stats.block = 26;
+    nheart.stats.armor = 9;    nheart.stats.ap_atk = 4;
+    nheart.exp = 560; nheart.gold_min = 180; nheart.gold_max = 320;
+    nheart.drops = { Drop("node_core", 100), Drop("node_shield", 60),
+                     Drop("portal_stone", 100) };
+    nheart.detect = 9; nheart.kill_counter = "kill_nheart";
+    nheart.on_hit_effect = "slow"; nheart.on_hit_chance = 50; nheart.on_hit_power = 3;
+    add(nheart);
+
+    EnemyDef mshadow;
+    mshadow.id = "master_shadow"; mshadow.name = "Тень Первого Мастера";
+    mshadow.stats.max_hp = 290; mshadow.stats.max_ap = 13; mshadow.stats.attack = 94;
+    mshadow.stats.dmg_min = 14; mshadow.stats.dmg_max = 25; mshadow.stats.block = 28;
+    mshadow.stats.armor = 10;   mshadow.stats.ap_atk = 4;
+    mshadow.exp = 620; mshadow.gold_min = 220; mshadow.gold_max = 400;
+    // Кольца у Тени нет: Мастер оставил его на столе в Зале Отказа,
+    // и получить его можно только там — признав его правоту.
+    mshadow.drops = { Drop("order_plate", 100), Drop("node_core", 100),
+                      Drop("acolyte_hood", 60), Drop("rune_stone", 100) };
+    mshadow.detect = 9; mshadow.kill_counter = "kill_mshadow";
+    mshadow.on_hit_effect = "weaken"; mshadow.on_hit_chance = 50; mshadow.on_hit_power = 3;
+    add(mshadow);
+
     // Вожак носит амулет Лады — цель квеста, а не случайная добыча.
     EnemyDef alpha;
     alpha.id = "wolf_alpha"; alpha.name = "Вожак стаи";
@@ -1343,6 +1672,98 @@ void Content::build_quests() {
     };
     quests_.push_back(q);
 
+    // --- Регион IV: Орден ---
+
+    q = QuestDef();
+    q.id = "orderway"; q.name = "Путь Ордена";
+    q.stages = {
+        QuestStageDef(1, "Аким показал с башни ворота обители. Печать Ордена открывает их."),
+        QuestStageDef(QUEST_DONE, "Ворота открылись. Обитель стоит нетронутой двести лет.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "watch4"; q.name = "Смена караула";
+    q.stages = {
+        QuestStageDef(1, "Привратник Севир двести лет ждёт смены. Приказ о ней лежит "
+                         "в библиотеке — гонец его не донёс."),
+        QuestStageDef(QUEST_DONE, "Приказ доставлен. Караул снят.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "charts"; q.name = "Карта сети";
+    q.stages = {
+        QuestStageDef(1, "Чертёжнику Гордею нужны 4 обрывка чертежа, чтобы собрать карту сети."),
+        QuestStageDef(QUEST_DONE, "Карта собрана. Спиц нет: узлы связаны друг с другом, "
+                                  "а середина образуется сама.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "keepsake"; q.name = "Оловянный солдатик";
+    q.stages = {
+        QuestStageDef(1, "В келье одиннадцатой лежал солдатик. Настоятель велел передать "
+                         "его, если кто-нибудь когда-нибудь придёт."),
+        QuestStageDef(QUEST_DONE, "Отшельник взял солдатика. Его звали Игнат.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "ovens"; q.name = "Печь берёт";
+    q.stages = {
+        QuestStageDef(1, "Истопник Фома растопит печь за 6 вырванных листов. "
+                         "Обратно вещь не достаётся."),
+        QuestStageDef(QUEST_DONE, "Печь взяла и отдала. Обмен состоялся.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "refusal"; q.name = "Зал Отказа";
+    q.stages = {
+        QuestStageDef(1, "Стенограмма Зала: одиннадцать за, один против. Через пять лет "
+                         "случилось Стяжение. Осталось сказать, кто был прав."),
+        QuestStageDef(QUEST_DONE, "Ты сказал. Зал услышал.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "unsealed"; q.name = "То, что вырвали"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "Вырванный лист совпадает с обрывом в уставе: связывать последний "
+                         "узел запрещалось, пока нет способа развязать."),
+        QuestStageDef(QUEST_DONE, "Аврелий прочёл вырванное. Совет знал, на что шёл.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "node2q"; q.name = "Второй держит"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "Узел Второй тянет в другую сторону ровно с той силой, с какой "
+                         "тянет сеть. Двести лет. Неизвестно чем."),
+        QuestStageDef(QUEST_DONE, "Сердце Узла остановлено. Второй больше не тянет — "
+                                  "и это тоже выбор.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "node3q"; q.name = "Третий открыт"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "Узел Третий не держит и не тянет. Он просто открыт, и через него "
+                         "уходит всё, что ни к чему не пристаёт."),
+        QuestStageDef(QUEST_DONE, "Через Третий уходят в Дрейф. Там и надо искать пропавших.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "firstmaster"; q.name = "Он ещё ходит"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "Могилу вырыли на случай, если вернётся. Место осталось свободным, "
+                         "и кто-то недавно приписал углём: «Я ещё хожу»."),
+        QuestStageDef(QUEST_DONE, "Тень Первого Мастера повержена. Кольцо он всё-таки снял.")
+    };
+    quests_.push_back(q);
+
     q = QuestDef();
     q.id = "seam"; q.name = "Шов за алтарём"; q.secret = true;
     q.stages = {
@@ -1432,6 +1853,13 @@ void Content::build_shops() {
     shops_[s.id] = s;
 
     s = ShopDef();
+    s.id = "shop_order"; s.name = "Кладовая Аврелия";
+    s.goods = {"order_draught", "acolyte_hood", "node_shield", "gate_halberd",
+               "rune_stone", "portal_stone", "antidote", "strong_tea"};
+    s.buy_pct = 100; s.sell_pct = 50;
+    shops_[s.id] = s;
+
+    s = ShopDef();
     s.id = "shop_herbs"; s.name = "Травы Лады";
     s.goods = {"herb_potion", "ap_tonic", "bread", "antidote", "salve",
                "elixir_might", "elixir_guard", "elixir_haste"};
@@ -1469,6 +1897,13 @@ void Content::build_npcs() {
     add("counter",  "Счетовод Аким",    "counter_root",  "");
     add("scribe",   "Писарь Феофан",    "scribe_root",   "");
     add("ferryman", "Перевозчик Хмурый","ferry_root",    "shop_ferry");
+
+    // --- Регион IV: Орден ---
+    add("gatekeeper", "Привратник Севир", "gatekeeper_root", "");
+    add("librarian",  "Книжник Аврелий",  "librarian_root",  "shop_order");
+    add("draftsman",  "Чертёжник Гордей", "draftsman_root",  "");
+    add("stoker",     "Истопник Фома",    "stoker_root",     "");
+    add("recorder",   "Протоколист Никон","recorder_root",   "");
 }
 
 // ---------------------------------------------------------------- события
@@ -1544,6 +1979,30 @@ void Content::build_triggers() {
     // Опись архива читается на месте — Феофану остаётся только выслушать.
     add(TriggerKind::NoteTaken, "lists", 1, "lists", 2, 1,
         "Опись прочитана. Считали души, а надо было считать имена.");
+
+    // --- Регион IV ---
+    add(TriggerKind::LocationEntered, "ordergate", 1, "orderway", QUEST_DONE, 1,
+        "Ворота открылись печатью. Обитель стоит нетронутой.");
+
+    // Солдатик находится сам и сам же становится квестом.
+    add(TriggerKind::ItemGained, "keepsake", 1, "keepsake", 1, 0,
+        "Оловянный солдатик. Краска стёрлась там, где его держали пальцами. "
+        "Новый след: «Оловянный солдатик».");
+
+    add(TriggerKind::NoteTaken, "unsealed", 1, "unsealed", 1, 0,
+        "Вырванный лист совпадает с обрывом в уставе. Открыта тайна: «То, что вырвали».");
+    add(TriggerKind::LocationEntered, "node2", 1, "node2q", 1, 0,
+        "Здесь что-то тянет в другую сторону. Открыта тайна: «Второй держит».");
+    add(TriggerKind::MobKilled, "kill_nheart", 1, "node2q", QUEST_DONE, 1,
+        "Сердце Узла остановлено. Второй больше не тянет.");
+    add(TriggerKind::LocationEntered, "node3", 1, "node3q", 1, 0,
+        "Узел не держит и не тянет — он открыт. Открыта тайна: «Третий открыт».");
+    add(TriggerKind::NoteTaken, "thirdnode", 1, "node3q", QUEST_DONE, 1,
+        "Отметка на Третьем: через него уходят в Дрейф.");
+    add(TriggerKind::NoteTaken, "emptygrave", 1, "firstmaster", 1, 0,
+        "«Не дописывайте. Я ещё хожу». Открыта тайна: «Он ещё ходит».");
+    add(TriggerKind::MobKilled, "kill_mshadow", 1, "firstmaster", QUEST_DONE, 1,
+        "Тень Первого Мастера повержена. Кольцо он всё-таки снял.");
 
     // Половина имени — вещь, с которой начинается вопрос о второй половине.
     add(TriggerKind::ItemGained, "half_name", 1, "halves", 1, 0,
@@ -2478,6 +2937,13 @@ void Content::build_dialogues() {
         wait.req_quest = "counting"; wait.req_stage_min = 1; wait.req_stage_max = 1;
         n.options.push_back(wait);
 
+        DlgOption ow_offer;
+        ow_offer.text = "Что это за стены на севере?";
+        ow_offer.next = "orderway_offer";
+        ow_offer.req_quest  = "orderway"; ow_offer.req_stage_min  = QUEST_NONE; ow_offer.req_stage_max = QUEST_NONE;
+        ow_offer.req_quest2 = "counting"; ow_offer.req_stage2_min = QUEST_DONE; ow_offer.req_stage2_max = QUEST_DONE;
+        n.options.push_back(ow_offer);
+
         DlgOption view;
         view.text = "Что видно с башни?";
         view.next = "counter_view";
@@ -2534,6 +3000,441 @@ void Content::build_dialogues() {
         take.give_item = "counter_lens"; take.give_count = 1;
         take.give_gold = 300; take.give_exp = 450;
         n.options.push_back(take);
+        add(n);
+    }
+
+    {
+        DlgNode n; n.id = "orderway_offer";
+        n.text = "Аким наводит цепь на север и долго молчит.\n"
+                 "— Обитель. Та самая. Стоит нетронутая, ворота заперты.\n"
+                 "\n"
+                 "Отпирает печать: узел из серебра. Их не выдавали — их передавали.\n"
+                 "Выходящий отдавал входящему. Если печать у тебя, а отдал её\n"
+                 "не человек, а мертвец, — значит, тот не вышел.\n"
+                 "\n"
+                 "Иди. Оттуда всё видно ещё яснее, и легче тебе от этого не станет.";
+        DlgOption take;
+        take.text = "Пойду к воротам.";
+        take.next = "";
+        take.set_quest = "orderway"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Мне и здесь ясно."));
+        add(n);
+    }
+
+    // --- Привратник Севир: смена, которая не пришла ---
+    {
+        DlgNode n; n.id = "gatekeeper_root";
+        n.text = "Страж стоит у внутренних ворот. Доспех цел, глаза живые.\n"
+                 "— Пост три. Смены не было. Проходи, если по делу.";
+
+        DlgOption offer;
+        offer.text = "Сколько ты уже стоишь?";
+        offer.next = "watch4_offer";
+        offer.req_quest = "watch4"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption done;
+        done.text = "Вот приказ. Пост снять.";
+        done.next = "watch4_reward";
+        done.req_quest = "watch4"; done.req_stage_min = 1; done.req_stage_max = 1;
+        done.req_item = "order_writ"; done.req_item_count = 1;
+        n.options.push_back(done);
+
+        DlgOption wait;
+        wait.text = "Ищу приказ.";
+        wait.next = "watch4_wait";
+        wait.req_quest = "watch4"; wait.req_stage_min = 1; wait.req_stage_max = 1;
+        n.options.push_back(wait);
+
+        DlgOption after;
+        after.text = "Как оно — не стоять?";
+        after.next = "watch4_after";
+        after.req_quest = "watch4"; after.req_stage_min = QUEST_DONE; after.req_stage_max = QUEST_DONE;
+        n.options.push_back(after);
+
+        n.options.push_back(bye("Стой дальше."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "watch4_offer";
+        n.text = "— Не считал. Считать — это ждать, а ждать нельзя: собьёшься.\n"
+                 "\n"
+                 "Приказ о смене должен был прийти. Гонец не дошёл — дороги не стало\n"
+                 "ни туда, ни обратно. Без приказа я пост не оставлю: не потому,\n"
+                 "что верю, будто кто-то придёт. Потому что иначе выйдет, что я\n"
+                 "стоял зря.\n"
+                 "\n"
+                 "В библиотеке есть ящик для недоставленного. Посмотри там.";
+        DlgOption take;
+        take.text = "Поищу приказ.";
+        take.next = "watch4_wait";
+        take.set_quest = "watch4"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Стой, раз надо."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "watch4_wait";
+        n.text = "— Ящик для недоставленного. Аврелий знает, где он.\n"
+                 "Только не говори ему, зачем. Он начнёт объяснять, а мне слушать\n"
+                 "нельзя: собьюсь.";
+        n.options.push_back(bye("Молчу."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "watch4_reward";
+        n.text = "Севир читает, шевеля губами, потом читает ещё раз.\n"
+                 "Потом ставит алебарду к стене — впервые за двести лет,\n"
+                 "и по тому, как он это делает, видно, что руки помнят движение.\n"
+                 "\n"
+                 "— Значит, не зря. Значит, приказ был.\n"
+                 "Держи алебарду. Мне она теперь не по чину: я не караул.";
+        DlgOption take;
+        take.text = "Принять алебарду. [700 опыта]";
+        take.set_quest = "watch4"; take.set_stage = QUEST_DONE;
+        take.take_item = "order_writ"; take.take_count = 1;
+        take.give_item = "gate_halberd"; take.give_count = 1;
+        take.give_gold = 400; take.give_exp = 700;
+        n.options.push_back(take);
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "watch4_after";
+        n.text = "— Непривычно. Сажусь — и встаю, будто кто окликнул.\n"
+                 "Пройдёт, наверное. За двести лет привык, за двести и отвыкну.";
+        n.options.push_back(bye("Бывай, Севир."));
+        add(n);
+    }
+
+    // --- Книжник Аврелий ---
+    {
+        DlgNode n; n.id = "librarian_root";
+        n.text = "Между стеллажами горит одна лампа. Книжник сидит под ней\n"
+                 "и переписывает что-то в тетрадь.\n"
+                 "— Тише, пожалуйста. Не потому что тайна — потому что привычка.";
+
+        DlgOption box;
+        box.text = "Где у вас ящик для недоставленного?";
+        box.next = "librarian_box";
+        box.req_quest = "watch4"; box.req_stage_min = 1; box.req_stage_max = 1;
+        n.options.push_back(box);
+
+        DlgOption torn;
+        torn.text = "Я нашёл лист, вырванный из устава.";
+        torn.next = "unsealed_talk";
+        torn.req_quest = "unsealed"; torn.req_stage_min = 1; torn.req_stage_max = 1;
+        n.options.push_back(torn);
+
+        DlgOption what;
+        what.text = "Что вы вообще читали?";
+        what.next = "librarian_read";
+        n.options.push_back(what);
+
+        DlgOption trade;
+        trade.text = "Что осталось в кладовой?";
+        trade.open_shop = true;
+        n.options.push_back(trade);
+
+        n.options.push_back(bye("Не буду мешать."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "librarian_box";
+        n.text = "— Второй стеллаж, нижний ящик. Там всё, что не дошло.\n"
+                 "Писем восемьдесят, приказов четыре, одно завещание.\n"
+                 "\n"
+                 "Я их разобрал по годам. Больше с ними делать нечего:\n"
+                 "адресаты либо здесь, либо нигде.";
+        DlgOption take;
+        take.text = "Взять приказ о смене караула.";
+        take.give_item = "order_writ"; take.give_count = 1;
+        n.options.push_back(take);
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "librarian_read";
+        n.text = "— О расстоянии. Всё остальное — приложения.\n"
+                 "\n"
+                 "Три школы было. Одна считала расстояние свойством, вторая —\n"
+                 "веществом, третья — привычкой. Все три ошиблись.\n"
+                 "\n"
+                 "Расстояние — это согласие. Мир согласен быть большим, пока\n"
+                 "его об этом не переспрашивают.\n"
+                 "\n"
+                 "Мы переспросили.";
+        n.options.push_back(bye("И он передумал."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "unsealed_talk";
+        n.text = "Аврелий берёт лист, прикладывает к уставу — совпадает по обрыву.\n"
+                 "Долго молчит.\n"
+                 "\n"
+                 "— Значит, было записано. «Связывать последний узел запрещается,\n"
+                 "доколе не будет найден способ развязать».\n"
+                 "\n"
+                 "Совет внёс это в устав по настоянию Мастера. И Совет же вырвал,\n"
+                 "когда Мастер ушёл. Не сжёг — вырвал и оставил лежать.\n"
+                 "\n"
+                 "Знаешь, что это значит? Что они не забыли. Они помнили и сделали.";
+        DlgOption take;
+        take.text = "Отдать лист в архив. [650 опыта]";
+        take.set_quest = "unsealed"; take.set_stage = QUEST_DONE;
+        take.take_item = "torn_page"; take.take_count = 1;
+        take.give_item = "acolyte_hood"; take.give_count = 1;
+        take.give_exp = 650;
+        n.options.push_back(take);
+        add(n);
+    }
+
+    // --- Чертёжник Гордей ---
+    {
+        DlgNode n; n.id = "draftsman_root";
+        n.text = "Стол во всю комнату, на нём лист во весь стол, и лист порван.\n"
+                 "Человек стоит над ним и не поднимает головы.\n"
+                 "— Не наступи на обрывки. Я их два века собираю.";
+
+        DlgOption offer;
+        offer.text = "Что это за чертёж?";
+        offer.next = "charts_offer";
+        offer.req_quest = "charts"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption done;
+        done.text = "Четыре обрывка.";
+        done.next = "charts_reward";
+        done.req_quest = "charts"; done.req_stage_min = 1; done.req_stage_max = 1;
+        done.req_item = "chart_piece"; done.req_item_count = 4;
+        n.options.push_back(done);
+
+        DlgOption wait;
+        wait.text = "Ещё ищу.";
+        wait.next = "charts_wait";
+        wait.req_quest = "charts"; wait.req_stage_min = 1; wait.req_stage_max = 1;
+        n.options.push_back(wait);
+
+        n.options.push_back(bye("Собирай."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "charts_offer";
+        n.text = "— Карта сети. Все узлы и все связи, как было до Стяжения.\n"
+                 "\n"
+                 "Не хватает четырёх кусков. Их растащили тени — те, что здесь\n"
+                 "ходят. Они не злые, они просто тоже чертят.\n"
+                 "\n"
+                 "Принеси четыре. Я хочу увидеть целиком хотя бы раз.";
+        DlgOption take;
+        take.text = "Принесу.";
+        take.next = "charts_wait";
+        take.set_quest = "charts"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Черти по памяти."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "charts_wait";
+        n.text = "— Четыре. Тени носят их с собой и не отдают по-хорошему.";
+        n.options.push_back(bye("Понял."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "charts_reward";
+        n.text = "Гордей раскладывает обрывки, и лист впервые за двести лет сходится.\n"
+                 "Он смотрит долго, потом садится прямо на пол.\n"
+                 "\n"
+                 "— Спиц нет.\n"
+                 "Мы всю жизнь думали, что узлы связаны с серединой. А они связаны\n"
+                 "друг с другом, и середина получается сама, когда связей довольно.\n"
+                 "\n"
+                 "Значит, Точку Ноль никто не строил. Значит, она просто вышла.\n"
+                 "Значит, и развязать её никто не умеет — потому что никто не вязал.";
+        DlgOption take;
+        take.text = "Забрать копию карты. [750 опыта]";
+        take.set_quest = "charts"; take.set_stage = QUEST_DONE;
+        take.take_item = "chart_piece"; take.take_count = 4;
+        take.give_item = "node_shield"; take.give_count = 1;
+        take.give_gold = 500; take.give_exp = 750;
+        n.options.push_back(take);
+        add(n);
+    }
+
+    // --- Истопник Фома: печь берёт ---
+    {
+        DlgNode n; n.id = "stoker_root";
+        n.text = "Печь тёплая, хотя её не топят. Истопник сидит рядом на чурбаке.\n"
+                 "— Не подходи близко. Она берёт то, что ближе.";
+
+        DlgOption offer;
+        offer.text = "Что значит «берёт»?";
+        offer.next = "ovens_offer";
+        offer.req_quest = "ovens"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption done;
+        done.text = "Шесть вырванных листов. Топи.";
+        done.next = "ovens_reward";
+        done.req_quest = "ovens"; done.req_stage_min = 1; done.req_stage_max = 1;
+        done.req_item = "torn_page"; done.req_item_count = 6;
+        n.options.push_back(done);
+
+        DlgOption wait;
+        wait.text = "Ещё собираю.";
+        wait.next = "ovens_wait";
+        wait.req_quest = "ovens"; wait.req_stage_min = 1; wait.req_stage_max = 1;
+        n.options.push_back(wait);
+
+        n.options.push_back(bye("Грейся."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "ovens_offer";
+        n.text = "— Печь не плавит. Печь берёт вещь и отдаёт то, чего в вещи не было.\n"
+                 "Обратно вещь не достаётся. Совсем.\n"
+                 "\n"
+                 "Клали книги, кольца. Один раз положили человека — после этого\n"
+                 "она полгода молчала, и настоятель запретил.\n"
+                 "\n"
+                 "Хочешь обмен — неси шесть вырванных листов. Зола у меня своя.\n"
+                 "Листов тут довольно: их вырывали охотно.";
+        DlgOption take;
+        take.text = "Соберу.";
+        take.next = "ovens_wait";
+        take.set_quest = "ovens"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Обойдусь."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "ovens_wait";
+        n.text = "— Шесть листов. И подумай ещё раз: обратно не достанешь.";
+        n.options.push_back(bye("Подумаю."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "ovens_reward";
+        n.text = "Фома кладёт листы в устье, сыплет золу сверху и закрывает заслонку.\n"
+                 "Ничего не гудит и не вспыхивает. Просто через минуту внутри\n"
+                 "лежит доспех, которого туда не клали.\n"
+                 "\n"
+                 "— Вот и весь фокус. Она отдала то, чего в них не было.\n"
+                 "А листов больше нет. Совсем нет — понимаешь?";
+        DlgOption take;
+        take.text = "Забрать доспех. [800 опыта]";
+        take.set_quest = "ovens"; take.set_stage = QUEST_DONE;
+        take.take_item = "torn_page"; take.take_count = 6;
+        take.give_item = "order_plate"; take.give_count = 1;
+        take.give_exp = 800;
+        n.options.push_back(take);
+        add(n);
+    }
+
+    // --- Протоколист Никон: Зал Отказа ---
+    {
+        DlgNode n; n.id = "recorder_root";
+        n.text = "Зал пуст, стол длинный, на нём протокол и перо. За столом сидит\n"
+                 "один человек и смотрит на пустую строку.\n"
+                 "— Заседание не закрыто. Не хватает последней записи.";
+
+        DlgOption offer;
+        offer.text = "Какой записи?";
+        offer.next = "refusal_offer";
+        offer.req_quest = "refusal"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption say_master;
+        say_master.text = "Запиши: Мастер был прав.";
+        say_master.next = "refusal_master";
+        say_master.req_quest = "refusal"; say_master.req_stage_min = 1; say_master.req_stage_max = 1;
+        say_master.set_quest = "refusal"; say_master.set_stage = QUEST_DONE;
+        say_master.set_counter = "refusal_choice"; say_master.set_counter_value = 1;
+        say_master.give_item = "master_ring"; say_master.give_count = 1;
+        say_master.give_exp = 700;
+        n.options.push_back(say_master);
+
+        DlgOption say_council;
+        say_council.text = "Запиши: Совет был прав.";
+        say_council.next = "refusal_council";
+        say_council.req_quest = "refusal"; say_council.req_stage_min = 1; say_council.req_stage_max = 1;
+        say_council.set_quest = "refusal"; say_council.set_stage = QUEST_DONE;
+        say_council.set_counter = "refusal_choice"; say_council.set_counter_value = 2;
+        say_council.give_item = "order_draught"; say_council.give_count = 3;
+        say_council.give_gold = 800;
+        say_council.give_exp = 700;
+        n.options.push_back(say_council);
+
+        DlgOption after_m;
+        after_m.text = "Протокол закрыт?";
+        after_m.next = "refusal_after_m";
+        after_m.req_quest = "refusal"; after_m.req_stage_min = QUEST_DONE; after_m.req_stage_max = QUEST_DONE;
+        after_m.req_counter = "refusal_choice"; after_m.req_counter_min = 1; after_m.req_counter_max = 1;
+        n.options.push_back(after_m);
+
+        DlgOption after_c;
+        after_c.text = "Протокол закрыт?";
+        after_c.next = "refusal_after_c";
+        after_c.req_quest = "refusal"; after_c.req_stage_min = QUEST_DONE; after_c.req_stage_max = QUEST_DONE;
+        after_c.req_counter = "refusal_choice"; after_c.req_counter_min = 2; after_c.req_counter_max = 2;
+        n.options.push_back(after_c);
+
+        n.options.push_back(bye("Мне нечего сказать."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "refusal_offer";
+        n.text = "— Одиннадцать за, один против. Мастер снял кольцо, положил на стол\n"
+                 "и вышел. В протокол внесли, что он был не в себе.\n"
+                 "\n"
+                 "Через пять лет случилось Стяжение, и заседание так и не закрыли:\n"
+                 "закрыть — значит записать, кто был прав, а записывать было некому.\n"
+                 "\n"
+                 "Ты не из Ордена. Тебе можно. Скажи — и я допишу.";
+        DlgOption take;
+        take.text = "Дай подумать.";
+        take.next = "";
+        take.set_quest = "refusal"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Это не мне решать."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "refusal_master";
+        n.text = "Никон записывает медленно, выводя каждую букву.\n"
+                 "«Особое мнение Первого Мастера признано верным. Заседание закрыто.»\n"
+                 "\n"
+                 "— Двести лет. Спасибо.\n"
+                 "Кольцо возьми. Оно тут с того дня лежит, и я не смел его тронуть,\n"
+                 "пока протокол был открыт.";
+        n.options.push_back(bye("Прощай, Никон."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "refusal_council";
+        n.text = "Никон записывает быстро, не глядя.\n"
+                 "«Решение Совета признано верным. Заседание закрыто.»\n"
+                 "\n"
+                 "— Так тоже можно. Он ведь и правда был не в себе — кто в себе\n"
+                 "уйдёт из обители в никуда?\n"
+                 "\n"
+                 "Возьми из кладовой, что причитается. Совет платил хорошо.";
+        n.options.push_back(bye("Прощай, Никон."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "refusal_after_m";
+        n.text = "— Закрыт. Впервые за двести лет мне нечего делать.\n"
+                 "Странное чувство. Хорошее, кажется.";
+        n.options.push_back(bye("Отдыхай."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "refusal_after_c";
+        n.text = "— Закрыт.\n"
+                 "Только знаешь... я всё равно смотрю на пустое место, где лежало\n"
+                 "кольцо. Его никто не забирал двести лет.\n"
+                 "Теперь и не заберёт.";
+        n.options.push_back(bye("Бывает."));
         add(n);
     }
 
@@ -2954,6 +3855,13 @@ void Content::build_dialogues() {
         zp_wait.req_quest = "zero_point"; zp_wait.req_stage_min = 1; zp_wait.req_stage_max = 1;
         n.options.push_back(zp_wait);
 
+        DlgOption keep;
+        keep.text = "Я нашёл в обители оловянного солдатика.";
+        keep.next = "keepsake_talk";
+        keep.req_quest = "keepsake"; keep.req_stage_min = 1; keep.req_stage_max = 1;
+        keep.req_item = "keepsake"; keep.req_item_count = 1;
+        n.options.push_back(keep);
+
         DlgOption cinch_ask;
         cinch_ask.text = "Я нашёл отчёт Ордена. Стяжение идёт до сих пор.";
         cinch_ask.next = "cinch_talk";
@@ -2973,6 +3881,29 @@ void Content::build_dialogues() {
         DlgNode n; n.id = "hermit_rest";
         n.text = "Ты греешься у огня. Усталость отступает.";
         n.options.push_back(bye("Спасибо."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "keepsake_talk";
+        n.text = "Отшельник берёт солдатика двумя пальцами и не сразу может\n"
+                 "поставить его на землю: рука не слушается.\n"
+                 "\n"
+                 "— Келья одиннадцатая. Я его сам туда и положил.\n"
+                 "\n"
+                 "Он долго молчит.\n"
+                 "\n"
+                 "— Меня зовут Игнат. Мы должны были идти вдвоём, и я остался\n"
+                 "снаружи — правило такое, чтобы было кому вспомнить.\n"
+                 "Он не вышел. Я ждал сорок лет, потом ушёл сам.\n"
+                 "\n"
+                 "Вот и всё вспоминание, чужак. Двести лет — и оловянный солдатик.";
+        DlgOption take;
+        take.text = "Отдать солдатика. [600 опыта]";
+        take.set_quest = "keepsake"; take.set_stage = QUEST_DONE;
+        take.take_item = "keepsake"; take.take_count = 1;
+        take.give_item = "portal_stone"; take.give_count = 2;
+        take.give_exp = 600;
+        n.options.push_back(take);
         add(n);
     }
     {

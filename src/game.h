@@ -174,6 +174,10 @@ public:
 
     // --- инвентарь ---
     int   count_item(const std::string& id) const;
+    // Сколько предмета при игроке всего: в сумке плюс надетое. Врата должны
+    // считать именно так — ключ на пальце остаётся ключом, и надетое кольцо
+    // не должно запирать дверь, которую само же и открывает.
+    int   carries_item(const std::string& id) const;
     void  add_item(const std::string& id, int n);
     bool  remove_item(const std::string& id, int n);
     bool  equip(const std::string& id);

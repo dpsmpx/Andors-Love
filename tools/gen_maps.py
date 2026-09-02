@@ -551,6 +551,8 @@ counter_tower.objects = [
     "spawn 24 8 mad_clerk 2 3",
     "spawn 34 14 mad_clerk 2 4",
     "exit 24 15 canal 43 12",
+    "exit 37 14 ordergate 24 15 key=order_seal "
+    "deny=Ворота обители заперты наглухо. Аким говорил про печать — узел из серебра.",
 ]
 
 # --- Городской архив ---
@@ -573,10 +575,195 @@ archive.objects = [
     "exit 24 15 foundry 7 6",
 ]
 
+# ===================== РЕГИОН IV · ОРДЕН =====================
+
+def hall(mid, name, fill="#"):
+    """Заготовка обительского зала: вход снизу по центру."""
+    m = Map(mid, name, fill)
+    m.rect(22, 13, 26, 16, ".")
+    return m
+
+# --- Ворота Ордена ---
+ordergate = hall("ordergate", "Ворота Ордена")
+ordergate.rect(8, 9, 40, 13, ".")                # площадь перед воротами
+ordergate.rect(20, 4, 28, 9, ".")                # створ ворот
+ordergate.rect(12, 5, 18, 8, ".")
+ordergate.rect(30, 5, 36, 8, ".")
+ordergate.objects = [
+    "sign 24 12 На створке вычеканен узел. Замочной скважины нет — есть углубление по печати.",
+    "note 15 6 gates",
+    "item 34 6 order_draught 1",
+    "chest 35 12 420 - order_draught:2 rune_stone:1",
+    "spawn 14 11 gate_guard 2 4",
+    "spawn 34 11 gate_guard 2 4",
+    "exit 24 15 counter 36 14",
+    "exit 24 4 gatehouse 24 15",
+]
+
+# --- Привратная ---
+gatehouse = hall("gatehouse", "Привратная")
+gatehouse.rect(6, 8, 42, 12, ".")                # длинные сени
+gatehouse.rect(10, 4, 20, 8, ".")                # караулка
+gatehouse.rect(28, 4, 38, 8, ".")                # оружейная
+gatehouse.objects = [
+    "npc 24 11 gatekeeper",
+    "sign 24 9 Алебарды стоят в козлах. Ни одна не тронута.",
+    "note 12 6 watchwrit",
+    "item 36 6 scrap_iron 2",
+    "chest 18 5 380 - order_draught:2 whetstone:1",
+    "spawn 8 10 gate_guard 2 4",
+    "spawn 40 10 acolyte 2 4",
+    "exit 24 15 ordergate 24 5",
+    "exit 8 8 library 24 15",
+    "exit 40 8 cells 24 15",
+]
+
+# --- Библиотека Ордена ---
+library = hall("library", "Библиотека Ордена")
+library.rect(4, 3, 44, 12, ".")
+for x in (8, 14, 20, 26, 32, 38):                # стеллажи
+    library.rect(x, 4, x + 2, 10, "#")
+library.rect(4, 11, 44, 12, ".")
+library.objects = [
+    "npc 6 6 librarian",
+    "sign 24 12 Полки до свода. Одна лампа. Пыли нет.",
+    "note 36 6 read",
+    "note 12 8 unsealed",
+    "item 24 6 torn_page 2",
+    "item 42 5 torn_page 1",
+    "chest 43 11 460 - order_draught:2 torn_page:2 strong_tea:1",
+    "spawn 17 7 page_swarm 3 5",
+    "spawn 35 8 page_swarm 3 5",
+    "spawn 24 11 acolyte 2 4",
+    "exit 24 15 gatehouse 9 8",
+    "exit 4 3 drafting 24 15",
+]
+
+# --- Чертёжный зал ---
+drafting = hall("drafting", "Чертёжный зал")
+drafting.rect(6, 4, 42, 12, ".")
+drafting.rect(16, 6, 32, 9, "#")                 # стол во всю комнату
+drafting.rect(23, 6, 25, 6, ".")
+drafting.objects = [
+    "npc 24 5 draftsman",
+    "sign 24 11 На столе лист во весь стол, и лист порван.",
+    "note 8 5 charts",
+    "item 10 11 chart_piece 1",
+    "item 40 5 chart_piece 1",
+    "chest 40 11 500 - chart_piece:1 order_draught:2",
+    "spawn 12 8 draft_shade 3 5",
+    "spawn 36 8 draft_shade 3 5",
+    "exit 24 15 library 6 4",
+    "exit 42 4 refusalhall 24 15",
+]
+
+# --- Кельи послушников ---
+cells = hall("cells", "Кельи послушников")
+cells.rect(4, 3, 44, 12, ".")
+for x in (6, 12, 18, 30, 36):                    # ряды келий
+    cells.rect(x, 4, x + 4, 7, "#")
+    cells.rect(x + 1, 5, x + 3, 6, ".")
+    cells.rect(x + 2, 7, x + 2, 7, ".")
+cells.objects = [
+    "sign 24 11 Двери не заперты. В каждой келье прибрано.",
+    "note 7 5 novice",
+    "note 13 5 keepsake",
+    "item 19 5 keepsake 1",
+    "item 31 5 order_draught 1",
+    "chest 37 5 400 - acolyte_hood:1 order_draught:1",
+    "spawn 24 9 cell_dweller 3 5",
+    "spawn 40 10 cell_dweller 2 4",
+    "exit 24 15 gatehouse 39 8",
+    "exit 4 12 furnace 24 15",
+]
+
+# --- Печь Ордена ---
+furnace = hall("furnace", "Печь Ордена")
+furnace.rect(8, 5, 40, 12, ".")
+furnace.rect(20, 6, 28, 10, "#")                 # сама печь
+furnace.rect(24, 6, 24, 6, ".")                  # устье
+furnace.objects = [
+    "npc 18 8 stoker",
+    "sign 24 11 Печь тёплая, хотя её не топят двести лет.",
+    "note 38 6 ovens",
+    "item 10 11 furnace_ash 2",
+    "chest 38 11 480 - furnace_ash:3 ember:2 order_draught:1",
+    "spawn 12 7 furnace_born 2 4",
+    "spawn 34 9 furnace_born 2 4",
+    "exit 24 15 cells 5 12",
+]
+
+# --- Зал Отказа ---
+refusalhall = hall("refusalhall", "Зал Отказа")
+refusalhall.rect(6, 4, 42, 12, ".")
+refusalhall.rect(14, 7, 34, 9, "#")              # длинный стол совета
+refusalhall.rect(24, 7, 24, 7, ".")              # место, где лежало кольцо
+refusalhall.objects = [
+    "npc 24 6 recorder",
+    "sign 24 11 Одиннадцать мест по одну сторону, одно по другую. Оно пустое.",
+    "note 8 5 refusal",
+    "item 40 5 order_draught 1",
+    "chest 40 11 520 - order_draught:2 rune_stone:1 strong_tea:1",
+    "spawn 10 10 refusal_echo 2 4",
+    "spawn 38 8 refusal_echo 2 4",
+    "exit 24 15 drafting 41 4",
+    "exit 6 4 node2 24 15",
+]
+
+# --- Узел Второй ---
+node2 = hall("node2", "Узел Второй")
+node2.rect(10, 4, 38, 12, ".")
+node2.rect(20, 6, 28, 10, "#")                   # кольцо узла
+node2.rect(24, 6, 24, 10, ".")
+node2.objects = [
+    "sign 24 11 Здесь что-то тянет в другую сторону. Ровно с той же силой.",
+    "note 12 5 secondnode",
+    "item 36 5 node_core 1",
+    "chest 36 11 560 - node_shield:1 order_draught:2",
+    "spawn 14 8 node_guard 2 3",
+    "spawn 34 8 node_guard 2 3",
+    "spawn 24 8 node_heart 1 2",
+    "exit 24 15 refusalhall 7 4",
+    "exit 38 4 node3 24 15",
+]
+
+# --- Узел Третий ---
+node3 = hall("node3", "Узел Третий")
+node3.rect(8, 4, 40, 12, ".")
+node3.rect(18, 5, 30, 11, "#")                   # обломки кольца
+node3.rect(22, 5, 26, 11, ".")
+node3.rect(18, 8, 30, 8, ".")
+node3.objects = [
+    "sign 24 12 Кольцо узла разомкнуто. Через разрыв тянет сквозняком.",
+    "note 10 5 thirdnode",
+    "item 38 5 node_core 1",
+    "chest 10 11 540 - portal_stone:1 order_draught:2",
+    "spawn 12 8 node_guard 2 4",
+    "spawn 36 9 node_guard 2 4",
+    "exit 24 15 node2 37 4",
+    "exit 8 12 grave 24 15",
+]
+
+# --- Могила Первого Мастера ---
+grave = hall("grave", "Могила Первого Мастера")
+grave.rect(10, 4, 38, 12, ".")
+grave.rect(22, 6, 26, 9, "#")                    # камень
+grave.rect(24, 9, 24, 9, ".")
+grave.objects = [
+    "sign 24 11 Камень стоит, могила пустая. Надпись дописана углём.",
+    "note 24 10 emptygrave",
+    "item 12 5 rune_stone 1",
+    "chest 36 11 640 - order_draught:3 rune_stone:2 node_core:1",
+    "spawn 24 5 master_shadow 1 2",
+    "exit 24 15 node3 9 12",
+]
+
 MAPS = [village, forest, cave, ruins, sanctum, vault,
         goatpath, glassfield, mill, market, bridge, saltmines,
         caravanserai, doubled,
-        halfcity, endless, foundry, canal, counter_tower, archive]
+        halfcity, endless, foundry, canal, counter_tower, archive,
+        ordergate, gatehouse, library, drafting, cells, furnace,
+        refusalhall, node2, node3, grave]
 
 # --------------------------------------------------------------- проверки
 def reachable(m, start):
@@ -602,7 +789,11 @@ def check():
                "market": (3, 9), "bridge": (24, 3), "saltmines": (24, 3),
                "caravanserai": (24, 15), "doubled": (3, 9),
                "halfcity": (24, 2), "endless": (3, 9), "foundry": (24, 3),
-               "canal": (24, 2), "counter": (24, 15), "archive": (24, 15)}
+               "canal": (24, 2), "counter": (24, 15), "archive": (24, 15),
+               "ordergate": (24, 15), "gatehouse": (24, 15), "library": (24, 15),
+               "drafting": (24, 15), "cells": (24, 15), "furnace": (24, 15),
+               "refusalhall": (24, 15), "node2": (24, 15), "node3": (24, 15),
+               "grave": (24, 15)}
 
     for m in MAPS:
         start = entries[m.id]

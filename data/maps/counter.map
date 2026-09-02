@@ -30,4 +30,5 @@ chest 11 14 240 - ledger_page:2 strong_tea:2
 spawn 24 8 mad_clerk 2 3
 spawn 34 14 mad_clerk 2 4
 exit 24 15 canal 43 12
+exit 37 14 ordergate 24 15 key=order_seal deny=Ворота обители заперты наглухо. Аким говорил про печать — узел из серебра.
 end
