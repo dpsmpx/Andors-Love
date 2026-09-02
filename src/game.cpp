@@ -17,9 +17,13 @@ void Game::msg(const std::string& m) {
 
 // ------------------------------------------------------------- новая партия
 
-void Game::new_game(const std::string& name) {
+void Game::new_game(const std::string& name, const std::string& race,
+                    const std::string& spec) {
     plr_ = Player();
     if (!name.empty()) plr_.name = name;
+    const Content& c = Content::get();
+    plr_.race = c.race(race) ? race : "human";
+    plr_.spec = c.spec(spec) ? spec : "swordsman";
 
     plr_.base = Stats();
     plr_.base.max_hp  = 30;
@@ -38,8 +42,16 @@ void Game::new_game(const std::string& name) {
     plr_.skill_points = 1;      // одно очко сразу, чтобы почувствовать систему
 
     add_item("bread", 2);
-    add_item("dagger", 1);
-    equip("dagger");
+    if (const SpecDef* sp = c.spec(plr_.spec)) {
+        if (!sp->start_item.empty()) {
+            add_item(sp->start_item, sp->start_count > 0 ? sp->start_count : 1);
+            equip(sp->start_item);
+        }
+    }
+    if (plr_.equipped[static_cast<std::size_t>(Slot::Weapon)].empty()) {
+        add_item("dagger", 1);
+        equip("dagger");
+    }
 
     Stats t = total();
     plr_.hp = t.max_hp;
@@ -56,24 +68,161 @@ void Game::new_game(const std::string& name) {
     rng_.set_seed(0x5EEDC0DEULL);
 
     if (const Location* l = here()) spawn_initial(*l);
+    chests_.clear();
+    notes_.clear();
+    {
+        const RaceDef* r  = c.race(plr_.race);
+        const SpecDef* sp = c.spec(plr_.spec);
+        msg(std::string(r ? r->name : "Странник") + ", " +
+            std::string(sp ? sp->name : "боец") + " — путь начинается.");
+    }
     msg("Ольховка встречает тебя запахом дыма и мокрой соломы.");
     msg("Нажми ? — список команд.");
 }
 
 // -------------------------------------------------------- характеристики
 
+void Game::apply_effect(std::vector<ActiveEffect>& list, const std::string& id,
+                        int turns, int power) {
+    if (id.empty() || turns <= 0) return;
+    if (!Content::get().effect(id)) return;
+    if (power < 1) power = 1;
+    for (ActiveEffect& a : list) {
+        if (a.id != id) continue;
+        // Повторное наложение продлевает эффект и оставляет большую силу,
+        // иначе список копил бы десятки одинаковых записей.
+        if (turns > a.turns) a.turns = turns;
+        if (power > a.power) a.power = power;
+        return;
+    }
+    list.push_back(ActiveEffect(id, turns, power));
+}
+
+Stats Game::effect_stats(const std::vector<ActiveEffect>& list) {
+    Stats t;
+    const Content& c = Content::get();
+    for (const ActiveEffect& a : list) {
+        const EffectDef* d = c.effect(a.id);
+        if (!d || d->kind != EffectKind::Stat) continue;
+        for (int i = 0; i < a.power; ++i) t += d->per_power;
+    }
+    return t;
+}
+
+int Game::tick_effects(std::vector<ActiveEffect>& list) {
+    const Content& c = Content::get();
+    int delta = 0;
+    for (std::size_t i = 0; i < list.size();) {
+        ActiveEffect& a = list[i];
+        const EffectDef* d = c.effect(a.id);
+        if (d) {
+            if (d->kind == EffectKind::Damage || d->kind == EffectKind::Heal)
+                delta += d->hp_per_turn * a.power;
+        }
+        if (--a.turns <= 0) list.erase(list.begin() + static_cast<long>(i));
+        else                ++i;
+    }
+    return delta;
+}
+
+int Game::cure_effects(std::vector<ActiveEffect>& list, const std::string& which) {
+    const Content& c = Content::get();
+    int removed = 0;
+    for (std::size_t i = 0; i < list.size();) {
+        const EffectDef* d = c.effect(list[i].id);
+        const bool hit = (which == "*") ? (d && d->harmful) : (list[i].id == which);
+        if (hit) { list.erase(list.begin() + static_cast<long>(i)); ++removed; }
+        else     ++i;
+    }
+    return removed;
+}
+
+std::string Game::effects_line(const std::vector<ActiveEffect>& list) {
+    const Content& c = Content::get();
+    std::string out;
+    for (const ActiveEffect& a : list) {
+        const EffectDef* d = c.effect(a.id);
+        if (!d) continue;
+        if (!out.empty()) out += ", ";
+        out += d->name;
+        if (a.power > 1) out += " x" + to_str(a.power);
+        out += "(" + to_str(a.turns) + ")";
+    }
+    return out;
+}
+
+// ---------------------------------------------------------- зачарования
+
+Stats Game::enchant_bonus() const {
+    Stats t;
+    const Content& c = Content::get();
+    for (const std::string& id : plr_.equipped) {
+        if (id.empty()) continue;
+        auto it = plr_.enchants.find(id);
+        if (it == plr_.enchants.end()) continue;
+        if (const EnchantDef* e = c.enchant(it->second)) t += e->bonus;
+    }
+    return t;
+}
+
+bool Game::can_enchant(const std::string& item_id) const {
+    const ItemDef* d = Content::get().item(item_id);
+    if (!d) return false;
+    if (slot_for(d->kind) == Slot::Count) return false;      // только снаряжение
+    return plr_.enchants.find(item_id) == plr_.enchants.end();
+}
+
+bool Game::enchant_item(const std::string& item_id, const std::string& ench_id) {
+    const Content& c = Content::get();
+    const ItemDef*    d = c.item(item_id);
+    const EnchantDef* e = c.enchant(ench_id);
+    if (!d || !e) return false;
+    if (!can_enchant(item_id)) { msg("На этой вещи уже есть зачарование."); return false; }
+
+    // Предмет должен быть у игрока: в сумке или надет.
+    bool equipped = false;
+    for (const std::string& id : plr_.equipped)
+        if (id == item_id) equipped = true;
+    if (!equipped && count_item(item_id) <= 0) return false;
+
+    if (plr_.gold < e->price) {
+        msg("Не хватает золота: нужно " + to_str(e->price) + ".");
+        return false;
+    }
+    if (!e->reagent.empty() && count_item(e->reagent) < e->reagent_count) {
+        const ItemDef* rd = c.item(e->reagent);
+        msg("Нужен реагент: " + std::string(rd ? rd->name : e->reagent) +
+            " x" + to_str(e->reagent_count) + ".");
+        return false;
+    }
+
+    plr_.gold -= e->price;
+    if (!e->reagent.empty()) remove_item(e->reagent, e->reagent_count);
+    plr_.enchants[item_id] = ench_id;
+    msg(d->name + " получает зачарование «" + e->name + "».");
+    return true;
+}
+
 Stats Game::total_no_stance() const {
     Stats t = plr_.base;
     const Content& c = Content::get();
+    if (const RaceDef* r  = c.race(plr_.race)) t += r->bonus;
+    if (const SpecDef* sp = c.spec(plr_.spec)) t += sp->bonus;
     for (const std::string& id : plr_.equipped) {
         if (id.empty()) continue;
         if (const ItemDef* d = c.item(id)) t += d->bonus;
     }
+    t += enchant_bonus();
     for (const auto& kv : plr_.skills) {
         const SkillDef* s = c.skill(kv.first);
         if (!s) continue;
         for (int i = 0; i < kv.second; ++i) t += s->bonus;
     }
+    t += effect_stats(plr_.effects);
+    // Никакой набор штрафов не должен обнулить героя.
+    if (t.max_hp < 1) t.max_hp = 1;
+    if (t.max_ap < 1) t.max_ap = 1;
+    if (t.attack < 5) t.attack = 5;
     return t;
 }
 
@@ -188,14 +337,30 @@ bool Game::use_item(const std::string& id) {
     if (!d || d->kind != ItemKind::Consumable) { msg("Это не применить."); return false; }
     if (count_item(id) <= 0) return false;
 
-    Stats t = total();
     int before_hp = plr_.hp, before_ap = plr_.ap;
+    std::string what;
+
+    if (!d->cures.empty()) {
+        int n = cure_effects(plr_.effects, d->cures);
+        if (n > 0) what += plural(n, "снят эффект", "снято эффекта", "снято эффектов") +
+                           std::string(": ") + to_str(n);
+        else       what += "снимать нечего";
+    }
+    if (!d->effect.empty()) {
+        apply_effect(plr_.effects, d->effect, d->effect_turns, d->effect_power);
+        const EffectDef* ed = Content::get().effect(d->effect);
+        if (ed) what += (what.empty() ? "" : ", ") + ed->name + " на " +
+                        to_str(d->effect_turns) + " ходов";
+    }
+
+    // total() пересчитываем после эффектов: эликсир мог поднять предел.
+    Stats t = total();
     plr_.hp = std::min(t.max_hp, plr_.hp + d->heal_hp);
     plr_.ap = std::min(t.max_ap, plr_.ap + d->heal_ap);
     remove_item(id, 1);
 
-    std::string what;
-    if (plr_.hp > before_hp) what += "+" + to_str(plr_.hp - before_hp) + " HP";
+    if (plr_.hp > before_hp) what += (what.empty() ? "" : ", ") + std::string("+") +
+                                     to_str(plr_.hp - before_hp) + " HP";
     if (plr_.ap > before_ap) what += (what.empty() ? "" : ", ") + std::string("+") +
                                      to_str(plr_.ap - before_ap) + " AP";
     if (what.empty()) what = "без эффекта";
@@ -230,6 +395,21 @@ Mob* Game::mob_by_uid(int uid) {
     return nullptr;
 }
 
+// Добыча разыгрывается при появлении моба, а не при смерти: моб реально
+// носит с собой то, что с него потом упадёт, и может подобрать ещё.
+void Game::fill_mob_inventory(Mob& m, const EnemyDef& e) {
+    m.gold = rng_.range(e.gold_min, e.gold_max);
+    for (const Drop& d : e.drops) {
+        if (!rng_.chance(d.percent)) continue;
+        bool merged = false;
+        for (ItemStack& st : m.inv)
+            if (st.id == d.item) { ++st.count; merged = true; break; }
+        if (!merged) m.inv.push_back(ItemStack(d.item, 1));
+    }
+    for (const ActiveEffect& a : e.innate)
+        apply_effect(m.effects, a.id, a.turns, a.power);
+}
+
 void Game::spawn_initial(const Location& loc) {
     if (visited_.count(loc.id)) return;
     visited_.insert(loc.id);
@@ -250,7 +430,10 @@ void Game::spawn_initial(const Location& loc) {
                 m.loc = loc.id;
                 m.pos = p;
                 m.zone = static_cast<int>(z);
-                if (const EnemyDef* e = Content::get().enemy(zone.enemy_id)) m.hp = e->stats.max_hp;
+                if (const EnemyDef* e = Content::get().enemy(zone.enemy_id)) {
+                    m.hp = e->stats.max_hp;
+                    fill_mob_inventory(m, *e);
+                }
                 mobs_.push_back(m);
                 break;
             }
@@ -285,12 +468,50 @@ void Game::respawn_tick() {
                 m.loc = loc_id;
                 m.pos = p;
                 m.zone = static_cast<int>(z);
-                if (const EnemyDef* e = Content::get().enemy(zone.enemy_id)) m.hp = e->stats.max_hp;
+                if (const EnemyDef* e = Content::get().enemy(zone.enemy_id)) {
+                    m.hp = e->stats.max_hp;
+                    fill_mob_inventory(m, *e);
+                }
                 mobs_.push_back(m);
                 break;
             }
         }
     }
+}
+
+bool Game::mob_can_stand(const Location& loc, Vec2 p, int self_uid) const {
+    if (!loc.walkable(p)) return false;
+    if (loc.npc_at(p) || loc.exit_at(p)) return false;
+    int ci = loc.chest_index_at(p);
+    if (ci >= 0 && !chest_opened(loc.id, ci)) return false;
+    for (const Mob& o : mobs_)
+        if (o.uid != self_uid && o.loc == loc.id && o.pos == p) return false;
+    return true;
+}
+
+Vec2 Game::step_toward(const Location& loc, const Mob& m, Vec2 target) const {
+    const int dx = target.x - m.pos.x;
+    const int dy = target.y - m.pos.y;
+    const int sx = (dx > 0) - (dx < 0);
+    const int sy = (dy > 0) - (dy < 0);
+    if (sx == 0 && sy == 0) return Vec2(0, 0);
+
+    Vec2 first(0, 0), second(0, 0);
+    if (std::abs(dx) >= std::abs(dy)) { first = Vec2(sx, 0); second = Vec2(0, sy); }
+    else                              { first = Vec2(0, sy); second = Vec2(sx, 0); }
+
+    // Шаг на игрока разбирает вызывающий: для него это начало боя.
+    Vec2 cand(m.pos.x + first.x, m.pos.y + first.y);
+    if (first.x != 0 || first.y != 0) {
+        if (cand == plr_.pos && m.loc == plr_.loc) return first;
+        if (mob_can_stand(loc, cand, m.uid)) return first;
+    }
+    cand = Vec2(m.pos.x + second.x, m.pos.y + second.y);
+    if (second.x != 0 || second.y != 0) {
+        if (cand == plr_.pos && m.loc == plr_.loc) return second;
+        if (mob_can_stand(loc, cand, m.uid)) return second;
+    }
+    return Vec2(0, 0);
 }
 
 void Game::move_mobs() {
@@ -303,14 +524,47 @@ void Game::move_mobs() {
         const EnemyDef* e = c.enemy(m.enemy_id);
         if (!e) continue;
 
-        int d = dist(m.pos, plr_.pos);
-        Vec2 step{0, 0};
+        // Дом — центр зоны спавна; без зоны моб считает домом текущее место.
+        Vec2 home = m.pos;
+        int  radius = 0;
+        if (m.zone >= 0 && m.zone < static_cast<int>(loc->zones.size())) {
+            home   = loc->zones[static_cast<std::size_t>(m.zone)].pos;
+            radius = loc->zones[static_cast<std::size_t>(m.zone)].radius;
+        }
 
-        if (e->aggressive && d <= e->detect) {
-            // Преследование: шаг по оси с большей разницей.
-            int dx = plr_.pos.x - m.pos.x, dy = plr_.pos.y - m.pos.y;
-            if (std::abs(dx) >= std::abs(dy)) step.x = (dx > 0) - (dx < 0);
-            else                              step.y = (dy > 0) - (dy < 0);
+        // Видит — значит, есть и расстояние, и прямая линия. Через стену
+        // и сквозь деревья моб игрока не замечает.
+        const bool sees = e->aggressive &&
+                          dist(m.pos, plr_.pos) <= e->detect &&
+                          loc->visible(m.pos, plr_.pos);
+
+        if (sees)                             m.state = MobState::Chase;
+        else if (m.state == MobState::Chase)  m.state = MobState::Return;
+
+        // Спокойный моб, оказавшийся вне своей зоны, тоже идёт домой: иначе
+        // он остался бы снаружи навсегда, занимая слот зоны и блокируя
+        // появление нового.
+        if (m.state == MobState::Idle && radius > 0 && dist(m.pos, home) > radius)
+            m.state = MobState::Return;
+
+        if (m.state == MobState::Return && dist(m.pos, home) <= radius)
+            m.state = MobState::Idle;
+
+        Vec2 step(0, 0);
+        if (m.state == MobState::Chase) {
+            step = step_toward(*loc, m, plr_.pos);
+        } else if (m.state == MobState::Return) {
+            step = step_toward(*loc, m, home);
+            if (step.x == 0 && step.y == 0) {
+                // Упёрся в препятствие: делаем случайный шаг, чтобы сойти с
+                // места, но домой идти не перестаём.
+                switch (rng_.range(0, 3)) {
+                    case 0: step = Vec2( 1,  0); break;
+                    case 1: step = Vec2(-1,  0); break;
+                    case 2: step = Vec2( 0,  1); break;
+                    default: step = Vec2(0, -1); break;
+                }
+            }
         } else if (rng_.chance(45)) {
             switch (rng_.range(0, 3)) {
                 case 0: step.x =  1; break;
@@ -318,10 +572,15 @@ void Game::move_mobs() {
                 case 2: step.y =  1; break;
                 default: step.y = -1; break;
             }
+            // Блуждание не уводит за пределы своей зоны: иначе мобы
+            // расползаются по карте, а слот зоны остаётся занятым.
+            Vec2 probe(m.pos.x + step.x, m.pos.y + step.y);
+            if (radius > 0 && dist(probe, home) > radius) step = Vec2(0, 0);
         }
+
         if (step.x == 0 && step.y == 0) continue;
 
-        Vec2 np{ m.pos.x + step.x, m.pos.y + step.y };
+        Vec2 np(m.pos.x + step.x, m.pos.y + step.y);
 
         if (np == plr_.pos) {                          // дошёл до игрока — бой
             if (e->aggressive) {
@@ -331,11 +590,206 @@ void Game::move_mobs() {
             }
             continue;
         }
-        if (!loc->walkable(np)) continue;
-        if (loc->npc_at(np) || loc->exit_at(np)) continue;
-        if (mob_at(np, m.loc)) continue;
+        if (!mob_can_stand(*loc, np, m.uid)) continue;
         m.pos = np;
+
+        // Моб подбирает лежащее на земле — потом это достанется победителю.
+        int idx = loc->item_index_at(np);
+        if (idx >= 0) {
+            const std::string key = loc->id + ":" + to_str(idx);
+            if (!taken_.count(key)) {
+                taken_.insert(key);
+                const MapItem& mi = loc->items[static_cast<std::size_t>(idx)];
+                bool merged = false;
+                for (ItemStack& st : m.inv)
+                    if (st.id == mi.item_id) { st.count += mi.count; merged = true; break; }
+                if (!merged) m.inv.push_back(ItemStack(mi.item_id, mi.count));
+            }
+        }
     }
+}
+
+// ------------------------------------------------------ книги и записки
+
+Book* Game::book(const std::string& id) {
+    for (Book& b : plr_.books)
+        if (b.id == id) return &b;
+    return nullptr;
+}
+
+const Book* Game::book(const std::string& id) const {
+    for (const Book& b : plr_.books)
+        if (b.id == id) return &b;
+    return nullptr;
+}
+
+bool Game::start_book(const std::string& title) {
+    if (static_cast<int>(plr_.books.size()) >= BOOK_MAX_COUNT) {
+        msg("Библиотека переполнена: больше " + to_str(BOOK_MAX_COUNT) + " не унести.");
+        return false;
+    }
+    if (count_item("book_blank") <= 0) { msg("Нужна чистая книга."); return false; }
+    remove_item("book_blank", 1);
+
+    Book b;
+    b.id    = "b" + to_str(plr_.next_book++);
+    b.title = trunc(title.empty() ? "Без названия" : title, BOOK_TITLE_MAX);
+    b.lines.push_back("");
+    plr_.books.push_back(b);
+    msg("Начата книга «" + b.title + "». Библиотека — клавиша B.");
+    return true;
+}
+
+bool Game::delete_book(const std::string& id) {
+    for (std::size_t i = 0; i < plr_.books.size(); ++i) {
+        if (plr_.books[i].id != id) continue;
+        const std::string title = plr_.books[i].title;
+        plr_.books.erase(plr_.books.begin() + static_cast<long>(i));
+        msg("Выброшено: «" + title + "».");
+        return true;
+    }
+    return false;
+}
+
+bool Game::book_set_title(const std::string& id, const std::string& title) {
+    Book* b = book(id);
+    if (!b || b->readonly) return false;
+    b->title = trunc(title.empty() ? "Без названия" : title, BOOK_TITLE_MAX);
+    return true;
+}
+
+bool Game::book_set_line(const std::string& id, int index, const std::string& text) {
+    Book* b = book(id);
+    if (!b || b->readonly) return false;
+    if (index < 0 || index >= static_cast<int>(b->lines.size())) return false;
+    b->lines[static_cast<std::size_t>(index)] = trunc(text, BOOK_MAX_CHARS);
+    return true;
+}
+
+bool Game::book_insert_line(const std::string& id, int index, const std::string& text) {
+    Book* b = book(id);
+    if (!b || b->readonly) return false;
+    if (static_cast<int>(b->lines.size()) >= BOOK_MAX_LINES) {
+        msg("В книге больше " + to_str(BOOK_MAX_LINES) + " строк не помещается.");
+        return false;
+    }
+    if (index < 0) index = 0;
+    if (index > static_cast<int>(b->lines.size())) index = static_cast<int>(b->lines.size());
+    b->lines.insert(b->lines.begin() + index, trunc(text, BOOK_MAX_CHARS));
+    return true;
+}
+
+bool Game::book_remove_line(const std::string& id, int index) {
+    Book* b = book(id);
+    if (!b || b->readonly) return false;
+    if (index < 0 || index >= static_cast<int>(b->lines.size())) return false;
+    if (b->lines.size() <= 1) { b->lines[0].clear(); return true; }  // последнюю чистим
+    b->lines.erase(b->lines.begin() + index);
+    return true;
+}
+
+bool Game::note_taken(const std::string& loc_id, int index) const {
+    return notes_.count(loc_id + ":" + to_str(index)) != 0;
+}
+
+bool Game::take_note(int index) {
+    const Location* loc = here();
+    if (!loc || index < 0 || index >= static_cast<int>(loc->notes.size())) return false;
+    if (note_taken(loc->id, index)) return false;
+
+    const MapNote& mn = loc->notes[static_cast<std::size_t>(index)];
+    const NoteDef* nd = Content::get().note(mn.note_id);
+    if (!nd) { msg("Листок рассыпался в руках."); notes_.insert(loc->id + ":" + to_str(index)); return false; }
+
+    notes_.insert(loc->id + ":" + to_str(index));
+
+    Book b;
+    b.id       = "n_" + nd->id;
+    b.title    = nd->title;
+    b.lines    = nd->lines;
+    b.readonly = true;
+    if (!book(b.id)) plr_.books.push_back(b);
+
+    // Счётчик позволяет требовать находку в диалоге.
+    plr_.counters["note_" + nd->id] = 1;
+    msg("Найдена записка: «" + nd->title + "». Читать — клавиша B.");
+    return true;
+}
+
+bool Game::chest_opened(const std::string& loc_id, int index) const {
+    return chests_.count(loc_id + ":" + to_str(index)) != 0;
+}
+
+bool Game::open_chest(int index) {
+    const Location* loc = here();
+    if (!loc || index < 0 || index >= static_cast<int>(loc->chests.size())) return false;
+    const MapChest& ch = loc->chests[static_cast<std::size_t>(index)];
+
+    if (chest_opened(loc->id, index)) { msg("Сундук уже пуст."); return false; }
+
+    if (!ch.key.empty() && count_item(ch.key) <= 0) {
+        const ItemDef* kd = Content::get().item(ch.key);
+        msg("Заперто. Нужен ключ: " + std::string(kd ? kd->name : ch.key) + ".");
+        return false;
+    }
+
+    chests_.insert(loc->id + ":" + to_str(index));
+    msg("Сундук открыт.");
+    if (ch.gold > 0) {
+        plr_.gold += ch.gold;
+        msg("В сундуке " + to_str(ch.gold) + " " +
+            plural(ch.gold, "монета", "монеты", "монет") + ".");
+    }
+    for (const ItemStack& st : ch.items) {
+        add_item(st.id, st.count);
+        const ItemDef* d = Content::get().item(st.id);
+        msg("Взято: " + std::string(d ? d->name : st.id) +
+            (st.count > 1 ? " x" + to_str(st.count) : "") + ".");
+    }
+    return true;
+}
+
+const Portal* Game::portal_at(Vec2 p, const std::string& loc_id) const {
+    for (const Portal& pt : plr_.portals)
+        if (pt.loc == loc_id && pt.pos == p) return &pt;
+    return nullptr;
+}
+
+bool Game::place_portal() {
+    if (!plr_.portal_master) {
+        msg("Ты не умеешь ставить порталы.");
+        return false;
+    }
+    const Location* loc = here();
+    if (!loc) return false;
+    if (portal_at(plr_.pos, plr_.loc)) { msg("Здесь уже стоит портал."); return false; }
+    if (loc->exit_at(plr_.pos) || loc->bed_at(plr_.pos)) {
+        msg("Слишком близко к переходу — портал не встанет.");
+        return false;
+    }
+    if (static_cast<int>(plr_.portals.size()) >= PORTAL_LIMIT) {
+        msg("Больше " + to_str(PORTAL_LIMIT) + " порталов не удержать. Сними лишний.");
+        return false;
+    }
+    if (count_item("portal_stone") <= 0) { msg("Нужен портальный камень."); return false; }
+
+    remove_item("portal_stone", 1);
+    plr_.portals.push_back(Portal(plr_.loc, plr_.pos));
+    msg("Портал поставлен (" + to_str(static_cast<int>(plr_.portals.size())) +
+        " из " + to_str(PORTAL_LIMIT) + ").");
+    return true;
+}
+
+bool Game::remove_portal_here() {
+    for (std::size_t i = 0; i < plr_.portals.size(); ++i) {
+        if (!(plr_.portals[i].loc == plr_.loc && plr_.portals[i].pos == plr_.pos)) continue;
+        plr_.portals.erase(plr_.portals.begin() + static_cast<long>(i));
+        add_item("portal_stone", 1);
+        msg("Портал снят, камень вернулся в сумку.");
+        return true;
+    }
+    msg("Здесь нет портала.");
+    return false;
 }
 
 bool Game::item_taken(const std::string& loc_id, int index) const {
@@ -344,11 +798,35 @@ bool Game::item_taken(const std::string& loc_id, int index) const {
 
 void Game::world_turn() {
     ++turn_;
+
+    // Эффекты тикают вне боя тоже: яд не ждёт, пока ты снова подерёшься.
+    int delta = tick_effects(plr_.effects);
+    if (delta != 0) {
+        Stats t = total();
+        int before = plr_.hp;
+        plr_.hp += delta;
+        if (plr_.hp > t.max_hp) plr_.hp = t.max_hp;
+        if (plr_.hp < 0) plr_.hp = 0;
+        if (plr_.hp != before && delta < 0)
+            msg("Эффекты отнимают " + to_str(before - plr_.hp) + " здоровья.");
+    }
+    for (Mob& m : mobs_) {
+        if (m.loc != plr_.loc) continue;
+        int d = tick_effects(m.effects);
+        if (d != 0) m.hp += d;
+    }
+    // Мобов, добитых эффектом вне боя, убираем без наград.
+    for (std::size_t i = 0; i < mobs_.size();) {
+        if (mobs_[i].hp <= 0) mobs_.erase(mobs_.begin() + static_cast<long>(i));
+        else ++i;
+    }
+
     respawn_tick();
     move_mobs();
 }
 
 void Game::rest() {
+    cure_effects(plr_.effects, "*");   // отдых снимает отраву
     Stats t = total();
     plr_.hp = t.max_hp;
     plr_.ap = t.max_ap;
@@ -371,6 +849,9 @@ Bump Game::try_move(int dx, int dy) {
     if (loc->npc_at(np))  return Bump::Npc;
     if (loc->sign_at(np)) return Bump::Sign;
 
+    int ci = loc->chest_index_at(np);
+    if (ci >= 0 && !chest_opened(loc->id, ci)) { open_chest(ci); return Bump::Chest; }
+
     if (!loc->walkable(np)) return Bump::Blocked;
 
     if (const MapExit* ex = loc->exit_at(np)) {
@@ -384,6 +865,28 @@ Bump Game::try_move(int dx, int dy) {
     }
 
     plr_.pos = np;
+
+    // Портал переносит к следующему по списку: с двумя это связка туда-обратно.
+    if (portal_at(np, plr_.loc)) {
+        if (plr_.portals.size() < 2) {
+            msg("Портал один — связывать не с чем. Поставь второй.");
+        } else {
+            std::size_t cur = 0;
+            for (std::size_t i = 0; i < plr_.portals.size(); ++i)
+                if (plr_.portals[i].loc == plr_.loc && plr_.portals[i].pos == np) cur = i;
+            const Portal& dst = plr_.portals[(cur + 1) % plr_.portals.size()];
+            const Location* dl = world_.location(dst.loc);
+            if (!dl) { msg("Портал ведёт в никуда: " + world_.last_error()); return Bump::Moved; }
+            plr_.loc = dst.loc;
+            plr_.pos = dst.pos;
+            spawn_initial(*dl);
+            msg("Портал переносит тебя в локацию «" + dl->name + "».");
+            return Bump::Portal;
+        }
+    }
+
+    int ni = loc->note_index_at(np);
+    if (ni >= 0 && !note_taken(loc->id, ni)) { take_note(ni); return Bump::Note; }
 
     int idx = loc->item_index_at(np);
     if (idx >= 0) {
@@ -412,17 +915,28 @@ bool Game::option_available(const DlgOption& o) const {
         if (o.req_stage_min >= 0 && st < o.req_stage_min) return false;
         if (o.req_stage_max >= 0 && st > o.req_stage_max) return false;
     }
+    if (!o.req_quest2.empty()) {
+        auto it = plr_.quests.find(o.req_quest2);
+        int st = (it == plr_.quests.end()) ? QUEST_NONE : it->second;
+        if (o.req_stage2_min >= 0 && st < o.req_stage2_min) return false;
+        if (o.req_stage2_max >= 0 && st > o.req_stage2_max) return false;
+    }
     if (!o.req_counter.empty()) {
         auto it = plr_.counters.find(o.req_counter);
         int c = (it == plr_.counters.end()) ? 0 : it->second;
         if (o.req_counter_min >= 0 && c < o.req_counter_min) return false;
         if (o.req_counter_max >= 0 && c > o.req_counter_max) return false;
     }
+    if (!o.req_note.empty()) {
+        auto it = plr_.counters.find("note_" + o.req_note);
+        if (it == plr_.counters.end() || it->second <= 0) return false;
+    }
     if (!o.req_item.empty() && count_item(o.req_item) < o.req_item_count) return false;
     return true;
 }
 
-void Game::apply_option(const DlgOption& o, const std::string& npc_shop, std::string* shop_out) {
+void Game::apply_option(const DlgOption& o, const std::string& npc_shop,
+                        std::string* shop_out, bool* enchant_out) {
     const Content& c = Content::get();
 
     if (!o.set_quest.empty()) {
@@ -452,8 +966,13 @@ void Game::apply_option(const DlgOption& o, const std::string& npc_shop, std::st
         msg("Получено " + to_str(o.give_gold) + " золотых.");
     }
     if (o.rest) rest();
+    if (o.portal_gift && !plr_.portal_master) {
+        plr_.portal_master = true;
+        msg("Открыт навык «Мастер нулевой точки»: теперь ты умеешь ставить порталы (P).");
+    }
     if (o.give_exp > 0) grant_exp(o.give_exp);
-    if (o.open_shop && shop_out) *shop_out = npc_shop;
+    if (o.open_shop && shop_out) *shop_out = o.shop_id.empty() ? npc_shop : o.shop_id;
+    if (o.open_enchant && enchant_out) *enchant_out = true;
 }
 
 // ------------------------------------------------------------- торговля
@@ -507,6 +1026,8 @@ void Game::start_combat(int mob_uid) {
     cb_.enemy_hp = m->hp;
     plr_.ap = total().max_ap;
     plr_.momentum = 0;
+    if (!plr_.effects.empty())
+        combat_log("На тебе: " + effects_line(plr_.effects) + ".");
     combat_log("— " + e->name + " преграждает путь. —");
 }
 
@@ -546,6 +1067,7 @@ void Game::combat_attack(bool power) {
 
     Stats me  = total();
     Stats foe = e->stats;
+    foe += effect_stats(m->effects);       // враг тоже под своими эффектами
     int pct = stance_damage_pct(plr_.stance);
     std::string line;
     int dmg;
@@ -567,6 +1089,19 @@ void Game::combat_attack(bool power) {
         if (!power && plr_.momentum < MOMENTUM_MAX) {
             ++plr_.momentum;
             combat_log("Кураж: " + to_str(plr_.momentum) + "/" + to_str(MOMENTUM_MAX) + ".");
+        }
+        // Зачарование оружия срабатывает только на попадании.
+        const Content& c = Content::get();
+        const std::string& wid = plr_.equipped[static_cast<std::size_t>(Slot::Weapon)];
+        auto ench = plr_.enchants.find(wid);
+        if (ench != plr_.enchants.end()) {
+            const EnchantDef* ed = c.enchant(ench->second);
+            if (ed && !ed->on_hit_effect.empty() && rng_.chance(ed->on_hit_chance)) {
+                apply_effect(m->effects, ed->on_hit_effect, 4, ed->on_hit_power);
+                const EffectDef* fx = c.effect(ed->on_hit_effect);
+                if (fx) combat_log("«" + ed->name + "»: на противника наложено «" +
+                                   fx->name + "».");
+            }
         }
     }
 
@@ -629,9 +1164,12 @@ void Game::enemy_turn() {
     const EnemyDef* e = Content::get().enemy(m->enemy_id);
     if (!e) { finish_combat(); return; }
 
+    const Content& c = Content::get();
     Stats foe = e->stats;
+    foe += effect_stats(m->effects);
     Stats me  = total();
     int eap = foe.max_ap;
+    if (eap < 1) eap = 1;
     int atk_cost = foe.ap_atk < 1 ? 1 : foe.ap_atk;
 
     while (eap >= atk_cost && plr_.hp > 0) {
@@ -642,9 +1180,32 @@ void Game::enemy_turn() {
             plr_.hp -= dmg;
             if (plr_.momentum > 0) --plr_.momentum;   // пропущенный удар сбивает кураж
             combat_log(e->name + ": " + line + ".");
+            if (!e->on_hit_effect.empty() && rng_.chance(e->on_hit_chance)) {
+                apply_effect(plr_.effects, e->on_hit_effect, 5, e->on_hit_power);
+                const EffectDef* fx = c.effect(e->on_hit_effect);
+                if (fx) combat_log("На тебя наложено: «" + fx->name + "».");
+            }
         } else {
             combat_log(e->name + ": промах.");
         }
+    }
+
+    // Конец раунда: эффекты тикают у обеих сторон.
+    int mine = tick_effects(plr_.effects);
+    if (mine != 0) {
+        plr_.hp += mine;
+        Stats t2 = total();
+        if (plr_.hp > t2.max_hp) plr_.hp = t2.max_hp;
+        combat_log(mine < 0 ? "Эффекты отнимают " + to_str(-mine) + " здоровья."
+                            : "Эффекты возвращают " + to_str(mine) + " здоровья.");
+    }
+    int theirs = tick_effects(m->effects);
+    if (theirs != 0) {
+        cb_.enemy_hp += theirs;
+        combat_log(theirs < 0 ? e->name + " теряет " + to_str(-theirs) + " от эффектов."
+                              : e->name + " восстанавливает " + to_str(theirs) + ".");
+        if (cb_.enemy_hp <= 0) { kill_mob(*m); return; }
+        m->hp = cb_.enemy_hp;
     }
 
     if (plr_.hp <= 0) {
@@ -668,17 +1229,16 @@ void Game::kill_mob(Mob& m) {
     combat_log(e->name + beaten + "!");
     msg(e->name + beaten + ".");
 
-    int gold = rng_.range(e->gold_min, e->gold_max);
-    if (gold > 0) {
-        plr_.gold += gold;
-        msg("Найдено " + to_str(gold) + " " +
-            plural(gold, "монета", "монеты", "монет") + ".");
+    if (m.gold > 0) {
+        plr_.gold += m.gold;
+        msg("Найдено " + to_str(m.gold) + " " +
+            plural(m.gold, "монета", "монеты", "монет") + ".");
     }
-    for (const Drop& d : e->drops) {
-        if (!rng_.chance(d.percent)) continue;
-        add_item(d.item, 1);
-        const ItemDef* def = Content::get().item(d.item);
-        msg("Добыча: " + std::string(def ? def->name : d.item) + ".");
+    for (const ItemStack& st : m.inv) {
+        add_item(st.id, st.count);
+        const ItemDef* def = Content::get().item(st.id);
+        msg("Добыча: " + std::string(def ? def->name : st.id) +
+            (st.count > 1 ? " x" + to_str(st.count) : "") + ".");
     }
     if (!e->kill_counter.empty()) ++plr_.counters[e->kill_counter];
 

@@ -10,7 +10,9 @@
 #  include <conio.h>
 #  include <windows.h>
 #else
+#  include <cerrno>
 #  include <sys/ioctl.h>
+#  include <sys/select.h>
 #  include <termios.h>
 #  include <unistd.h>
 #endif
@@ -55,6 +57,40 @@ int read_key() {
 static termios g_saved;
 static bool g_raw = false;
 
+// Один байт возврата: заменяет ungetc, потому что ввод читается напрямую
+// через read(), а не через stdio. Смешивать select() со stdio нельзя —
+// буфер stdio может уже держать данные, о которых select() не знает.
+static int g_pushback = -1;
+
+// Сколько ждать продолжения escape-последовательности. Байты стрелки
+// приходят вплотную, так что этого хватает с запасом.
+static const int ESC_WAIT_MS = 60;
+
+static int read_byte_blocking() {
+    if (g_pushback >= 0) { int c = g_pushback; g_pushback = -1; return c; }
+    unsigned char c = 0;
+    ssize_t n;
+    do { n = ::read(STDIN_FILENO, &c, 1); } while (n < 0 && errno == EINTR);
+    if (n <= 0) return -1;
+    return static_cast<int>(c);
+}
+
+// Возвращает байт или -1, если за timeout_ms ничего не пришло.
+static int read_byte_timed(int timeout_ms) {
+    if (g_pushback >= 0) { int c = g_pushback; g_pushback = -1; return c; }
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(STDIN_FILENO, &fds);
+    timeval tv;
+    tv.tv_sec  = timeout_ms / 1000;
+    tv.tv_usec = (timeout_ms % 1000) * 1000;
+    int r;
+    do { r = ::select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv); }
+    while (r < 0 && errno == EINTR);
+    if (r <= 0) return -1;
+    return read_byte_blocking();
+}
+
 RawMode::RawMode() {
     // Если ввод перенаправлен (тесты, пайп), raw-режим не нужен и невозможен.
     if (!isatty(STDIN_FILENO)) return;
@@ -75,15 +111,19 @@ RawMode::~RawMode() {
 
 int read_key() {
     if (g_eof) return KEY_EOF;
-    int ch = getchar();
-    if (ch == EOF) { g_eof = true; return KEY_EOF; }
+    int ch = read_byte_blocking();
+    if (ch < 0) { g_eof = true; return KEY_EOF; }
     if (ch != 27) return ch;
 
-    // Возможная escape-последовательность стрелки: ESC [ A..D
-    if (!g_raw) return KEY_ESC;
-    int a = getchar();
-    if (a != '[') { ungetc(a, stdin); return KEY_ESC; }
-    switch (getchar()) {
+    // Одиночный Escape и начало escape-последовательности различаются только
+    // тем, придёт ли следом ещё байт. Раньше здесь стояло безусловное чтение,
+    // и на одиночном Escape ввод замирал: экран не перерисовывался, пока
+    // пользователь не нажмёт что-нибудь ещё, — а потом всё срабатывало разом.
+    int a = read_byte_timed(ESC_WAIT_MS);
+    if (a < 0) return KEY_ESC;                       // продолжения нет — это Escape
+    if (a != '[' && a != 'O') { g_pushback = a; return KEY_ESC; }
+
+    switch (read_byte_timed(ESC_WAIT_MS)) {
         case 'A': return KEY_UP;
         case 'B': return KEY_DOWN;
         case 'C': return KEY_RIGHT;

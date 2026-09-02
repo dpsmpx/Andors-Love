@@ -4,6 +4,7 @@
 #include "../src/world.h"
 
 #include "../src/embedded_maps.h"
+#include "../src/ui.h"
 #include "../src/platform.h"
 
 #include <cstdio>
@@ -74,6 +75,40 @@ void test_wrap() {
     check(ind.size() >= 2 && ind[1].substr(0, 4) == "    ", "отступ переносится на следующую строку");
 }
 
+void test_glyphs() {
+    section("символы карты");
+
+    // Символы объектов не должны совпадать друг с другом и с тайлами: иначе
+    // на карте не отличить врага от дерева, а предмет от земли.
+    const char objs[] = { glyph::PLAYER, glyph::NPC, glyph::MOB,
+                          glyph::EXIT, glyph::SIGN, glyph::ITEM, glyph::BED };
+    const int  n = static_cast<int>(sizeof(objs));
+
+    bool unique = true;
+    for (int i = 0; i < n; ++i)
+        for (int j = i + 1; j < n; ++j)
+            if (objs[i] == objs[j]) unique = false;
+    check(unique, "символы объектов попарно различны");
+
+    bool clear_of_tiles = true;
+    for (int t = 0; t < static_cast<int>(Tile::Count); ++t) {
+        char tg = tile_glyph(static_cast<Tile>(t));
+        for (int i = 0; i < n; ++i)
+            if (objs[i] == tg) clear_of_tiles = false;
+    }
+    check(clear_of_tiles, "символы объектов не совпадают с символами тайлов");
+
+    check(glyph::MOB != glyph::NPC, "враг и житель различимы между собой");
+
+    // Все тайлы тоже должны быть различимы.
+    bool tiles_unique = true;
+    for (int a = 0; a < static_cast<int>(Tile::Count); ++a)
+        for (int b = a + 1; b < static_cast<int>(Tile::Count); ++b)
+            if (tile_glyph(static_cast<Tile>(a)) == tile_glyph(static_cast<Tile>(b)))
+                tiles_unique = false;
+    check(tiles_unique, "символы тайлов попарно различны");
+}
+
 void test_maps() {
     section("карты");
     World w("data/maps");
@@ -99,13 +134,57 @@ void test_maps() {
         if (v->walkable(Vec2{0, y}) || v->walkable(Vec2{v->w - 1, y})) border_solid = false;
     check(border_solid, "рамка деревни непроходима со всех сторон");
 
-    // Переходы должны вести друг в друга и попадать на проходимую клетку.
-    check(v->exits.size() == 1 && f->exits.size() == 1, "по одному переходу в каждой локации");
-    if (!v->exits.empty() && !f->exits.empty()) {
-        eqs(v->exits[0].target, "forest",  "деревня ведёт в лес");
-        eqs(f->exits[0].target, "village", "лес ведёт в деревню");
-        check(f->walkable(v->exits[0].dest), "точка прибытия в лесу проходима");
-        check(v->walkable(f->exits[0].dest), "точка прибытия в деревне проходима");
+    // Граф мира: каждый переход ведёт в существующую локацию на проходимую
+    // клетку, и все локации достижимы из деревни. Ошибка здесь означает
+    // локацию, куда нельзя попасть или откуда нельзя выйти.
+    const char* all[] = {"village", "forest", "cave", "ruins", "sanctum"};
+    const int   nloc  = static_cast<int>(sizeof(all) / sizeof(all[0]));
+
+    for (int i = 0; i < nloc; ++i) {
+        const Location* loc = w.location(all[i]);
+        check(loc != nullptr, std::string("локация ") + all[i] + " загружается: " + w.last_error());
+        if (!loc) continue;
+        check(!loc->exits.empty(), std::string(all[i]) + ": есть хотя бы один переход");
+        for (const MapExit& e : loc->exits) {
+            const Location* dst = w.location(e.target);
+            check(dst != nullptr, std::string(all[i]) + " -> " + e.target + ": цель существует");
+            if (!dst) continue;
+            check(dst->walkable(e.dest),
+                  std::string(all[i]) + " -> " + e.target + ": точка прибытия проходима");
+            check(loc->walkable(e.pos),
+                  std::string(all[i]) + ": сам переход стоит на проходимой клетке");
+        }
+    }
+
+    // Обход графа от деревни: недостижимая локация — это потерянный контент.
+    std::vector<std::string> seen_loc;
+    std::vector<std::string> queue_loc;
+    queue_loc.push_back("village");
+    while (!queue_loc.empty()) {
+        std::string cur = queue_loc.back();
+        queue_loc.pop_back();
+        bool known = false;
+        for (const std::string& x : seen_loc) if (x == cur) known = true;
+        if (known) continue;
+        seen_loc.push_back(cur);
+        const Location* loc = w.location(cur);
+        if (!loc) continue;
+        for (const MapExit& e : loc->exits) queue_loc.push_back(e.target);
+    }
+    eq(static_cast<int>(seen_loc.size()), nloc, "все локации достижимы из деревни");
+
+    // И обратно: из каждой локации есть путь домой (граф двусторонний).
+    for (int i = 0; i < nloc; ++i) {
+        const Location* loc = w.location(all[i]);
+        if (!loc) continue;
+        bool has_way_back = false;
+        for (const MapExit& e : loc->exits) {
+            const Location* dst = w.location(e.target);
+            if (!dst) continue;
+            for (const MapExit& back : dst->exits)
+                if (back.target == all[i]) has_way_back = true;
+        }
+        check(has_way_back, std::string(all[i]) + ": из локации есть обратный путь");
     }
 
     // Ни один объект не должен стоять в стене.
@@ -125,7 +204,7 @@ void test_maps() {
 void test_embedded_maps() {
     section("вшитые карты");
 
-    for (const char* id : {"village", "forest"}) {
+    for (const char* id : {"village", "forest", "cave", "ruins", "sanctum"}) {
         const char* emb = embedded_map(id);
         check(emb != nullptr, std::string("карта ") + id + " вшита в бинарник");
         if (!emb) continue;
@@ -172,19 +251,49 @@ void test_embedded_maps() {
 
 void test_new_game_and_stats() {
     section("новая игра и характеристики");
+    const Content& c = Content::get();
     Game g;
-    g.new_game("Тестер");
+    g.new_game("Тестер", "human", "swordsman");
     eqs(g.player().name, "Тестер", "имя игрока берётся из ввода");   // была ошибка new_name = name
     eq(g.player().level, 1, "стартовый уровень");
+    eqs(g.player().race, "human", "раса записана");
+    eqs(g.player().spec, "swordsman", "специализация записана");
     check(g.here() != nullptr, "стартовая локация загружена");
 
+    // Ожидания считаем из базы контента, а не держим магическими числами:
+    // при правке баланса тест не должен падать на ровном месте.
+    const RaceDef*  race = c.race("human");
+    const SpecDef*  spec = c.spec("swordsman");
+    const ItemDef*  wpn  = c.item(spec ? spec->start_item : "");
+    check(race && spec && wpn, "раса, специализация и стартовое оружие описаны");
+    if (!race || !spec || !wpn) return;
+
     Stats t = g.total();
-    eq(t.max_hp, 30, "стартовое здоровье");
-    eq(g.player().hp, 30, "здоровье заполнено");
-    // база 1-3 + кинжал 2-4
-    eq(t.dmg_min, 3, "урон с кинжалом, минимум");
-    eq(t.dmg_max, 7, "урон с кинжалом, максимум");
-    eq(g.attack_cost(), 3, "кинжал удешевляет атаку на 1 AP");
+    eq(t.max_hp, 30 + race->bonus.max_hp + spec->bonus.max_hp,
+       "здоровье = база + раса + специализация");
+    eq(g.player().hp, t.max_hp, "здоровье заполнено доверху");
+    eq(t.dmg_min, 1 + spec->bonus.dmg_min + wpn->bonus.dmg_min, "минимальный урон сходится");
+    eq(t.dmg_max, 3 + spec->bonus.dmg_max + wpn->bonus.dmg_max, "максимальный урон сходится");
+    eqs(g.player().equipped[static_cast<std::size_t>(Slot::Weapon)], spec->start_item,
+        "надето стартовое оружие специализации");
+
+    // Раса и специализация действительно влияют на итог.
+    Game g2;
+    g2.new_game("Другой", "elf", "archer");
+    const RaceDef* r2 = c.race("elf");
+    const SpecDef* s2 = c.spec("archer");
+    check(r2 && s2, "эльф и лучник описаны");
+    if (r2 && s2) {
+        eq(g2.total().max_hp, 30 + r2->bonus.max_hp + s2->bonus.max_hp,
+           "другая раса и путь дают другое здоровье");
+        check(g2.total().max_hp != t.max_hp, "итог заметно отличается от мечника-человека");
+        check(g2.total().attack > t.attack, "лучник-эльф метче мечника-человека");
+    }
+
+    // Ниндзя удешевляет атаку — проверяем, что специализация правит и стоимость.
+    Game g3;
+    g3.new_game("Третий", "human", "ninja");
+    check(g3.attack_cost() < g.attack_cost(), "ниндзя бьёт дешевле по AP");
 
     // Стойки должны реально менять цифры.
     int block_balanced = g.total().block;
@@ -201,7 +310,10 @@ void test_new_game_and_stats() {
 void test_equipment() {
     section("снаряжение");
     Game g;
-    g.new_game("Тестер");
+    // Мечник не меняет стоимость атаки, поэтому вклад оружия виден чисто.
+    g.new_game("Тестер", "human", "swordsman");
+    const std::string start_weapon = g.player().equipped[static_cast<std::size_t>(Slot::Weapon)];
+    const int cost0 = g.attack_cost();
     int armor0 = g.total().armor;
 
     g.add_item("leather_armor", 1);
@@ -212,8 +324,8 @@ void test_equipment() {
     // Смена оружия должна возвращать прежнее в сумку, а не терять его.
     g.add_item("axe", 1);
     check(g.equip("axe"), "топор надевается");
-    eq(g.count_item("dagger"), 1, "прежнее оружие вернулось в сумку");
-    eq(g.attack_cost(), 5, "топор дороже по AP");
+    eq(g.count_item(start_weapon), 1, "прежнее оружие вернулось в сумку");
+    eq(g.attack_cost(), cost0 + 1, "топор дороже по AP на единицу");
 
     check(g.unequip(Slot::Armor), "доспех снимается");
     eq(g.total().armor, armor0, "броня вернулась к исходной");
@@ -537,7 +649,7 @@ void test_content_integrity() {
             check(c.item(gid) != nullptr, "товар " + gid + " есть в базе предметов");
     }
 
-    const char* npcs[] = {"elder", "herbalist", "smith", "trader", "hermit"};
+    const char* npcs[] = {"elder", "herbalist", "smith", "trader", "hermit", "enchanter"};
     for (const char* nid : npcs) {
         const NpcDef* n = c.npc(nid);
         check(n != nullptr, std::string("NPC ") + nid + " существует");
@@ -549,10 +661,17 @@ void test_content_integrity() {
 
     // Все переходы диалогов ведут в существующие узлы, а награды — в реальные предметы.
     const char* nodes[] = {"elder_root","elder_offer","elder_taken","elder_progress",
-                           "elder_reward","elder_after","herbalist_root","herb_offer",
-                           "herb_taken","herb_progress","herb_reward","smith_root",
-                           "smith_offer","smith_taken","smith_progress","smith_reward",
-                           "trader_root","trader_talk","hermit_root","hermit_rest","hermit_hint"};
+                           "elder_reward","elder_after","elder_queen_offer",
+                           "elder_queen_wait","elder_queen_reward",
+                           "herbalist_root","herb_offer","herb_taken","herb_progress",
+                           "herb_reward","moss_offer","moss_wait","moss_reward",
+                           "smith_root","smith_offer","smith_taken","smith_progress",
+                           "smith_reward","outpost_offer","outpost_wait","outpost_reward",
+                           "trader_root","trader_talk",
+                           "hermit_root","hermit_rest","hermit_hint",
+                           "zp_offer","zp_wait","zp_reward","zp_after",
+                           "ench_root","ench_about","ench_offer","ench_wait","ench_reward",
+                           "books_offer","books_wait","books_reward"};
     for (const char* nid : nodes) {
         const DlgNode* n = c.node(nid);
         check(n != nullptr, std::string("узел ") + nid + " существует");
@@ -567,6 +686,12 @@ void test_content_integrity() {
             if (!o.take_item.empty())
                 check(c.item(o.take_item) != nullptr,
                       std::string(nid) + ": требуемый '" + o.take_item + "' есть в базе");
+            if (!o.req_note.empty())
+                check(c.note(o.req_note) != nullptr,
+                      std::string(nid) + ": записка '" + o.req_note + "' есть в базе");
+            if (!o.shop_id.empty())
+                check(c.shop(o.shop_id) != nullptr,
+                      std::string(nid) + ": магазин '" + o.shop_id + "' существует");
             if (!o.req_quest.empty())
                 check(c.quest(o.req_quest) != nullptr,
                       std::string(nid) + ": квест '" + o.req_quest + "' существует");
@@ -577,7 +702,8 @@ void test_content_integrity() {
     }
 
     // Добыча врагов должна ссылаться на существующие предметы.
-    const char* mobs[] = {"rat", "wolf", "bandit", "wolf_alpha"};
+    const char* mobs[] = {"rat", "wolf", "bandit", "wolf_alpha", "spider", "bat",
+                          "spider_queen", "brigand", "bandit_chief", "wraith", "keeper"};
     for (const char* mid : mobs) {
         const EnemyDef* e = c.enemy(mid);
         check(e != nullptr, std::string("враг ") + mid + " существует");
@@ -590,7 +716,7 @@ void test_content_integrity() {
 
     // Зоны спавна на картах должны ссылаться на существующих врагов.
     World w("data/maps");
-    for (const char* lid : {"village", "forest"}) {
+    for (const char* lid : {"village", "forest", "cave", "ruins", "sanctum"}) {
         const Location* loc = w.location(lid);
         if (!loc) continue;
         for (const SpawnZone& z : loc->zones)
@@ -602,6 +728,17 @@ void test_content_integrity() {
         for (const MapNpc& n : loc->npcs)
             check(c.npc(n.npc_id) != nullptr,
                   std::string(lid) + ": NPC на карте '" + n.npc_id + "' есть в базе");
+        for (const MapNote& nt : loc->notes)
+            check(c.note(nt.note_id) != nullptr,
+                  std::string(lid) + ": записка на карте '" + nt.note_id + "' есть в базе");
+        for (const MapChest& ch : loc->chests) {
+            if (!ch.key.empty())
+                check(c.item(ch.key) != nullptr,
+                      std::string(lid) + ": ключ сундука '" + ch.key + "' есть в базе");
+            for (const ItemStack& st : ch.items)
+                check(c.item(st.id) != nullptr,
+                      std::string(lid) + ": содержимое сундука '" + st.id + "' есть в базе");
+        }
     }
 
     // Амулет должен быть добываем — иначе квест Лады непроходим.
@@ -613,94 +750,982 @@ void test_content_integrity() {
     check(amulet_droppable, "амулет гарантированно падает с вожака — квест проходим");
 }
 
-// Сквозная проверка: можно ли вообще пройти игру. Бьём реальной боевой
-// механикой, а не подкручиваем счётчики, — иначе тест не доказывает
-// проходимость.
-void test_playthrough() {
-    section("сквозное прохождение: квесты через реальный бой");
-    Game g;
-    g.new_game("Герой");
+void test_mob_ai() {
+    section("ИИ мобов: видимость и возврат в зону");
+    World w("data/maps");
+    const Location* v = w.location("village");
+    check(v != nullptr, "деревня загружается");
+    if (!v) return;
 
-    // Берём все три квеста у жителей.
+    // --- прямая видимость ---
+    // В деревне дома стоят на строках 11..13, столбцы 3..9; пруд — 17..21 на
+    // строках 10..12; деревья — 7..9 на строке 15.
+    check(v->visible(Vec2(6, 9), Vec2(6, 5)),   "по открытому месту видно");
+    check(v->visible(Vec2(6, 9), Vec2(6, 9)),   "клетка видит саму себя");
+    check(!v->visible(Vec2(6, 14), Vec2(6, 10)), "сквозь дом не видно");
+    check(!v->visible(Vec2(6, 15), Vec2(10, 15)), "сквозь деревья не видно");
+    check(v->visible(Vec2(16, 11), Vec2(22, 11)), "через воду видно: она не стена");
+    check(v->visible(Vec2(6, 14), Vec2(6, 10)) == v->visible(Vec2(6, 10), Vec2(6, 14)),
+          "видимость симметрична");
+
+    // --- поведение ---
+    Game g;
+    g.new_game("Наблюдатель", "human", "swordsman");
+    check(!g.mobs().empty(), "мобы расставлены");
+    if (g.mobs().empty()) return;
+
+    const int uid = g.mobs()[0].uid;
+
+    // Остальных мобов уводим в дальний угол, чтобы они не начали бой сами
+    // и не оборвали ход мира раньше времени.
+    auto park_others = [&]() {
+        int slot = 0;
+        for (const Mob& other : g.mobs()) {
+            if (other.uid == uid) continue;
+            Mob* o = g.mob_by_uid(other.uid);
+            if (!o) continue;
+            o->pos = Vec2(40 + (slot % 6), 16);
+            o->state = MobState::Idle;
+            ++slot;
+        }
+    };
+
+    // Дом наблюдаемого моба — центр его зоны спавна.
+    Vec2 home(0, 0);
+    int radius = 0;
+    {
+        const Mob* m = g.mob_by_uid(uid);
+        check(m && m->zone >= 0, "у моба есть зона спавна");
+        if (!m || m->zone < 0) return;
+        home   = v->zones[static_cast<std::size_t>(m->zone)].pos;
+        radius = v->zones[static_cast<std::size_t>(m->zone)].radius;
+    }
+
+    // 1. Игрок за домом — моб его не видит и не преследует.
+    {
+        Mob* m = g.mob_by_uid(uid);
+        m->pos = Vec2(6, 14);
+        m->state = MobState::Idle;
+        g.player().pos = Vec2(6, 10);
+        park_others();
+        g.world_turn();
+        m = g.mob_by_uid(uid);
+        check(m != nullptr, "моб не исчез");
+        if (m) check(m->state != MobState::Chase,
+                     "за препятствием моб игрока не видит и не преследует");
+    }
+
+    // 2. На открытом месте на том же расстоянии — преследует и приближается.
+    {
+        Mob* m = g.mob_by_uid(uid);
+        m->pos = Vec2(24, 16);
+        m->state = MobState::Idle;
+        g.player().pos = Vec2(20, 16);
+        park_others();
+        int before = dist(m->pos, g.player().pos);
+        g.world_turn();
+        m = g.mob_by_uid(uid);
+        if (m && !g.combat().active) {
+            eq(static_cast<int>(m->state), static_cast<int>(MobState::Chase),
+               "на виду моб переходит в преследование");
+            check(dist(m->pos, g.player().pos) < before, "и подходит ближе");
+        } else {
+            check(true, "моб дошёл до игрока и начал бой — тоже верно");
+        }
+        g.combat().active = false;
+    }
+
+    // 3. Игрок скрылся за препятствием — моб бросает погоню и идёт домой.
+    {
+        Mob* m = g.mob_by_uid(uid);
+        m->pos = Vec2(6, 14);            // далеко от своей зоны
+        m->state = MobState::Chase;      // как будто только что гнался
+        g.player().pos = Vec2(6, 10);    // за домом, вне видимости
+        park_others();
+        check(dist(m->pos, home) > radius, "моб заведомо вне своей зоны");
+        int before_home = dist(m->pos, home);
+        g.world_turn();
+        m = g.mob_by_uid(uid);
+        check(m != nullptr, "моб не исчез");
+        if (m) {
+            eq(static_cast<int>(m->state), static_cast<int>(MobState::Return),
+               "потеряв игрока из виду, моб возвращается");
+            check(dist(m->pos, home) < before_home, "и приближается к своей зоне");
+        }
+    }
+
+    // 4. Дойдя до зоны, моб успокаивается.
+    {
+        g.player().pos = Vec2(1, 1);     // игрок далеко от всех зон
+        park_others();
+        int guard = 0;
+        const Mob* m = g.mob_by_uid(uid);
+        while (m && m->state == MobState::Return && guard++ < 200) {
+            g.world_turn();
+            m = g.mob_by_uid(uid);
+        }
+        check(m != nullptr, "моб дошёл живым");
+        if (m) {
+            eq(static_cast<int>(m->state), static_cast<int>(MobState::Idle),
+               "вернувшись в зону, моб переходит в покой");
+            check(dist(m->pos, home) <= radius, "и находится внутри своей зоны");
+        }
+    }
+
+    // 5. В покое моб не расползается по карте. Раньше он уходил куда угодно,
+    //    продолжая занимать слот своей зоны и блокируя респавн.
+    {
+        g.player().pos = Vec2(1, 1);
+        bool all_home = true;
+        for (int turn = 0; turn < 250; ++turn) {
+            g.world_turn();
+            if (g.combat().active) { g.combat().active = false; continue; }
+            for (const Mob& m : g.mobs()) {
+                if (m.loc != "village" || m.zone < 0) continue;
+                if (m.state != MobState::Idle) continue;
+                const SpawnZone& z = v->zones[static_cast<std::size_t>(m.zone)];
+                if (dist(m.pos, z.pos) > z.radius) all_home = false;
+            }
+        }
+        check(all_home, "за 250 ходов ни один спокойный моб не ушёл из своей зоны");
+    }
+
+    // 6. Зоны спавна не пустеют. Ровно это и ломал прежний ИИ: уползший моб
+    //    продолжал считаться жителем своей зоны, слот был занят, а рядом с
+    //    точкой спавна никого не было.
+    {
+        g.player().pos = Vec2(1, 1);
+        for (int turn = 0; turn < 300; ++turn) {
+            g.world_turn();
+            if (g.combat().active) g.combat().active = false;
+        }
+        bool zones_ok = true;
+        for (std::size_t z = 0; z < v->zones.size(); ++z) {
+            const SpawnZone& zone = v->zones[z];
+            int counted = 0, actually_home = 0;
+            for (const Mob& m : g.mobs()) {
+                if (m.loc != "village" || m.zone != static_cast<int>(z)) continue;
+                ++counted;
+                if (dist(m.pos, zone.pos) <= zone.radius) ++actually_home;
+            }
+            // Слот зоны занят только теми, кто и правда рядом (или идёт назад).
+            if (counted > 0 && actually_home == 0) zones_ok = false;
+        }
+        check(zones_ok, "занятые слоты зон подкреплены мобами рядом с точкой спавна");
+    }
+
+    // 7. Луч видимости работает и в тесных локациях, где стен больше, чем пола.
+    {
+        const Location* cave = w.location("cave");
+        check(cave != nullptr, "пещера загружается");
+        if (cave) {
+            int blocked = 0, open = 0;
+            for (int y = 1; y < 17; ++y) {
+                for (int x = 1; x < 47; ++x) {
+                    Vec2 a(x, y), b(x + 6, y);
+                    if (!cave->in_bounds(b)) continue;
+                    if (!cave->walkable(a) || !cave->walkable(b)) continue;
+                    if (cave->visible(a, b)) ++open; else ++blocked;
+                }
+            }
+            check(blocked > 0, "в пещере есть пары клеток, между которыми не видно");
+            check(open > 0, "и есть пары, между которыми видно");
+        }
+    }
+
+    // 8. Состояние переживает сохранение и загрузку.
+    {
+        platform::make_dir("saves");
+        Mob* m = g.mob_by_uid(uid);
+        m->state = MobState::Return;
+        check(g.save_to("saves/test_ai.sav"), "сохранение записано");
+        Game g2;
+        check(g2.load_from("saves/test_ai.sav"), "сохранение прочитано");
+        const Mob* m2 = g2.mob_by_uid(uid);
+        check(m2 != nullptr, "моб восстановлен");
+        if (m2) eq(static_cast<int>(m2->state), static_cast<int>(MobState::Return),
+                   "состояние моба пережило сохранение");
+        std::remove("saves/test_ai.sav");
+    }
+}
+
+void test_effects() {
+    section("эффекты и их таймер");
+    const Content& c = Content::get();
+
+    std::vector<ActiveEffect> fx;
+    Game::apply_effect(fx, "poison", 3, 2);
+    eq(static_cast<int>(fx.size()), 1, "эффект наложен");
+
+    // Повторное наложение не плодит дубликаты, а продлевает и усиливает.
+    Game::apply_effect(fx, "poison", 5, 1);
+    eq(static_cast<int>(fx.size()), 1, "повтор не создаёт второй записи");
+    eq(fx[0].turns, 5, "длительность взята большая");
+    eq(fx[0].power, 2, "сила взята большая");
+
+    Game::apply_effect(fx, "нет-такого-эффекта", 5, 1);
+    eq(static_cast<int>(fx.size()), 1, "несуществующий эффект не накладывается");
+
+    // Тик отнимает здоровье и укорачивает эффект.
+    const EffectDef* pd = c.effect("poison");
+    check(pd != nullptr, "яд описан в базе");
+    if (pd) {
+        int d = Game::tick_effects(fx);
+        eq(d, pd->hp_per_turn * 2, "яд силы 2 отнимает вдвое больше");
+        eq(fx[0].turns, 4, "длительность уменьшилась на ход");
+    }
+
+    // Эффект истекает и исчезает сам.
+    for (int i = 0; i < 10; ++i) Game::tick_effects(fx);
+    check(fx.empty(), "истёкший эффект убирается из списка");
+
+    // Модификаторы характеристик суммируются с учётом силы.
+    std::vector<ActiveEffect> mod;
+    Game::apply_effect(mod, "might", 5, 3);
+    const EffectDef* md = c.effect("might");
+    if (md) {
+        Stats st = Game::effect_stats(mod);
+        eq(st.dmg_min, md->per_power.dmg_min * 3, "сила эффекта умножает бонус");
+    }
+    Stats none = Game::effect_stats(std::vector<ActiveEffect>());
+    eq(none.dmg_min, 0, "пустой список не даёт бонусов");
+
+    // Снятие: "*" убирает только вредное.
+    std::vector<ActiveEffect> mix;
+    Game::apply_effect(mix, "poison", 5, 1);
+    Game::apply_effect(mix, "regen", 5, 1);
+    Game::apply_effect(mix, "weaken", 5, 1);
+    eq(Game::cure_effects(mix, "*"), 2, "снято два вредных эффекта");
+    eq(static_cast<int>(mix.size()), 1, "полезный эффект остался");
+    eqs(mix[0].id, "regen", "остался именно полезный");
+    eq(Game::cure_effects(mix, "regen"), 1, "снятие по имени работает");
+
+    // Эффекты действительно меняют боевые характеристики героя.
+    Game g;
+    g.new_game("Тестер", "human", "swordsman");
+    int dmg0 = g.total().dmg_max;
+    Game::apply_effect(g.player().effects, "might", 5, 2);
+    check(g.total().dmg_max > dmg0, "эффект силы поднимает урон героя");
+    int atk0 = g.total().attack;
+    Game::apply_effect(g.player().effects, "weaken", 5, 1);
+    check(g.total().attack < atk0, "слабость снижает меткость");
+
+    // Яд тикает и вне боя, на ходу мира.
+    Game g2;
+    g2.new_game("Отравленный", "human", "swordsman");
+    Game::apply_effect(g2.player().effects, "poison", 5, 2);
+    int hp0 = g2.player().hp;
+    g2.world_turn();
+    check(g2.player().hp < hp0, "яд отнимает здоровье на ходу мира");
+
+    // Отдых снимает отраву.
+    g2.rest();
+    check(g2.player().effects.empty(), "отдых снимает вредные эффекты");
+    eq(g2.player().hp, g2.total().max_hp, "и восстанавливает здоровье");
+
+    // Противоядие тоже.
+    Game g3;
+    g3.new_game("Лечёный", "human", "swordsman");
+    Game::apply_effect(g3.player().effects, "poison", 5, 1);
+    g3.add_item("antidote", 1);
+    check(g3.use_item("antidote"), "противоядие применяется");
+    check(g3.player().effects.empty(), "противоядие снимает яд");
+
+    // Эликсир накладывает эффект.
+    g3.add_item("elixir_might", 1);
+    check(g3.use_item("elixir_might"), "эликсир применяется");
+    check(!g3.player().effects.empty(), "эликсир накладывает эффект");
+}
+
+void test_races_and_specs() {
+    section("расы и специализации");
+    const Content& c = Content::get();
+    check(c.races().size() >= 5, "рас не меньше пяти");
+    check(c.specs().size() >= 5, "специализаций не меньше пяти");
+
+    for (const RaceDef& r : c.races())
+        check(!r.name.empty() && !r.desc.empty(), "у расы " + r.id + " есть имя и описание");
+    for (const SpecDef& sp : c.specs()) {
+        check(!sp.name.empty(), "у специализации " + sp.id + " есть имя");
+        check(c.item(sp.start_item) != nullptr,
+              "стартовый предмет " + sp.start_item + " существует");
+    }
+
+    // Каждая связка расы и пути должна давать играбельного героя.
+    for (const RaceDef& r : c.races()) {
+        for (const SpecDef& sp : c.specs()) {
+            Game g;
+            g.new_game("Проба", r.id, sp.id);
+            Stats t = g.total();
+            check(t.max_hp > 0, r.id + "/" + sp.id + ": здоровье положительно");
+            check(t.max_ap > 0, r.id + "/" + sp.id + ": очки действия положительны");
+            check(g.attack_cost() >= 1, r.id + "/" + sp.id + ": атака стоит хотя бы 1 AP");
+            check(t.attack >= 5, r.id + "/" + sp.id + ": шанс попасть не обнулён");
+            check(g.player().hp == t.max_hp, r.id + "/" + sp.id + ": старт с полным здоровьем");
+        }
+    }
+
+    // Неизвестная раса или путь откатываются к значению по умолчанию.
+    Game g;
+    g.new_game("Кто-то", "нет-такой-расы", "нет-такого-пути");
+    check(c.race(g.player().race) != nullptr, "неизвестная раса заменена корректной");
+    check(c.spec(g.player().spec) != nullptr, "неизвестный путь заменён корректным");
+}
+
+void test_mob_inventory() {
+    section("инвентарь мобов");
+    Game g;
+    g.new_game("Тестер", "human", "swordsman");
+    check(!g.mobs().empty(), "мобы расставлены");
+    if (g.mobs().empty()) return;
+
+    // Хотя бы у кого-то из мобов есть что отнять: добыча разыгрывается
+    // при появлении, а не в момент смерти.
+    bool any_loot = false;
+    for (const Mob& m : g.mobs())
+        if (!m.inv.empty() || m.gold > 0) any_loot = true;
+    check(any_loot, "мобы носят с собой добычу");
+
+    // Убийство передаёт игроку именно то, что моб нёс.
+    int uid = g.mobs()[0].uid;
+    const Mob* m = g.mob_by_uid(uid);
+    check(m != nullptr, "моб найден");
+    if (!m) return;
+    std::vector<ItemStack> carried = m->inv;
+    int carried_gold = m->gold;
+    int gold_before = g.player().gold;
+    std::vector<int> before;
+    for (const ItemStack& st : carried) before.push_back(g.count_item(st.id));
+
+    g.start_combat(uid);
+    for (int i = 0; i < 400 && g.combat().active; ++i) {
+        g.player().hp = g.total().max_hp;
+        if (g.player().ap < g.attack_cost()) g.player().ap = g.total().max_ap;
+        g.combat_attack(false);
+    }
+    check(!g.combat().active, "бой закончился");
+    eq(g.player().gold, gold_before + carried_gold, "золото моба перешло игроку");
+    for (std::size_t i = 0; i < carried.size(); ++i)
+        eq(g.count_item(carried[i].id), before[i] + carried[i].count,
+           "предмет " + carried[i].id + " перешёл игроку");
+    check(g.mob_by_uid(uid) == nullptr, "убитый моб убран с карты");
+}
+
+void test_chests() {
+    section("сундуки");
+    World w("data/maps");
+    const Location* v = w.location("village");
+    check(v != nullptr && !v->chests.empty(), "в деревне есть сундук");
+    if (!v || v->chests.empty()) return;
+
+    Game g;
+    g.new_game("Тестер", "human", "swordsman");
+    check(!g.chest_opened("village", 0), "сундук изначально закрыт");
+
+    const MapChest& ch = v->chests[0];
+    int gold0 = g.player().gold;
+    check(g.open_chest(0), "незапертый сундук открывается");
+    check(g.chest_opened("village", 0), "сундук помечен вскрытым");
+    eq(g.player().gold, gold0 + ch.gold, "золото из сундука получено");
+    for (const ItemStack& st : ch.items)
+        check(g.count_item(st.id) >= st.count, "предмет " + st.id + " из сундука получен");
+
+    // Повторно тот же сундук не даёт ничего.
+    int gold1 = g.player().gold;
+    check(!g.open_chest(0), "второй раз сундук не открывается");
+    eq(g.player().gold, gold1, "и золота не прибавляет");
+
+    // Запертый сундук требует ключ.
+    const Location* r = w.location("ruins");
+    check(r != nullptr, "развалины загружаются");
+    if (!r) return;
+    int locked = -1;
+    for (std::size_t i = 0; i < r->chests.size(); ++i)
+        if (!r->chests[i].key.empty()) locked = static_cast<int>(i);
+    check(locked >= 0, "на развалинах есть запертый сундук");
+    if (locked < 0) return;
+
+    const std::string keyid = r->chests[static_cast<std::size_t>(locked)].key;
+    check(Content::get().item(keyid) != nullptr, "нужный ключ есть в базе предметов");
+
+    Game g2;
+    g2.new_game("Взломщик", "human", "swordsman");
+    g2.player().loc = "ruins";
+    g2.player().pos = Vec2(24, 3);
+    check(!g2.open_chest(locked), "без ключа запертый сундук не открыть");
+    check(!g2.chest_opened("ruins", locked), "и он остаётся закрытым");
+    g2.add_item(keyid, 1);
+    check(g2.open_chest(locked), "с ключом открывается");
+}
+
+void test_enchanting() {
+    section("зачарования");
+    const Content& c = Content::get();
+    check(c.enchants().size() >= 5, "зачарований не меньше пяти");
+    for (const EnchantDef& e : c.enchants()) {
+        check(!e.name.empty(), "у зачарования " + e.id + " есть имя");
+        check(e.price > 0, "у зачарования " + e.id + " есть цена");
+        if (!e.reagent.empty())
+            check(c.item(e.reagent) != nullptr, "реагент " + e.reagent + " есть в базе");
+        if (!e.on_hit_effect.empty())
+            check(c.effect(e.on_hit_effect) != nullptr,
+                  "эффект удара " + e.on_hit_effect + " есть в базе");
+    }
+
+    Game g;
+    g.new_game("Тестер", "human", "swordsman");
+    const std::string wpn = g.player().equipped[static_cast<std::size_t>(Slot::Weapon)];
+    check(g.can_enchant(wpn), "оружие можно зачаровать");
+    check(!g.can_enchant("bread"), "хлеб зачаровать нельзя");
+
+    const EnchantDef* keen = c.enchant("keen");
+    check(keen != nullptr, "зачарование «Острота» есть");
+    if (!keen) return;
+
+    // Без золота и реагента не выйдет.
+    g.player().gold = 0;
+    check(!g.enchant_item(wpn, "keen"), "без золота зачарование не проходит");
+    g.player().gold = keen->price;
+    if (!keen->reagent.empty()) {
+        check(!g.enchant_item(wpn, "keen"), "без реагента зачарование не проходит");
+        g.add_item(keen->reagent, keen->reagent_count);
+    }
+
+    int atk0 = g.total().attack;
+    check(g.enchant_item(wpn, "keen"), "с золотом и реагентом проходит");
+    eq(g.player().gold, 0, "золото списано");
+    if (!keen->reagent.empty()) eq(g.count_item(keen->reagent), 0, "реагент израсходован");
+    check(g.total().attack > atk0, "зачарование подняло меткость");
+
+    // Одна вещь — одна руна.
+    g.player().gold = 10000;
+    g.add_item("ember", 5);
+    check(!g.can_enchant(wpn), "повторно ту же вещь зачаровать нельзя");
+    check(!g.enchant_item(wpn, "flame"), "и попытка отклоняется");
+
+    // Снятое снаряжение перестаёт давать бонус зачарования.
+    int with_ench = g.total().attack;
+    g.unequip(Slot::Weapon);
+    check(g.total().attack < with_ench, "снятая вещь не даёт бонуса зачарования");
+}
+
+void test_portals() {
+    section("порталы");
+    Game g;
+    g.new_game("Тестер", "human", "swordsman");
+
+    check(!g.place_portal(), "без умения портал не поставить");
+    g.player().portal_master = true;
+    check(!g.place_portal(), "без камня портал не поставить");
+
+    g.add_item("portal_stone", 3);
+    g.player().pos = Vec2(5, 8);
+    check(g.place_portal(), "первый портал ставится");
+    eq(static_cast<int>(g.player().portals.size()), 1, "портал записан");
+    eq(g.count_item("portal_stone"), 2, "камень израсходован");
+    check(!g.place_portal(), "второй портал на том же месте не встанет");
+
+    check(g.portal_at(Vec2(5, 8), "village") != nullptr, "портал виден на своём месте");
+    check(g.portal_at(Vec2(6, 8), "village") == nullptr, "и только на своём");
+
+    // Один портал никуда не ведёт.
+    g.player().pos = Vec2(4, 8);
+    g.try_move(1, 0);
+    eqs(g.player().loc, "village", "с одним порталом переноса нет");
+
+    // Со вторым — переносит.
+    g.player().pos = Vec2(20, 8);
+    check(g.place_portal(), "второй портал ставится");
+    g.player().pos = Vec2(4, 8);
+    Bump b = g.try_move(1, 0);
+    check(b == Bump::Portal, "шаг на портал сработал");
+    eq(g.player().pos.x, 20, "перенесло ко второму порталу");
+
+    // Снятие возвращает камень.
+    int stones = g.count_item("portal_stone");
+    check(g.remove_portal_here(), "портал под ногами снимается");
+    eq(g.count_item("portal_stone"), stones + 1, "камень вернулся");
+    eq(static_cast<int>(g.player().portals.size()), 1, "портал убран из списка");
+
+    // Больше лимита не поставить.
+    g.player().portals.clear();
+    g.add_item("portal_stone", 10);
+    int placed = 0;
+    for (int i = 0; i < PORTAL_LIMIT + 3; ++i) {
+        g.player().pos = Vec2(3 + i, 9);
+        if (g.place_portal()) ++placed;
+    }
+    eq(placed, PORTAL_LIMIT, "поставлено ровно столько, сколько разрешено");
+}
+
+// Сквозная проверка: проходима ли игра целиком. Бои идут настоящей боевой
+// механикой, предметы поднимаются с карты, переходы — через реальные выходы.
+// Подкручиваются только здоровье и очки действия героя: тест про проходимость
+// контента, а не про баланс.
+void test_books_and_notes() {
+    section("книги и записки");
+    const Content& c = Content::get();
+
+    // --- записки в базе ---
+    const char* note_ids[] = {"ink", "miner", "watch", "zero", "child", "proto", "hermit"};
+    for (const char* id : note_ids) {
+        const NoteDef* n = c.note(id);
+        check(n != nullptr, std::string("записка ") + id + " описана");
+        if (!n) continue;
+        check(!n->title.empty(), std::string("у записки ") + id + " есть заголовок");
+        check(!n->lines.empty(), std::string("у записки ") + id + " есть текст");
+    }
+    check(c.note("нет-такой") == nullptr, "несуществующая записка не выдумывается");
+
+    // --- книги ---
+    Game g;
+    g.new_game("Писарь", "human", "swordsman");
+    check(g.books().empty(), "библиотека пуста на старте");
+    check(!g.start_book("Дневник"), "без чистой книги начать нечего");
+
+    g.add_item("book_blank", 2);
+    check(g.start_book("Дневник"), "книга начата");
+    eq(static_cast<int>(g.books().size()), 1, "книга появилась в библиотеке");
+    eq(g.count_item("book_blank"), 1, "чистая книга израсходована");
+
+    const std::string bid = g.books()[0].id;
+    const Book* b = g.book(bid);
+    check(b != nullptr, "книга находится по коду");
+    if (!b) return;
+    eqs(b->title, "Дневник", "название сохранено");
+    check(!b->readonly, "своя книга доступна для правки");
+
+    // Правка строк.
+    check(g.book_set_line(bid, 0, "Первая строка"), "строка записана");
+    eqs(g.book(bid)->lines[0], "Первая строка", "текст на месте");
+    check(g.book_insert_line(bid, 1, "Вторая"), "строка добавлена");
+    eq(static_cast<int>(g.book(bid)->lines.size()), 2, "строк стало две");
+    check(g.book_insert_line(bid, 1, ""), "пустая строка тоже добавляется");
+    eqs(g.book(bid)->lines[1], "", "пустая строка пуста");
+
+    check(!g.book_set_line(bid, 99, "мимо"), "правка несуществующей строки отклонена");
+    check(!g.book_set_line("нет-такой-книги", 0, "мимо"), "правка чужого кода отклонена");
+
+    // Пределы длины.
+    std::string longline;
+    for (int i = 0; i < BOOK_MAX_CHARS + 30; ++i) longline += "я";
+    g.book_set_line(bid, 0, longline);
+    eq(static_cast<int>(utf8_len(g.book(bid)->lines[0])), BOOK_MAX_CHARS,
+       "слишком длинная строка обрезается по видимым символам");
+
+    std::string longtitle;
+    for (int i = 0; i < BOOK_TITLE_MAX + 20; ++i) longtitle += "ю";
+    g.book_set_title(bid, longtitle);
+    eq(static_cast<int>(utf8_len(g.book(bid)->title)), BOOK_TITLE_MAX,
+       "слишком длинное название обрезается");
+
+    // Предел числа строк.
+    int added = 0;
+    for (int i = 0; i < BOOK_MAX_LINES + 20; ++i)
+        if (g.book_insert_line(bid, 0, "строка")) ++added;
+    eq(static_cast<int>(g.book(bid)->lines.size()), BOOK_MAX_LINES,
+       "строк не больше предела");
+
+    // Удаление строк: последняя не исчезает, а очищается.
+    while (g.book(bid)->lines.size() > 1) g.book_remove_line(bid, 0);
+    eq(static_cast<int>(g.book(bid)->lines.size()), 1, "осталась одна строка");
+    check(g.book_remove_line(bid, 0), "удаление последней строки допустимо");
+    eq(static_cast<int>(g.book(bid)->lines.size()), 1, "но книга не остаётся без строк");
+    eqs(g.book(bid)->lines[0], "", "последняя строка просто очищается");
+
+    // Предел числа книг.
+    g.add_item("book_blank", BOOK_MAX_COUNT + 5);
+    int made = 1;
+    for (int i = 0; i < BOOK_MAX_COUNT + 5; ++i)
+        if (g.start_book("Книга " + to_str(i))) ++made;
+    eq(static_cast<int>(g.books().size()), BOOK_MAX_COUNT, "книг не больше предела");
+
+    // Удаление книги.
+    const std::string victim = g.books().back().id;
+    check(g.delete_book(victim), "книга выбрасывается");
+    check(g.book(victim) == nullptr, "и исчезает из библиотеки");
+    check(!g.delete_book("нет-такой"), "выбросить несуществующую нельзя");
+
+    // --- записки подбираются с карты ---
+    Game g2;
+    g2.new_game("Искатель", "human", "swordsman");
+    const Location* forest = g2.world().location("forest");
+    check(forest != nullptr && !forest->notes.empty(), "в лесу есть записки");
+    if (!forest || forest->notes.empty()) return;
+
+    g2.player().loc = "forest";
+    const MapNote& mn = forest->notes[0];
+    check(!g2.note_taken("forest", 0), "записка изначально не подобрана");
+
+    // Подходим к записке настоящим шагом.
+    const int dxs[] = {1, -1, 0, 0}, dys[] = {0, 0, 1, -1};
+    bool picked = false;
+    for (int k = 0; k < 4 && !picked; ++k) {
+        Vec2 from(mn.pos.x - dxs[k], mn.pos.y - dys[k]);
+        if (!forest->walkable(from)) continue;
+        g2.player().pos = from;
+        if (g2.try_move(dxs[k], dys[k]) == Bump::Note) picked = true;
+    }
+    check(picked, "шаг на записку её подбирает");
+    check(g2.note_taken("forest", 0), "записка помечена подобранной");
+
+    const Book* nb = g2.book("n_" + mn.note_id);
+    check(nb != nullptr, "записка попала в библиотеку");
+    if (nb) {
+        check(nb->readonly, "найденная записка доступна только для чтения");
+        check(!nb->lines.empty(), "и содержит текст");
+        check(!g2.book_set_line(nb->id, 0, "правка"), "переписать записку нельзя");
+        check(!g2.book_set_title(nb->id, "другое"), "и переименовать нельзя");
+    }
+    eq(g2.player().counters["note_" + mn.note_id], 1, "находка отмечена счётчиком");
+
+    // Повторно та же записка не появляется.
+    int books_before = static_cast<int>(g2.books().size());
+    check(!g2.take_note(0), "повторно записка не подбирается");
+    eq(static_cast<int>(g2.books().size()), books_before, "и дубликата в библиотеке нет");
+}
+
+void test_book_save_roundtrip() {
+    section("сохранение библиотеки");
+    const char* path = "saves/test_books.sav";
+    platform::make_dir("saves");
+
+    Game a;
+    a.new_game("Летописец", "elf", "mage");
+    a.add_item("book_blank", 3);
+    a.start_book("Путевые заметки");
+    const std::string id = a.books()[0].id;
+
+    // Нарочно кладём то, на чём построчный формат мог бы сломаться:
+    // пустые строки, отступы, кириллицу и знаки-разделители.
+    a.book_set_line(id, 0, "Первый день пути");
+    a.book_insert_line(id, 1, "");
+    a.book_insert_line(id, 2, "    отступ в четыре пробела");
+    a.book_insert_line(id, 3, "знаки: : = # ~ | > * & 0 1 2");
+    a.book_insert_line(id, 4, "ёжик, «кавычки» и тире —");
+    a.book_insert_line(id, 5, "");
+
+    a.start_book("Вторая книга");
+    a.book_set_line(a.books()[1].id, 0, "текст второй книги");
+
+    // И найденная записка.
+    a.player().counters["note_ink"] = 1;
+    Book note;
+    note.id = "n_ink"; note.title = "Рецепт чернил"; note.readonly = true;
+    note.lines.push_back("строка записки");
+    a.player().books.push_back(note);
+
+    const std::vector<Book> before = a.books();
+    check(a.save_to(path), "сохранение записано: " + a.error());
+
+    Game b;
+    b.new_game("Другой", "orc", "ninja");
+    check(b.load_from(path), "сохранение прочитано: " + b.error());
+
+    eq(static_cast<int>(b.books().size()), static_cast<int>(before.size()),
+       "число книг совпадает");
+    bool all_same = true;
+    for (std::size_t i = 0; i < before.size() && i < b.books().size(); ++i) {
+        const Book& x = before[i];
+        const Book& y = b.books()[i];
+        if (x.id != y.id || x.title != y.title || x.readonly != y.readonly) all_same = false;
+        if (x.lines.size() != y.lines.size()) { all_same = false; continue; }
+        for (std::size_t j = 0; j < x.lines.size(); ++j)
+            if (x.lines[j] != y.lines[j]) all_same = false;
+    }
+    check(all_same, "текст всех книг восстановлен посимвольно");
+
+    const Book* restored = b.book(id);
+    check(restored != nullptr, "первая книга на месте");
+    if (restored && restored->lines.size() > 5) {
+        eqs(restored->lines[0], "Первый день пути", "обычная строка цела");
+        eqs(restored->lines[1], "", "пустая строка осталась пустой");
+        eqs(restored->lines[2], "    отступ в четыре пробела", "отступ не съеден");
+        eqs(restored->lines[3], "знаки: : = # ~ | > * & 0 1 2", "разделители не сломали разбор");
+        eqs(restored->lines[4], "ёжик, «кавычки» и тире —", "кириллица и знаки целы");
+        eqs(restored->lines[5], "", "последняя пустая строка на месте");
+    }
+    const Book* rn = b.book("n_ink");
+    check(rn != nullptr && rn->readonly, "записка восстановлена как «только чтение»");
+    eq(b.player().counters["note_ink"], 1, "счётчик находки восстановлен");
+
+    std::remove(path);
+}
+
+void test_no_escape_needed() {
+    section("управление без Escape");
+    // Из любого списка должен быть выход обычными клавишами: на экранной
+    // клавиатуре Android Escape набирается сочетанием и требовать его нельзя.
+    // Проверяем сам контракт: choose трактует Q и 0 как отмену.
+    check(ui::CHOOSE_CANCEL == -1, "код отмены не пересекается с индексами");
+    check(ui::CHOOSE_HOTKEY == -2, "код горячей клавиши отличается от отмены");
+
+    // И что коды Escape и конца ввода — разные значения: раньше одиночный
+    // Escape и закрытый ввод были неотличимы, из-за чего игра зависала.
+    check(platform::KEY_ESC != platform::KEY_EOF, "Escape и конец ввода различаются");
+    check(platform::KEY_EOF != platform::KEY_UP &&
+          platform::KEY_EOF != platform::KEY_DOWN,
+          "конец ввода не совпадает со стрелками");
+}
+
+void test_playthrough() {
+    section("сквозное прохождение: все квесты");
+    Game g;
+    g.new_game("Герой", "human", "swordsman");
     const Content& c = Content::get();
     std::string shop;
-    g.apply_option(c.node("elder_offer")->options[0], "", &shop);
-    g.apply_option(c.node("herb_offer")->options[0],  "", &shop);
-    g.apply_option(c.node("smith_offer")->options[0], "", &shop);
-    eq(g.player().quests["wolves"], 1, "квест на волков взят");
-    eq(g.player().quests["amulet"], 1, "квест на амулет взят");
-    eq(g.player().quests["pelts"],  1, "заказ кузнеца взят");
 
-    // Уходим в лес через настоящий переход.
-    const Location* v = g.here();
-    check(v && !v->exits.empty(), "в деревне есть переход");
-    if (!v || v->exits.empty()) return;
-    g.player().pos = Vec2{v->exits[0].pos.x - 1, v->exits[0].pos.y};
-    g.try_move(1, 0);
-    eqs(g.player().loc, "forest", "герой в лесу");
-    check(!g.mobs().empty(), "в лесу есть кому сопротивляться");
+    // --- вспомогательные действия ---
 
-    // Побеждаем противника честной боевой механикой.
+    // Перейти в соседнюю локацию через настоящий выход.
+    auto travel = [&](const std::string& target) {
+        const Location* loc = g.here();
+        if (!loc) return false;
+        for (const MapExit& e : loc->exits) {
+            if (e.target != target) continue;
+            const int dx[] = {1, -1, 0, 0}, dy[] = {0, 0, 1, -1};
+            for (int k = 0; k < 4; ++k) {
+                Vec2 from(e.pos.x - dx[k], e.pos.y - dy[k]);
+                if (!loc->walkable(from) && !(loc->exit_at(from))) continue;
+                g.player().pos = from;
+                if (g.try_move(dx[k], dy[k]) == Bump::Exit) return true;
+            }
+        }
+        return false;
+    };
+
+    // Подобрать с карты все экземпляры предмета в текущей локации.
+    auto gather = [&](const std::string& item_id) {
+        const Location* loc = g.here();
+        if (!loc) return 0;
+        int got = 0;
+        for (std::size_t i = 0; i < loc->items.size(); ++i) {
+            if (loc->items[i].item_id != item_id) continue;
+            if (g.item_taken(loc->id, static_cast<int>(i))) continue;
+            const Vec2 t = loc->items[i].pos;
+            const int dx[] = {1, -1, 0, 0}, dy[] = {0, 0, 1, -1};
+            for (int k = 0; k < 4; ++k) {
+                Vec2 from(t.x - dx[k], t.y - dy[k]);
+                if (!loc->walkable(from)) continue;
+                g.player().pos = from;
+                if (g.try_move(dx[k], dy[k]) == Bump::Item) { ++got; break; }
+            }
+        }
+        return got;
+    };
+
+    // Подобрать записку с карты настоящим шагом.
+    auto gather_note = [&](const std::string& note_id) {
+        const Location* loc = g.here();
+        if (!loc) return false;
+        for (std::size_t i = 0; i < loc->notes.size(); ++i) {
+            if (loc->notes[i].note_id != note_id) continue;
+            if (g.note_taken(loc->id, static_cast<int>(i))) return true;
+            const Vec2 t = loc->notes[i].pos;
+            const int dx[] = {1, -1, 0, 0}, dy[] = {0, 0, 1, -1};
+            for (int k = 0; k < 4; ++k) {
+                Vec2 from(t.x - dx[k], t.y - dy[k]);
+                if (!loc->walkable(from)) continue;
+                g.player().pos = from;
+                if (g.try_move(dx[k], dy[k]) == Bump::Note) return true;
+            }
+        }
+        return false;
+    };
+
+    // Победить противника честной боевой механикой.
     auto fight = [&](int uid) {
         g.start_combat(uid);
-        for (int guard = 0; guard < 400 && g.combat().active; ++guard) {
-            // Герой не должен умереть — тест про проходимость, не про баланс.
+        for (int guard = 0; guard < 600 && g.combat().active; ++guard) {
             g.player().hp = g.total().max_hp;
             if (g.player().ap < g.attack_cost()) g.player().ap = g.total().max_ap;
             g.combat_attack(false);
         }
+        g.player().effects.clear();      // тест не про выживание под ядом
         return !g.combat().active;
     };
 
-    // Бьём волков, пока счётчик не дойдёт до пяти.
+    // Перебить в текущей локации всех мобов заданного вида (с респавном).
+    auto hunt = [&](const std::string& enemy_id, int need) {
+        int killed = 0, guard = 0;
+        while (killed < need && guard++ < 200) {
+            int uid = -1;
+            for (const Mob& m : g.mobs())
+                if (m.loc == g.player().loc && m.enemy_id == enemy_id) { uid = m.uid; break; }
+            if (uid < 0) { g.world_turn(); continue; }
+            if (fight(uid)) ++killed;
+        }
+        return killed;
+    };
+
+    // --- деревня: берём первые квесты ---
+    g.apply_option(c.node("elder_offer")->options[0], "", &shop);
+    g.apply_option(c.node("herb_offer")->options[0],  "", &shop);
+    g.apply_option(c.node("smith_offer")->options[0], "", &shop);
+    eq(g.player().quests["wolves"], 1, "квест на волков взят");
+
+    // --- лес: волки, вожак, шкуры ---
+    check(travel("forest"), "переход в лес");
+    eqs(g.player().loc, "forest", "герой в лесу");
+    check(hunt("wolf", 5) >= 1, "волки находятся и побеждаются");
     int guard = 0;
-    while (g.player().counters["kill_wolf"] < 5 && guard++ < 60) {
-        int uid = -1;
-        for (const Mob& m : g.mobs())
-            if (m.loc == "forest" && (m.enemy_id == "wolf" || m.enemy_id == "wolf_alpha")) {
-                uid = m.uid;
-                break;
-            }
-        if (uid < 0) { g.world_turn(); continue; }   // ждём респавна
-        check(fight(uid), "бой завершается, а не зацикливается");
+    while (g.player().counters["kill_wolf"] < 5 && guard++ < 40) {
+        if (hunt("wolf", 1) == 0) g.world_turn();
     }
-    check(g.player().counters["kill_wolf"] >= 5, "пять волков перебиты в бою");
+    check(g.player().counters["kill_wolf"] >= 5, "пять волков перебиты");
+    check(hunt("wolf_alpha", 1) == 1, "вожак стаи повержен");
+    eq(g.count_item("amulet"), 1, "амулет добыт");
 
-    // Вожак должен быть побеждён и отдать амулет.
-    int alpha = -1;
-    for (const Mob& m : g.mobs())
-        if (m.enemy_id == "wolf_alpha") alpha = m.uid;
-    if (alpha >= 0) fight(alpha);
-    eq(g.count_item("amulet"), 1, "амулет добыт с вожака");
+    while (g.count_item("wolf_pelt") < 3 && guard++ < 80) {
+        if (hunt("wolf", 1) == 0) g.world_turn();
+    }
+    check(g.count_item("wolf_pelt") >= 3, "три шкуры собраны");
 
-    // Возвращаемся и сдаём все три квеста.
-    bool can_finish_wolves = false;
-    for (const DlgOption& o : c.node("elder_root")->options)
-        if (o.next == "elder_reward" && g.option_available(o)) can_finish_wolves = true;
-    check(can_finish_wolves, "старейшина принимает работу");
+    // Пока в лесу — собираем всё для квеста Гурия.
+    check(gather_note("ink"), "рецепт чернил найден в лесу");
+    check(g.book("n_ink") != nullptr, "записка попала в библиотеку");
+    check(gather("oak_gall") >= 3, "чернильные орешки собраны");
+
+    // --- сдаём первую тройку квестов ---
     g.apply_option(c.node("elder_reward")->options[0], "", &shop);
+    g.apply_option(c.node("herb_reward")->options[0],  "", &shop);
+    g.apply_option(c.node("smith_reward")->options[0], "", &shop);
     eq(g.player().quests["wolves"], QUEST_DONE, "квест на волков закрыт");
-
-    bool can_finish_amulet = false;
-    for (const DlgOption& o : c.node("herbalist_root")->options)
-        if (o.next == "herb_reward" && g.option_available(o)) can_finish_amulet = true;
-    check(can_finish_amulet, "Лада принимает амулет");
-    g.apply_option(c.node("herb_reward")->options[0], "", &shop);
     eq(g.player().quests["amulet"], QUEST_DONE, "квест на амулет закрыт");
-    eq(g.count_item("amulet"), 0, "амулет отдан хозяйке");
-    eq(g.count_item("ring_hp"), 1, "кольцо жизни получено");
+    eq(g.player().quests["pelts"],  QUEST_DONE, "заказ кузнеца закрыт");
 
-    check(g.count_item("wolf_pelt") >= 3, "с волков набралось три шкуры на заказ");
-    if (g.count_item("wolf_pelt") >= 3) {
-        g.apply_option(c.node("smith_reward")->options[0], "", &shop);
-        eq(g.player().quests["pelts"], QUEST_DONE, "заказ кузнеца закрыт");
-        eq(g.count_item("chain_armor"), 1, "кольчуга получена");
-    }
+    // --- новые квесты открываются только после старых ---
+    auto visible = [&](const char* node, const char* target) {
+        const DlgNode* n = c.node(node);
+        if (!n) return false;
+        for (const DlgOption& o : n->options)
+            if (o.next == target && g.option_available(o)) return true;
+        return false;
+    };
+    check(visible("trader_root", "books_offer"), "Гурий открыл квест о бумаге");
+    g.apply_option(c.node("books_offer")->options[0], "", &shop);
+    check(visible("trader_root", "books_reward"),
+          "с рецептом и орешками Гурий готов принять работу");
+    g.apply_option(c.node("books_reward")->options[0], "", &shop);
+    eq(g.player().quests["books"], QUEST_DONE, "квест о бумаге закрыт");
+    eq(g.count_item("book_blank"), 1, "первая чистая книга выдана");
 
-    check(g.player().level >= 3, "к концу трёх квестов герой заметно вырос");
-    std::cout << "  (итог прохождения: уровень " << g.player().level
+    // Книжная лавка открылась, и в ней действительно книги.
+    bool book_shop = false;
+    for (const DlgOption& o : c.node("trader_root")->options)
+        if (o.open_shop && o.shop_id == "shop_books" && g.option_available(o)) book_shop = true;
+    check(book_shop, "книжная лавка стала доступна");
+
+    // Книгу можно начать и в неё писать.
+    check(g.start_book("Хроника похода"), "книга начата из выданной чистой");
+    const std::string diary = g.books().back().id;
+    check(g.book_set_line(diary, 0, "Волки, амулет и три шкуры."), "первая запись сделана");
+    check(g.book_insert_line(diary, 1, "Дальше — пещера."), "вторая запись сделана");
+    eq(static_cast<int>(g.book(diary)->lines.size()), 2, "в книге две строки");
+
+    check(visible("elder_root", "elder_queen_offer"), "Мирон открыл квест на матку");
+    check(visible("herbalist_root", "moss_offer"),    "Лада открыла квест на мох");
+    check(visible("smith_root", "outpost_offer"),     "Бран открыл квест на заставу");
+
+    g.apply_option(c.node("elder_queen_offer")->options[0], "", &shop);
+    g.apply_option(c.node("moss_offer")->options[0],        "", &shop);
+    g.apply_option(c.node("outpost_offer")->options[0],     "", &shop);
+
+    // --- пещера: мох и матка ---
+    check(travel("cave"), "переход в пещеру");
+    eqs(g.player().loc, "cave", "герой в пещере");
+    check(gather("glow_moss") >= 3, "светящийся мох собран с карты");
+    check(hunt("spider_queen", 1) == 1, "паучья матка повержена");
+    eq(g.player().counters["kill_queen"], 1, "счётчик матки сработал");
+    check(g.count_item("focus_node") >= 1, "первый узловой фокус добыт");
+
+    check(travel("forest"), "возврат в лес");
+    g.apply_option(c.node("elder_queen_reward")->options[0], "", &shop);
+    g.apply_option(c.node("moss_reward")->options[0],        "", &shop);
+    eq(g.player().quests["queen"], QUEST_DONE, "квест на матку закрыт");
+    eq(g.player().quests["moss"],  QUEST_DONE, "квест на мох закрыт");
+
+    // --- развалины: атаман ---
+    check(travel("ruins"), "переход на развалины");
+    eqs(g.player().loc, "ruins", "герой на развалинах");
+    check(hunt("bandit_chief", 1) == 1, "атаман повержен");
+    check(g.count_item("rusty_key") >= 1, "ржавый ключ добыт с атамана");
+    check(g.count_item("focus_node") >= 2, "второй фокус добыт");
+
+    // Запертый сундук теперь открывается.
+    const Location* rl = g.here();
+    int locked = -1;
+    if (rl)
+        for (std::size_t i = 0; i < rl->chests.size(); ++i)
+            if (!rl->chests[i].key.empty()) locked = static_cast<int>(i);
+    check(locked >= 0 && g.open_chest(locked), "запертый сундук открыт добытым ключом");
+
+    g.apply_option(c.node("outpost_reward")->options[0], "", &shop);
+    eq(g.player().quests["outpost"], QUEST_DONE, "квест на заставу закрыт");
+
+    // --- святилище: страж ---
+    check(travel("sanctum"), "переход в святилище");
+    eqs(g.player().loc, "sanctum", "герой в святилище");
+    check(hunt("keeper", 1) == 1, "страж нулевой точки повержен");
+    check(g.count_item("focus_node") >= 3, "третий фокус добыт");
+    check(g.count_item("rune_stone") >= 1, "рунный камень добыт");
+
+    // --- отшельник: порталы ---
+    check(visible("hermit_root", "zp_offer"), "отшельник открыл квест о нулевой точке");
+    g.apply_option(c.node("zp_offer")->options[0], "", &shop);
+    check(visible("hermit_root", "zp_reward"), "с тремя фокусами награда доступна");
+    g.apply_option(c.node("zp_reward")->options[0], "", &shop);
+    eq(g.player().quests["zero_point"], QUEST_DONE, "квест о нулевой точке закрыт");
+    check(g.player().portal_master, "умение ставить порталы получено");
+    check(g.count_item("portal_stone") >= 2, "портальные камни выданы");
+
+    // Порталы работают в бою за пределами теста портального модуля.
+    g.player().loc = "village";
+    g.player().pos = Vec2(5, 8);
+    check(g.place_portal(), "портал ставится в деревне");
+    g.player().loc = "forest";
+    g.player().pos = Vec2(3, 8);
+    check(g.place_portal(), "второй портал ставится в лесу");
+    g.player().pos = Vec2(2, 8);
+    Bump pb = g.try_move(1, 0);
+    check(pb == Bump::Portal, "портал сработал");
+    eqs(g.player().loc, "village", "портал перенёс между локациями");
+
+    // --- зачарователь ---
+    g.apply_option(c.node("ench_offer")->options[0], "", &shop);
+    check(visible("ench_root", "ench_reward"), "с рунным камнем Вельд готов");
+    g.apply_option(c.node("ench_reward")->options[0], "", &shop);
+    eq(g.player().quests["enchanter"], QUEST_DONE, "квест зачарователя закрыт");
+
+    bool ench_open = false;
+    const DlgNode* er = c.node("ench_root");
+    for (const DlgOption& o : er->options)
+        if (o.open_enchant && g.option_available(o)) ench_open = true;
+    check(ench_open, "услуга зачарования открылась");
+
+    // Зачарование доводится до конца.
+    const std::string wpn = g.player().equipped[static_cast<std::size_t>(Slot::Weapon)];
+    g.player().gold += 5000;
+    g.add_item("whetstone", 3);
+    int atk_before = g.total().attack;
+    check(g.enchant_item(wpn, "keen"), "оружие зачаровано");
+    check(g.total().attack > atk_before, "зачарование подняло меткость");
+
+    // --- итог ---
+    const char* all_quests[] = {"wolves", "amulet", "pelts", "moss", "books",
+                                "queen", "outpost", "zero_point", "enchanter"};
+    for (const char* q : all_quests)
+        eq(g.player().quests[q], QUEST_DONE, std::string("квест ") + q + " пройден");
+
+    // Записки-пасхалки лежат по всем локациям и находятся по ходу дела.
+    check(g.books().size() >= 2, "библиотека наполнилась находками и своими книгами");
+    check(g.book(diary) != nullptr, "своя книга дожила до конца прохождения");
+
+    check(g.player().level >= 8, "к концу всех квестов герой заметно вырос");
+    std::cout << "  (итог: уровень " << g.player().level
               << ", золота " << g.player().gold
-              << ", волков убито " << g.player().counters["kill_wolf"] << ")\n";
+              << ", квестов пройдено " << (sizeof(all_quests) / sizeof(all_quests[0]))
+              << ")\n";
 }
 
 } // namespace
@@ -709,6 +1734,7 @@ int main() {
     std::cout << "Тесты «Любви Эндора»\n";
     test_text_helpers();
     test_wrap();
+    test_glyphs();
     test_maps();
     test_embedded_maps();
     test_new_game_and_stats();
@@ -720,6 +1746,16 @@ int main() {
     test_combat();
     test_save_load();
     test_movement_and_pickup();
+    test_mob_ai();
+    test_effects();
+    test_races_and_specs();
+    test_mob_inventory();
+    test_chests();
+    test_enchanting();
+    test_portals();
+    test_books_and_notes();
+    test_book_save_roundtrip();
+    test_no_escape_needed();
     test_content_integrity();
     test_playthrough();
 

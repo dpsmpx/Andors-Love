@@ -18,6 +18,10 @@ bool tile_walkable(Tile t) {
     return t == Tile::Floor || t == Tile::Grass || t == Tile::Road;
 }
 
+bool tile_transparent(Tile t) {
+    return t != Tile::Wall && t != Tile::Tree;
+}
+
 Tile tile_from_char(char c) {
     switch (c) {
         case '.': return Tile::Floor;
@@ -60,6 +64,7 @@ const char* kind_name(ItemKind k) {
         case ItemKind::Shield:     return "щит";
         case ItemKind::Ring:       return "кольцо";
         case ItemKind::Consumable: return "расходник";
+        case ItemKind::Book:       return "книга";
         default:                   return "разное";
     }
 }

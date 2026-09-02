@@ -6,6 +6,28 @@
 #include <istream>
 #include <sstream>
 
+// Целочисленный алгоритм Брезенхэма: идём по клеткам от a к b и проверяем
+// прозрачность всех промежуточных. Дробной арифметики нет намеренно —
+// результат должен быть одинаков на любой платформе, иначе моб «увидит»
+// игрока на одном устройстве и не увидит на другом.
+bool Location::visible(Vec2 a, Vec2 b) const {
+    int dx =  (b.x > a.x ? b.x - a.x : a.x - b.x);
+    int dy = -(b.y > a.y ? b.y - a.y : a.y - b.y);
+    int sx = a.x < b.x ? 1 : -1;
+    int sy = a.y < b.y ? 1 : -1;
+    int err = dx + dy;
+    int x = a.x, y = a.y;
+
+    for (;;) {
+        if (x == b.x && y == b.y) return true;
+        int e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x += sx; }
+        if (e2 <= dx) { err += dx; y += sy; }
+        if (x == b.x && y == b.y) return true;
+        if (!tile_transparent(at(Vec2(x, y)))) return false;
+    }
+}
+
 const MapExit* Location::exit_at(Vec2 p) const {
     for (const MapExit& e : exits)
         if (e.pos == p) return &e;
@@ -28,6 +50,18 @@ const MapNpc* Location::npc_at(Vec2 p) const {
     for (const MapNpc& n : npcs)
         if (n.pos == p) return &n;
     return nullptr;
+}
+
+int Location::note_index_at(Vec2 p) const {
+    for (std::size_t i = 0; i < notes.size(); ++i)
+        if (notes[i].pos == p) return static_cast<int>(i);
+    return -1;
+}
+
+int Location::chest_index_at(Vec2 p) const {
+    for (std::size_t i = 0; i < chests.size(); ++i)
+        if (chests[i].pos == p) return static_cast<int>(i);
+    return -1;
 }
 
 int Location::item_index_at(Vec2 p) const {
@@ -137,6 +171,30 @@ bool World::parse(std::istream& in, const std::string& id, const std::string& sr
             if (!(ls >> z.pos.x >> z.pos.y >> z.enemy_id >> z.max_count >> z.radius))
                 return fail("spawn <x> <y> <враг> <макс> <радиус>");
             loc.zones.push_back(z);
+
+        } else if (key == "chest") {
+            // chest <x> <y> <золото> <ключ|-> [предмет:количество ...]
+            MapChest ch;
+            std::string keyname;
+            if (!(ls >> ch.pos.x >> ch.pos.y >> ch.gold >> keyname))
+                return fail("chest <x> <y> <золото> <ключ|-> [предмет:кол-во ...]");
+            if (keyname != "-") ch.key = keyname;
+            std::string entry;
+            while (ls >> entry) {
+                std::size_t colon = entry.find(':');
+                if (colon == std::string::npos)
+                    return fail("содержимое сундука пишется как предмет:количество");
+                int n = to_int(entry.substr(colon + 1), 0);
+                if (n <= 0) return fail("количество в сундуке должно быть больше нуля");
+                ch.items.push_back(ItemStack(entry.substr(0, colon), n));
+            }
+            loc.chests.push_back(ch);
+
+        } else if (key == "note") {
+            MapNote nt;
+            if (!(ls >> nt.pos.x >> nt.pos.y >> nt.note_id))
+                return fail("note <x> <y> <код записки>");
+            loc.notes.push_back(nt);
 
         } else if (key == "bed") {
             Vec2 b;

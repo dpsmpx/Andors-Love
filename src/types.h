@@ -34,8 +34,29 @@ enum class Tile : unsigned char {
     Count
 };
 
+// Символы карты собраны здесь. В текстовом режиме их приходится экономить:
+// уникальный знак на каждого моба и NPC не масштабируется, когда контента
+// становится много. Поэтому все враги рисуются одним символом, все NPC —
+// другим; различать их предстоит будущему графическому режиму, а пока —
+// по имени в диалоге и в бою.
+namespace glyph {
+constexpr char PLAYER = '@';
+constexpr char NPC    = 'N';   // любой житель, с которым можно говорить
+constexpr char MOB    = 'X';   // любой враг
+constexpr char EXIT   = '>';
+constexpr char SIGN   = '!';
+constexpr char ITEM   = '*';
+constexpr char BED    = '&';
+constexpr char CHEST  = 'C';   // сундук
+constexpr char PORTAL = 'O';   // портал, поставленный игроком
+constexpr char NOTE   = '?';   // записка, лежащая в мире
+} // namespace glyph
+
 char tile_glyph(Tile t);
 bool tile_walkable(Tile t);
+// Пропускает ли тайл взгляд. Через воду видно, сквозь стену и дерево — нет,
+// поэтому прозрачность и проходимость — разные вещи.
+bool tile_transparent(Tile t);
 Tile tile_from_char(char c);
 
 // ---------- характеристики ----------
@@ -65,7 +86,7 @@ inline Stats operator+(Stats a, const Stats& b) { a += b; return a; }
 
 // ---------- предметы ----------
 
-enum class ItemKind { Misc, Weapon, Armor, Helmet, Shield, Ring, Consumable };
+enum class ItemKind { Misc, Weapon, Armor, Helmet, Shield, Ring, Consumable, Book };
 
 enum class Slot { Weapon = 0, Armor, Helmet, Shield, Ring, Count };
 
@@ -82,7 +103,31 @@ struct ItemDef {
     Stats       bonus;          // для снаряжения
     int         heal_hp = 0;    // для расходников
     int         heal_ap = 0;
+    std::string effect;         // накладываемый эффект
+    int         effect_turns = 0;
+    int         effect_power = 1;
+    std::string cures;          // снимаемый эффект; "*" — все вредные
     std::string desc;
+};
+
+// ---------- эффекты ----------
+// Эффект либо тикает здоровьем каждый ход, либо подмешивает свои
+// характеристики в боевые. Сила эффекта — множитель: яд силы 3 снимает втрое
+// больше, чем силы 1.
+
+enum class EffectKind {
+    Damage,   // урон каждый ход (яд, кровотечение, горение)
+    Heal,     // лечение каждый ход (регенерация)
+    Stat      // модификатор боевых характеристик
+};
+
+// Наложенный эффект: у кого он висит, знает владелец списка.
+struct ActiveEffect {
+    std::string id;
+    int         turns = 0;   // осталось ходов
+    int         power = 1;   // сила
+    ActiveEffect() = default;
+    ActiveEffect(const std::string& i, int t, int p) : id(i), turns(t), power(p) {}
 };
 
 // Стопка предметов в инвентаре.
@@ -91,6 +136,34 @@ struct ItemStack {
     int         count = 0;
     ItemStack() = default;
     ItemStack(const std::string& i, int c) : id(i), count(c) {}
+};
+
+// ---------- книги и записки ----------
+// Книга живёт не в сумке, а в библиотеке героя: у каждой свой текст, а сумка
+// хранит стопки одинаковых предметов и такого не выдержала бы. Найденные
+// записки попадают туда же, но только для чтения.
+
+struct Book {
+    std::string              id;
+    std::string              title;
+    std::vector<std::string> lines;
+    bool                     readonly = false;
+};
+
+constexpr int BOOK_MAX_COUNT = 24;   // книг в библиотеке
+constexpr int BOOK_MAX_LINES = 40;   // строк в книге
+constexpr int BOOK_MAX_CHARS = 56;   // видимых символов в строке
+constexpr int BOOK_TITLE_MAX = 28;
+
+// ---------- порталы ----------
+// Игрок ставит их сам, получив соответствующий навык. Шаг на портал
+// переносит к следующему в списке — с двумя это двусторонняя связка.
+
+struct Portal {
+    std::string loc;
+    Vec2        pos;
+    Portal() = default;
+    Portal(const std::string& l, Vec2 p) : loc(l), pos(p) {}
 };
 
 // ---------- стойки ----------

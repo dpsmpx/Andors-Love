@@ -23,13 +23,27 @@ int choose(const std::string& title, const std::vector<std::string>& items,
 // Ввод строки в raw-режиме (работает и с перенаправленным вводом).
 std::string read_line(const std::string& prompt, const std::string& def);
 
+// Правка одной строки с предзаполнением. Enter — принять. Возвращает false,
+// если правка отменена. Никаких управляющих клавиш: на экранной клавиатуре
+// Android доступны только буквы, цифры, Enter и Backspace.
+bool edit_line(const std::string& title, const std::string& hint,
+               std::string* text, std::size_t max_len);
+
 void message_box(const std::string& title, const std::string& body);
+
+// Создание героя: имя, раса, специализация. false — игрок отменил.
+bool screen_create_hero(std::string* name, std::string* race, std::string* spec);
 
 // Экраны героя.
 void screen_character(Game& g);
 void screen_inventory(Game& g);
 void screen_quests(Game& g);
 void screen_skills(Game& g);
+void screen_effects(Game& g);
+void screen_enchant(Game& g);
+void screen_portals(Game& g);
+void screen_library(Game& g);
+void screen_book(Game& g, const std::string& book_id);
 
 // Диалог с NPC; при выборе торговли откроет магазин.
 void run_dialogue(Game& g, const std::string& npc_id);

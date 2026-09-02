@@ -31,7 +31,7 @@ bool dir_writable(const std::string& dir) {
     return true;
 }
 
-std::string find_save_dir() {
+std::string find_save_dir(const char* argv0) {
     if (const char* env = std::getenv("ANDORS_LOVE_SAVE"))
         if (dir_writable(env)) return env;
 
@@ -39,6 +39,14 @@ std::string find_save_dir() {
 
     if (const char* home = std::getenv("HOME")) {
         const std::string d = std::string(home) + "/.andors-love";
+        if (dir_writable(d)) return d;
+    }
+    // Рядом с самим бинарником. Внутри APK это приватный каталог приложения —
+    // он доступен для записи, тогда как рабочий каталог может быть любым,
+    // а HOME и TMPDIR вообще не заданы.
+    const std::string exe = platform::exe_dir(argv0);
+    if (!exe.empty()) {
+        const std::string d = exe + "/saves";
         if (dir_writable(d)) return d;
     }
     if (const char* tmp = std::getenv("TMPDIR")) {
@@ -101,6 +109,9 @@ void play(Game& g) {
             case 'i': case 'I': ui::screen_inventory(g); continue;
             case 'q': case 'Q': ui::screen_quests(g);    continue;
             case 'k': case 'K': ui::screen_skills(g);    continue;
+            case 'f': case 'F': ui::screen_effects(g);   continue;
+            case 'p': case 'P': ui::screen_portals(g);   continue;
+            case 'b': case 'B': ui::screen_library(g);   continue;
             case '?':           ui::help_screen();       continue;
 
             case '1': g.combat_set_stance(Stance::Cautious);
@@ -110,6 +121,9 @@ void play(Game& g) {
             case '3': g.combat_set_stance(Stance::Fierce);
                       g.msg("Стойка: яростная.");   continue;
 
+            // Меню открывается и буквой: на экранной клавиатуре Android
+            // Escape набирается сочетанием клавиш, требовать его неудобно.
+            case 'm': case 'M':
             case platform::KEY_ESC: {
                 std::vector<std::string> opts{"Вернуться в игру", "Сохранить игру",
                                               "Загрузить сохранение",
@@ -150,6 +164,7 @@ void play(Game& g) {
                 continue;
             }
             case Bump::Blocked:
+            case Bump::Chest:            // сундук открывается на месте, шага нет
                 continue;
             case Bump::Combat:
                 continue;                       // бой обработается в начале цикла
@@ -166,7 +181,7 @@ int main(int argc, char** argv) {
     platform::RawMode raw;
     platform::hide_cursor();
 
-    g_save_dir  = find_save_dir();
+    g_save_dir  = find_save_dir(argc > 0 ? argv[0] : nullptr);
     g_save_file = g_save_dir + "/hero.sav";
 
     Game g(find_data_root(argc > 0 ? argv[0] : nullptr));
@@ -180,8 +195,9 @@ int main(int argc, char** argv) {
         // Каждый пункт обрабатывается ровно один раз: «Справка» показывает
         // справку, «Выход» выходит.
         if (sel == 0) {
-            std::string name = ui::read_line("Как тебя звать?", "Странник");
-            g.new_game(name);
+            std::string name, race, spec;
+            if (!ui::screen_create_hero(&name, &race, &spec)) continue;
+            g.new_game(name, race, spec);
             if (!g.here()) {
                 ui::message_box("Не удалось начать игру",
                                 "  " + g.world().last_error() + "\n\n"
