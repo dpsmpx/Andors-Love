@@ -60,6 +60,8 @@ struct NpcDef {
 struct Drop {
     std::string item;
     int         percent = 0;
+    Drop() = default;
+    Drop(const std::string& i, int p) : item(i), percent(p) {}
 };
 
 struct EnemyDef {
@@ -92,6 +94,8 @@ struct ShopDef {
 struct QuestStageDef {
     int         stage = 0;
     std::string text;
+    QuestStageDef() = default;
+    QuestStageDef(int s, const std::string& t) : stage(s), text(t) {}
 };
 
 struct QuestDef {

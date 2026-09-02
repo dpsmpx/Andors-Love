@@ -8,14 +8,45 @@
 namespace ui {
 namespace {
 
-constexpr int VIEW_W = 48;
-constexpr int VIEW_H = 18;
-constexpr int PANEL  = 30;
+int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+// Раскладка экрана считается заново перед каждой отрисовкой: на настольном
+// терминале панель героя стоит справа от карты, на узком экране телефона она
+// уезжает под карту, а окно обзора сжимается. Иначе 88 колонок игрового
+// экрана сворачивались бы переносами в нечитаемую кашу.
+struct Layout {
+    int  cols = 80;
+    int  rows = 24;
+    int  view_w = 48;
+    int  view_h = 18;
+    bool side = true;    // панель сбоку, а не снизу
+    int  rule = 60;      // ширина разделительных линий
+    int  bar  = 12;      // длина полосок HP/AP
+};
+
+Layout layout() {
+    Layout L;
+    platform::term_size(&L.cols, &L.rows);
+    // Панель сбоку требует 48 карты + рамка + ~30 панели.
+    L.side = (L.cols >= 80 && L.rows >= 24);
+    if (L.side) {
+        L.view_w = 48;
+        L.view_h = 18;
+        L.bar    = 12;
+    } else {
+        L.view_w = clampi(L.cols - 2, 20, 48);
+        // Место под заголовок, рамки, компактную панель и журнал.
+        L.view_h = clampi(L.rows - 12, 8, 18);
+        L.bar    = clampi(L.cols / 4, 6, 12);
+    }
+    L.rule = clampi(L.cols - 1, 20, 64);
+    return L;
+}
 
 std::string bar(int cur, int max, int width, char full = '#', char empty = '.') {
+    if (width < 1) width = 1;
     if (max <= 0) return std::string(static_cast<std::size_t>(width), empty);
-    if (cur < 0) cur = 0;
-    if (cur > max) cur = max;
+    cur = clampi(cur, 0, max);
     int n = cur * width / max;
     if (n == 0 && cur > 0) n = 1;               // остаток здоровья всегда виден
     return std::string(static_cast<std::size_t>(n), full) +
@@ -23,36 +54,33 @@ std::string bar(int cur, int max, int width, char full = '#', char empty = '.') 
 }
 
 void out(const std::string& s) { std::cout << s << '\n'; }
+void rule(int w) { out(std::string(static_cast<std::size_t>(w), '-')); }
 
-std::string frame_top(int w)    { return "+" + std::string(static_cast<std::size_t>(w), '-') + "+"; }
-
-// Строит один кадр карты: слои пишутся по порядку из README —
-// тайл, койка, переход, табличка, предмет, моб, NPC, игрок.
-std::vector<std::string> render_map(Game& g, const Location& loc) {
-    int ox = g.player().pos.x - VIEW_W / 2;
-    int oy = g.player().pos.y - VIEW_H / 2;
-    ox = std::max(0, std::min(ox, std::max(0, loc.w - VIEW_W)));
-    oy = std::max(0, std::min(oy, std::max(0, loc.h - VIEW_H)));
+// Кадр карты. Слои пишутся в порядке из дизайн-документа: тайл, койка,
+// переход, табличка, предмет, моб, NPC, игрок.
+std::vector<std::string> render_map(Game& g, const Location& loc, int vw, int vh) {
+    int ox = g.player().pos.x - vw / 2;
+    int oy = g.player().pos.y - vh / 2;
+    ox = std::max(0, std::min(ox, std::max(0, loc.w - vw)));
+    oy = std::max(0, std::min(oy, std::max(0, loc.h - vh)));
 
     std::vector<std::string> rows;
-    for (int y = 0; y < VIEW_H; ++y) {
+    for (int y = 0; y < vh; ++y) {
         std::string row;
-        for (int x = 0; x < VIEW_W; ++x) {
+        for (int x = 0; x < vw; ++x) {
             Vec2 p{ox + x, oy + y};
             char ch = ' ';
             if (loc.in_bounds(p)) {
                 ch = tile_glyph(loc.at(p));
-                if (loc.bed_at(p))                       ch = '&';
-                if (loc.exit_at(p))                      ch = '>';
-                if (loc.sign_at(p))                      ch = '!';
+                if (loc.bed_at(p))  ch = '&';
+                if (loc.exit_at(p)) ch = '>';
+                if (loc.sign_at(p)) ch = '!';
                 int ii = loc.item_index_at(p);
                 if (ii >= 0 && !g.item_taken(loc.id, ii)) ch = '*';
-                if (const Mob* m = g.mob_at(p, g.player().loc)) {
+                if (const Mob* m = g.mob_at(p, g.player().loc))
                     if (const EnemyDef* e = Content::get().enemy(m->enemy_id)) ch = e->glyph;
-                }
-                if (const MapNpc* n = loc.npc_at(p)) {
+                if (const MapNpc* n = loc.npc_at(p))
                     if (const NpcDef* d = Content::get().npc(n->npc_id)) ch = d->glyph;
-                }
                 if (p == g.player().pos) ch = '@';
             }
             row += ch;
@@ -62,42 +90,63 @@ std::vector<std::string> render_map(Game& g, const Location& loc) {
     return rows;
 }
 
-std::vector<std::string> panel_lines(Game& g) {
+// Полная панель — для широкого экрана, столбцом справа от карты.
+std::vector<std::string> panel_wide(Game& g, const Layout& L) {
     const Player& p = g.player();
     Stats t = g.total();
-    std::vector<std::string> L;
+    std::vector<std::string> V;
 
-    L.push_back(p.name + ", ур." + to_str(p.level));
-    L.push_back("HP " + pad(to_str(p.hp) + "/" + to_str(t.max_hp), 8) + bar(p.hp, t.max_hp, 12));
-    L.push_back("AP " + pad(to_str(p.ap) + "/" + to_str(t.max_ap), 8) + bar(p.ap, t.max_ap, 12));
-    L.push_back("Опыт " + to_str(p.exp) + "/" + to_str(g.exp_to_next()));
-    L.push_back("Золото " + to_str(p.gold));
-    L.push_back("");
-    L.push_back("Стойка: " + std::string(stance_name(p.stance)));
-    L.push_back("Кураж:  " + bar(p.momentum, MOMENTUM_MAX, MOMENTUM_MAX, '*', '-') +
+    V.push_back(p.name + ", ур." + to_str(p.level));
+    V.push_back("HP " + pad(to_str(p.hp) + "/" + to_str(t.max_hp), 8) + bar(p.hp, t.max_hp, L.bar));
+    V.push_back("AP " + pad(to_str(p.ap) + "/" + to_str(t.max_ap), 8) + bar(p.ap, t.max_ap, L.bar));
+    V.push_back("Опыт " + to_str(p.exp) + "/" + to_str(g.exp_to_next()));
+    V.push_back("Золото " + to_str(p.gold));
+    V.push_back("");
+    V.push_back("Стойка: " + std::string(stance_name(p.stance)));
+    V.push_back("Кураж:  " + bar(p.momentum, MOMENTUM_MAX, MOMENTUM_MAX, '*', '-') +
                 " " + to_str(p.momentum) + "/" + to_str(MOMENTUM_MAX));
-    if (p.skill_points > 0)
-        L.push_back("Очков навыка: " + to_str(p.skill_points) + " (K)");
-    L.push_back("");
-    L.push_back("Урон " + to_str(t.dmg_min) + "-" + to_str(t.dmg_max) +
+    if (p.skill_points > 0) V.push_back("Очков навыка: " + to_str(p.skill_points) + " (K)");
+    V.push_back("");
+    V.push_back("Урон " + to_str(t.dmg_min) + "-" + to_str(t.dmg_max) +
                 "  меткость " + to_str(t.attack) + "%");
-    L.push_back("Блок " + to_str(t.block) + "%  броня " + to_str(t.armor) +
+    V.push_back("Блок " + to_str(t.block) + "%  броня " + to_str(t.armor) +
                 "  крит " + to_str(t.crit) + "%");
-    L.push_back("");
-    L.push_back("--- снаряжение ---");
+    V.push_back("");
+    V.push_back("--- снаряжение ---");
     for (int i = 0; i < static_cast<int>(Slot::Count); ++i) {
         const std::string& id = p.equipped[static_cast<std::size_t>(i)];
         std::string nm = "—";
         if (!id.empty())
             if (const ItemDef* d = Content::get().item(id)) nm = d->name;
-        L.push_back(pad(slot_name(static_cast<Slot>(i)), 8) + trunc(nm, PANEL - 9));
+        V.push_back(pad(slot_name(static_cast<Slot>(i)), 8) + trunc(nm, 20));
     }
-    return L;
+    return V;
+}
+
+// Сжатая панель — для телефона, тремя строками под картой.
+std::vector<std::string> panel_narrow(Game& g, const Layout& L) {
+    const Player& p = g.player();
+    Stats t = g.total();
+    std::vector<std::string> V;
+
+    V.push_back(trunc(p.name, 12) + " ур." + to_str(p.level) +
+                "  HP " + to_str(p.hp) + "/" + to_str(t.max_hp) +
+                " " + bar(p.hp, t.max_hp, L.bar));
+    V.push_back("AP " + to_str(p.ap) + "/" + to_str(t.max_ap) +
+                "  Оп " + to_str(p.exp) + "/" + to_str(g.exp_to_next()) +
+                "  Зол " + to_str(p.gold) +
+                (p.skill_points > 0 ? "  +" + to_str(p.skill_points) + " нав.(K)" : ""));
+    V.push_back(std::string(stance_name(p.stance)) +
+                "  Кураж " + bar(p.momentum, MOMENTUM_MAX, MOMENTUM_MAX, '*', '-') +
+                "  Ур " + to_str(t.dmg_min) + "-" + to_str(t.dmg_max) +
+                " Мет " + to_str(t.attack) + "% Бр " + to_str(t.armor));
+    return V;
 }
 
 } // namespace
 
 void draw_world(Game& g) {
+    const Layout L = layout();
     const Location* loc = g.here();
     platform::clear_screen();
     if (!loc) {
@@ -105,38 +154,54 @@ void draw_world(Game& g) {
         return;
     }
 
-    std::vector<std::string> map = render_map(g, *loc);
-    std::vector<std::string> pan = panel_lines(g);
+    std::vector<std::string> map = render_map(g, *loc, L.view_w, L.view_h);
+    const std::string border = "+" + std::string(static_cast<std::size_t>(L.view_w), '-') + "+";
 
-    out(loc->name + "  ·  ход " + to_str(g.turn()) +
-        "  ·  [?] справка  [C] герой  [I] сумка  [Q] квесты  [K] навыки");
-    out(frame_top(VIEW_W));
-    for (std::size_t i = 0; i < map.size(); ++i) {
-        std::string right = (i < pan.size()) ? pan[i] : std::string();
-        out("|" + map[i] + "|  " + right);
+    if (L.side) {
+        std::string head = loc->name + "  ·  ход " + to_str(g.turn()) + "  ·  ";
+        head += (L.cols >= 92) ? "[?] справка  [C] герой  [I] сумка  [Q] квесты  [K] навыки"
+                               : "[?]спр [C]герой [I]сумка [Q]квест [K]нав";
+        out(trunc(head, static_cast<std::size_t>(L.cols)));
+        std::vector<std::string> pan = panel_wide(g, L);
+        out(border);
+        for (std::size_t i = 0; i < map.size(); ++i)
+            out("|" + map[i] + "|  " + (i < pan.size() ? pan[i] : std::string()));
+        out(border);
+    } else {
+        out(trunc(loc->name, static_cast<std::size_t>(L.cols) - 12) + " · ход " + to_str(g.turn()));
+        out(border);
+        for (const std::string& r : map) out("|" + r + "|");
+        out(border);
+        for (const std::string& r : panel_narrow(g, L)) out(trunc(r, static_cast<std::size_t>(L.cols)));
+        out(trunc(L.cols >= 42 ? "[?]спр [C]герой [I]сумка [Q]квест [K]нав"
+                               : "[?] [C]герой [I]сумка [Q]квест [K]нав",
+                  static_cast<std::size_t>(L.cols)));
     }
-    out(frame_top(VIEW_W));
 
     const std::vector<std::string>& lg = g.log();
-    std::size_t from = lg.size() > 4 ? lg.size() - 4 : 0;
-    for (std::size_t i = from; i < lg.size(); ++i) out("  " + lg[i]);
-    for (std::size_t i = lg.size() - from; i < 4; ++i) out("");
+    const std::size_t show = L.side ? 4 : 3;
+    std::size_t from = lg.size() > show ? lg.size() - show : 0;
+    for (std::size_t i = from; i < lg.size(); ++i)
+        out("  " + trunc(lg[i], static_cast<std::size_t>(L.cols) - 2));
+    for (std::size_t i = lg.size() - from; i < show; ++i) out("");
     std::cout.flush();
 }
 
 int choose(const std::string& title, const std::vector<std::string>& items,
            const std::string& footer, const std::vector<int>& hotkeys, int* hotkey_out) {
-    if (items.empty()) return -1;
+    if (items.empty()) return CHOOSE_CANCEL;
     int sel = 0;
     for (;;) {
+        const Layout L = layout();
         platform::clear_screen();
-        out(title);
-        out(std::string(60, '-'));
+        for (const std::string& t : wrap(title, static_cast<std::size_t>(L.cols))) out(t);
+        rule(L.rule);
         for (std::size_t i = 0; i < items.size(); ++i)
-            out((static_cast<int>(i) == sel ? " > " : "   ") + items[i]);
-        out(std::string(60, '-'));
-        out(footer.empty() ? "  Стрелки/WS — выбор, Enter/пробел — принять, Esc — назад"
-                           : footer);
+            out((static_cast<int>(i) == sel ? " > " : "   ") +
+                trunc(items[i], static_cast<std::size_t>(L.cols) - 4));
+        rule(L.rule);
+        out(trunc(footer.empty() ? "  ^v выбор · Enter принять · Esc назад" : footer,
+                  static_cast<std::size_t>(L.cols)));
         std::cout.flush();
 
         int k = platform::read_key();
@@ -146,13 +211,14 @@ int choose(const std::string& title, const std::vector<std::string>& items,
             return CHOOSE_HOTKEY;
         }
         switch (k) {
-            case platform::KEY_UP:   case 'w': case 'W': sel = (sel + static_cast<int>(items.size()) - 1) % static_cast<int>(items.size()); break;
-            case platform::KEY_DOWN: case 's': case 'S': sel = (sel + 1) % static_cast<int>(items.size()); break;
+            case platform::KEY_UP:   case 'w': case 'W':
+                sel = (sel + static_cast<int>(items.size()) - 1) % static_cast<int>(items.size()); break;
+            case platform::KEY_DOWN: case 's': case 'S':
+                sel = (sel + 1) % static_cast<int>(items.size()); break;
             case platform::KEY_ENTER: case '\r': case platform::KEY_SPACE: return sel;
             case platform::KEY_EOF:
-            case platform::KEY_ESC: case 'q': case 'Q': return -1;
+            case platform::KEY_ESC: case 'q': case 'Q': return CHOOSE_CANCEL;
             default:
-                // Быстрый выбор цифрой 1..9.
                 if (k >= '1' && k <= '9') {
                     int idx = k - '1';
                     if (idx < static_cast<int>(items.size())) return idx;
@@ -165,18 +231,21 @@ int choose(const std::string& title, const std::vector<std::string>& items,
 std::string read_line(const std::string& prompt, const std::string& def) {
     std::string buf;
     for (;;) {
+        const Layout L = layout();
+        const std::size_t w = static_cast<std::size_t>(L.cols);
         platform::clear_screen();
-        out(prompt);
+        for (const std::string& t : wrap(prompt, w)) out(t);
         out("");
-        out("  " + (buf.empty() ? def + "  (по умолчанию)" : buf) + "_");
+        out(trunc("  " + (buf.empty() ? def + "  (по умолчанию)" : buf) + "_", w));
         out("");
-        out("  Enter — принять, Esc — по умолчанию");
+        out(trunc(L.cols >= 40 ? "  Enter — принять, Esc — по умолчанию"
+                               : "  Enter — ок, Esc — по умолч.", w));
         std::cout.flush();
 
         int k = platform::read_key();
         if (k == platform::KEY_ENTER || k == '\r') break;
         if (k == platform::KEY_ESC || k == platform::KEY_EOF) { buf.clear(); break; }
-        if (k == 127 || k == 8) {                       // backspace
+        if (k == 127 || k == 8) {
             // Срезаем целый UTF-8 символ, а не байт.
             while (!buf.empty() && (static_cast<unsigned char>(buf.back()) & 0xC0) == 0x80)
                 buf.pop_back();
@@ -189,11 +258,12 @@ std::string read_line(const std::string& prompt, const std::string& def) {
 }
 
 void message_box(const std::string& title, const std::string& body) {
+    const Layout L = layout();
     platform::clear_screen();
-    out(title);
-    out(std::string(60, '-'));
-    out(body);
-    out(std::string(60, '-'));
+    for (const std::string& t : wrap(title, static_cast<std::size_t>(L.cols))) out(t);
+    rule(L.rule);
+    for (const std::string& t : wrap(body, static_cast<std::size_t>(L.cols))) out(t);
+    rule(L.rule);
     out("  Любая клавиша — далее");
     std::cout.flush();
     platform::read_key();
@@ -230,7 +300,7 @@ void screen_character(Game& g) {
     s += "  " + p.name + ", уровень " + to_str(p.level) + "\n";
     s += "  Опыт: " + to_str(p.exp) + " / " + to_str(g.exp_to_next()) + "\n";
     s += "  Золото: " + to_str(p.gold) + "\n\n";
-    s += "  Здоровье     " + to_str(p.hp) + " / " + to_str(t.max_hp) + "\n";
+    s += "  Здоровье      " + to_str(p.hp) + " / " + to_str(t.max_hp) + "\n";
     s += "  Очки действия " + to_str(p.ap) + " / " + to_str(t.max_ap) + "\n";
     s += "  Урон          " + to_str(t.dmg_min) + " - " + to_str(t.dmg_max) + "\n";
     s += "  Меткость      " + to_str(t.attack) + "%\n";
@@ -238,9 +308,9 @@ void screen_character(Game& g) {
     s += "  Броня         " + to_str(t.armor) + "\n";
     s += "  Крит          " + to_str(t.crit) + "%\n";
     s += "  Атака стоит   " + to_str(g.attack_cost()) + " AP\n\n";
-    s += "  Стойка: " + std::string(stance_name(p.stance)) + " (" +
-         stance_hint(p.stance) + ")\n";
-    s += "  Без учёта стойки: меткость " + to_str(nb.attack) + "%, блок " +
+    s += "  Стойка: " + std::string(stance_name(p.stance)) + "\n";
+    s += "  (" + std::string(stance_hint(p.stance)) + ")\n";
+    s += "  Без стойки: мет " + to_str(nb.attack) + "%, блок " +
          to_str(nb.block) + "%, броня " + to_str(nb.armor) + "\n\n";
     s += "  Навыки:\n";
     bool any = false;
@@ -257,7 +327,10 @@ void screen_character(Game& g) {
 
 void screen_inventory(Game& g) {
     for (;;) {
+        const Layout L = layout();
         const Player& p = g.player();
+        const std::size_t namew = L.side ? 24 : 16;
+
         std::vector<std::string> rows;
         std::vector<std::string> ids;
 
@@ -265,15 +338,12 @@ void screen_inventory(Game& g) {
             const std::string& id = p.equipped[static_cast<std::size_t>(i)];
             if (id.empty()) continue;
             const ItemDef* d = Content::get().item(id);
-            rows.push_back("[надето] " + pad(slot_name(static_cast<Slot>(i)), 8) +
-                           (d ? d->name : id));
+            rows.push_back("[надето] " + (d ? d->name : id));
             ids.push_back("!" + to_str(i));           // '!' — маркер снятия
         }
         for (const ItemStack& st : p.inv) {
             const ItemDef* d = Content::get().item(st.id);
-            std::string nm = d ? d->name : st.id;
-            rows.push_back(pad(nm, 24) + " x" + pad(to_str(st.count), 4) +
-                           (d ? std::string(kind_name(d->kind)) : ""));
+            rows.push_back(pad(d ? d->name : st.id, namew) + " x" + to_str(st.count));
             ids.push_back(st.id);
         }
         if (rows.empty()) { message_box("Сумка", "  Пусто."); return; }
@@ -283,10 +353,7 @@ void screen_inventory(Game& g) {
         if (sel < 0) return;
 
         const std::string& key = ids[static_cast<std::size_t>(sel)];
-        if (key[0] == '!') {
-            g.unequip(static_cast<Slot>(to_int(key.substr(1))));
-            continue;
-        }
+        if (key[0] == '!') { g.unequip(static_cast<Slot>(to_int(key.substr(1)))); continue; }
 
         const ItemDef* d = Content::get().item(key);
         if (!d) continue;
@@ -356,18 +423,20 @@ void screen_quests(Game& g) {
 
 void screen_skills(Game& g) {
     for (;;) {
+        const Layout L = layout();
         const Content& c = Content::get();
         std::vector<std::string> rows;
         std::vector<std::string> ids;
         for (const SkillDef& s : c.skills()) {
             auto it = g.player().skills.find(s.id);
             int rank = (it == g.player().skills.end()) ? 0 : it->second;
-            rows.push_back(pad(s.name, 12) + pad(to_str(rank) + "/" + to_str(s.max_rank), 8) +
-                           s.desc);
+            std::string row = pad(s.name, 10) + to_str(rank) + "/" + to_str(s.max_rank);
+            if (L.side) row += "  " + s.desc;
+            rows.push_back(row);
             ids.push_back(s.id);
         }
         int pts = g.player().skill_points;
-        int sel = choose("Навыки · свободных очков: " + to_str(pts), rows,
+        int sel = choose("Навыки · очков: " + to_str(pts), rows,
                          pts > 0 ? "  Enter — вложить очко, Esc — назад"
                                  : "  Очков нет. Esc — назад");
         if (sel < 0) return;
@@ -384,7 +453,10 @@ void run_shop(Game& g, const std::string& shop_id) {
     bool buying = true;
 
     for (;;) {
+        const Layout L = layout();
         const Content& c = Content::get();
+        const std::size_t namew = L.side ? 24 : 16;
+
         std::vector<std::string> rows;
         std::vector<std::string> ids;
 
@@ -392,31 +464,31 @@ void run_shop(Game& g, const std::string& shop_id) {
             for (const std::string& gid : shop->goods) {
                 const ItemDef* d = c.item(gid);
                 if (!d) continue;
-                rows.push_back(pad(d->name, 24) + pad(kind_name(d->kind), 12) +
-                               to_str(g.buy_price(*shop, *d)) + " зол.");
+                rows.push_back(pad(d->name, namew) + pad(to_str(g.buy_price(*shop, *d)), 5) + "зол.");
                 ids.push_back(gid);
             }
         } else {
             for (const ItemStack& st : g.player().inv) {
                 const ItemDef* d = c.item(st.id);
                 if (!d || d->price <= 0) continue;   // квестовое не продаётся
-                rows.push_back(pad(d->name, 24) + pad("x" + to_str(st.count), 12) +
-                               to_str(g.sell_price(*shop, *d)) + " зол.");
+                rows.push_back(pad(d->name, namew) + pad("x" + to_str(st.count), 5) +
+                               to_str(g.sell_price(*shop, *d)) + "зол.");
                 ids.push_back(st.id);
             }
         }
         if (rows.empty()) rows.push_back(buying ? "(товар кончился)" : "(продавать нечего)");
 
-        std::string title = shop->name + " · " + (buying ? "ПОКУПКА" : "ПРОДАЖА") +
+        std::string title = (L.side ? shop->name + " · " : "") +
+                            std::string(buying ? "ПОКУПКА" : "ПРОДАЖА") +
                             " · золото: " + to_str(g.player().gold);
         int hk = 0;
         int sel = choose(title, rows,
-                         "  ↑↓ выбор · Enter — сделка · ←→ или T — купить/продать · Esc — уйти",
+                         L.side ? "  ^v выбор · Enter сделка · <> или T — купить/продать · Esc уйти"
+                                : "  Enter сделка · T купить/продать · Esc",
                          {'t', 'T', platform::KEY_LEFT, platform::KEY_RIGHT}, &hk);
         if (sel == CHOOSE_HOTKEY) { buying = !buying; continue; }
         if (sel < 0) return;
-        if (ids.empty()) continue;
-        if (sel >= static_cast<int>(ids.size())) continue;
+        if (ids.empty() || sel >= static_cast<int>(ids.size())) continue;
 
         if (buying) g.buy(*shop, ids[static_cast<std::size_t>(sel)]);
         else        g.sell(*shop, ids[static_cast<std::size_t>(sel)]);
@@ -443,7 +515,7 @@ void run_dialogue(Game& g, const std::string& npc_id) {
         if (rows.empty()) return;
 
         int sel = choose(npc->name + "\n\n" + node->text + "\n", rows,
-                         "  Стрелки — выбор, Enter — сказать, Esc — уйти");
+                         "  ^v выбор · Enter сказать · Esc уйти");
         if (sel < 0) return;
 
         const DlgOption* o = opts[static_cast<std::size_t>(sel)];
@@ -458,38 +530,64 @@ void run_dialogue(Game& g, const std::string& npc_id) {
 
 void run_combat(Game& g) {
     while (g.combat().active) {
+        const Layout L = layout();
         const Mob* m = g.mob_by_uid(g.combat().mob_uid);
         const EnemyDef* e = m ? Content::get().enemy(m->enemy_id) : nullptr;
         if (!e) break;
 
+        const Player& p = g.player();
         Stats t = g.total();
+        const int hb = L.side ? 20 : L.bar;
+
         platform::clear_screen();
         out("=== БОЙ ===");
-        out("");
-        out("  " + pad(e->name, 24) + "HP " + pad(to_str(g.combat().enemy_hp) + "/" +
-            to_str(e->stats.max_hp), 10) + bar(g.combat().enemy_hp, e->stats.max_hp, 20));
-        out("  " + pad("меткость " + to_str(e->stats.attack) + "%", 24) +
-            "блок " + to_str(e->stats.block) + "%  броня " + to_str(e->stats.armor));
-        out("");
-        out(std::string(64, '-'));
-        out("  " + pad(g.player().name, 24) + "HP " + pad(to_str(g.player().hp) + "/" +
-            to_str(t.max_hp), 10) + bar(g.player().hp, t.max_hp, 20));
-        out("  " + pad("AP " + to_str(g.player().ap) + "/" + to_str(t.max_ap), 24) +
-            "Кураж " + bar(g.player().momentum, MOMENTUM_MAX, MOMENTUM_MAX, '*', '-') +
-            " " + to_str(g.player().momentum) + "/" + to_str(MOMENTUM_MAX));
-        out("  " + pad("Стойка: " + std::string(stance_name(g.player().stance)), 24) +
-            stance_hint(g.player().stance));
-        out(std::string(64, '-'));
+        if (L.side) {
+            out("");
+            out("  " + pad(e->name, 24) + "HP " +
+                pad(to_str(g.combat().enemy_hp) + "/" + to_str(e->stats.max_hp), 10) +
+                bar(g.combat().enemy_hp, e->stats.max_hp, hb));
+            out("  " + pad("меткость " + to_str(e->stats.attack) + "%", 24) +
+                "блок " + to_str(e->stats.block) + "%  броня " + to_str(e->stats.armor));
+            out("");
+            rule(L.rule);
+            out("  " + pad(p.name, 24) + "HP " +
+                pad(to_str(p.hp) + "/" + to_str(t.max_hp), 10) + bar(p.hp, t.max_hp, hb));
+            out("  " + pad("AP " + to_str(p.ap) + "/" + to_str(t.max_ap), 24) +
+                "Кураж " + bar(p.momentum, MOMENTUM_MAX, MOMENTUM_MAX, '*', '-') +
+                " " + to_str(p.momentum) + "/" + to_str(MOMENTUM_MAX));
+            out("  " + pad("Стойка: " + std::string(stance_name(p.stance)), 24) +
+                stance_hint(p.stance));
+        } else {
+            out(trunc(e->name, static_cast<std::size_t>(L.cols)));
+            out("HP " + pad(to_str(g.combat().enemy_hp) + "/" + to_str(e->stats.max_hp), 8) +
+                bar(g.combat().enemy_hp, e->stats.max_hp, hb));
+            out("мет " + to_str(e->stats.attack) + "% бл " + to_str(e->stats.block) +
+                "% бр " + to_str(e->stats.armor));
+            rule(L.rule);
+            out(trunc(p.name, static_cast<std::size_t>(L.cols)));
+            out("HP " + pad(to_str(p.hp) + "/" + to_str(t.max_hp), 8) + bar(p.hp, t.max_hp, hb));
+            out("AP " + to_str(p.ap) + "/" + to_str(t.max_ap) +
+                "  Кураж " + bar(p.momentum, MOMENTUM_MAX, MOMENTUM_MAX, '*', '-'));
+            out("Стойка: " + std::string(stance_name(p.stance)));
+        }
+        rule(L.rule);
 
         const std::vector<std::string>& lg = g.combat().log;
-        std::size_t from = lg.size() > 8 ? lg.size() - 8 : 0;
-        for (std::size_t i = from; i < lg.size(); ++i) out("  " + lg[i]);
-        for (std::size_t i = lg.size() - from; i < 8; ++i) out("");
+        const std::size_t show = L.side ? 8 : 5;
+        std::size_t from = lg.size() > show ? lg.size() - show : 0;
+        for (std::size_t i = from; i < lg.size(); ++i)
+            out("  " + trunc(lg[i], static_cast<std::size_t>(L.cols) - 2));
+        for (std::size_t i = lg.size() - from; i < show; ++i) out("");
 
         out("");
-        out("  [A] атака (" + to_str(g.attack_cost()) + " AP)   [P] мощный удар (кураж " +
-            to_str(MOMENTUM_COST) + ")   [U] предмет (" + to_str(AP_ITEM_COST) + " AP)");
-        out("  [1/2/3] стойка   [E] закончить ход   [F] бежать");
+        if (L.side) {
+            out("  [A] атака (" + to_str(g.attack_cost()) + " AP)   [P] мощный удар (кураж " +
+                to_str(MOMENTUM_COST) + ")   [U] предмет (" + to_str(AP_ITEM_COST) + " AP)");
+            out("  [1/2/3] стойка   [E] закончить ход   [F] бежать");
+        } else {
+            out("[A]атака " + to_str(g.attack_cost()) + "AP  [P]мощный " + to_str(MOMENTUM_COST));
+            out("[U]предмет [E]ход [F]бежать [1/2/3]стойка");
+        }
         std::cout.flush();
 
         int k = platform::read_key();
@@ -506,7 +604,7 @@ void run_combat(Game& g) {
                 for (const ItemStack& st : g.player().inv) {
                     const ItemDef* d = Content::get().item(st.id);
                     if (!d || d->kind != ItemKind::Consumable) continue;
-                    rows.push_back(pad(d->name, 24) + "x" + to_str(st.count));
+                    rows.push_back(pad(d->name, 20) + "x" + to_str(st.count));
                     ids.push_back(st.id);
                 }
                 if (rows.empty()) { message_box("Бой", "  Расходников нет."); break; }

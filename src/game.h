@@ -67,7 +67,7 @@ enum class Bump {
 
 class Game {
 public:
-    Game();
+    explicit Game(const std::string& data_root = "data/maps");
 
     // --- жизненный цикл ---
     void new_game(const std::string& name);

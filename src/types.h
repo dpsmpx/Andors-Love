@@ -7,6 +7,10 @@
 struct Vec2 {
     int x = 0;
     int y = 0;
+    Vec2() = default;
+    // Конструктор нужен ради C++11: поля с инициализаторами лишают структуру
+    // статуса агрегата, и запись Vec2{1, 2} без него не собирается.
+    Vec2(int nx, int ny) : x(nx), y(ny) {}
 };
 inline bool operator==(const Vec2& a, const Vec2& b) { return a.x == b.x && a.y == b.y; }
 
@@ -85,6 +89,8 @@ struct ItemDef {
 struct ItemStack {
     std::string id;
     int         count = 0;
+    ItemStack() = default;
+    ItemStack(const std::string& i, int c) : id(i), count(c) {}
 };
 
 // ---------- стойки ----------
@@ -111,6 +117,11 @@ std::string pad(const std::string& s, std::size_t width);
 std::string trunc(const std::string& s, std::size_t width);
 
 std::vector<std::string> split_ws(const std::string& s);
+
+// Переносит текст по словам на ширину width (в видимых символах), сохраняя
+// уже имеющиеся переводы строк. Без этого реплики NPC уезжали бы за край
+// узкого экрана.
+std::vector<std::string> wrap(const std::string& text, std::size_t width);
 std::string to_str(int v);
 
 // Русское склонение при числе: plural(1,"монета","монеты","монет") -> "монета".

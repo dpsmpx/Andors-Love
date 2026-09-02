@@ -8,7 +8,7 @@ int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
 } // namespace
 
-Game::Game() : world_("data/maps") {}
+Game::Game(const std::string& data_root) : world_(data_root) {}
 
 void Game::msg(const std::string& m) {
     log_.push_back(m);
