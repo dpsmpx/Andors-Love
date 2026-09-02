@@ -30,6 +30,12 @@ const MapNpc* Location::npc_at(Vec2 p) const {
     return nullptr;
 }
 
+int Location::chest_index_at(Vec2 p) const {
+    for (std::size_t i = 0; i < chests.size(); ++i)
+        if (chests[i].pos == p) return static_cast<int>(i);
+    return -1;
+}
+
 int Location::item_index_at(Vec2 p) const {
     for (std::size_t i = 0; i < items.size(); ++i)
         if (items[i].pos == p) return static_cast<int>(i);
@@ -137,6 +143,24 @@ bool World::parse(std::istream& in, const std::string& id, const std::string& sr
             if (!(ls >> z.pos.x >> z.pos.y >> z.enemy_id >> z.max_count >> z.radius))
                 return fail("spawn <x> <y> <враг> <макс> <радиус>");
             loc.zones.push_back(z);
+
+        } else if (key == "chest") {
+            // chest <x> <y> <золото> <ключ|-> [предмет:количество ...]
+            MapChest ch;
+            std::string keyname;
+            if (!(ls >> ch.pos.x >> ch.pos.y >> ch.gold >> keyname))
+                return fail("chest <x> <y> <золото> <ключ|-> [предмет:кол-во ...]");
+            if (keyname != "-") ch.key = keyname;
+            std::string entry;
+            while (ls >> entry) {
+                std::size_t colon = entry.find(':');
+                if (colon == std::string::npos)
+                    return fail("содержимое сундука пишется как предмет:количество");
+                int n = to_int(entry.substr(colon + 1), 0);
+                if (n <= 0) return fail("количество в сундуке должно быть больше нуля");
+                ch.items.push_back(ItemStack(entry.substr(0, colon), n));
+            }
+            loc.chests.push_back(ch);
 
         } else if (key == "bed") {
             Vec2 b;

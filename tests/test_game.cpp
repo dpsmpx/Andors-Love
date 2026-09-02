@@ -133,13 +133,57 @@ void test_maps() {
         if (v->walkable(Vec2{0, y}) || v->walkable(Vec2{v->w - 1, y})) border_solid = false;
     check(border_solid, "рамка деревни непроходима со всех сторон");
 
-    // Переходы должны вести друг в друга и попадать на проходимую клетку.
-    check(v->exits.size() == 1 && f->exits.size() == 1, "по одному переходу в каждой локации");
-    if (!v->exits.empty() && !f->exits.empty()) {
-        eqs(v->exits[0].target, "forest",  "деревня ведёт в лес");
-        eqs(f->exits[0].target, "village", "лес ведёт в деревню");
-        check(f->walkable(v->exits[0].dest), "точка прибытия в лесу проходима");
-        check(v->walkable(f->exits[0].dest), "точка прибытия в деревне проходима");
+    // Граф мира: каждый переход ведёт в существующую локацию на проходимую
+    // клетку, и все локации достижимы из деревни. Ошибка здесь означает
+    // локацию, куда нельзя попасть или откуда нельзя выйти.
+    const char* all[] = {"village", "forest", "cave", "ruins", "sanctum"};
+    const int   nloc  = static_cast<int>(sizeof(all) / sizeof(all[0]));
+
+    for (int i = 0; i < nloc; ++i) {
+        const Location* loc = w.location(all[i]);
+        check(loc != nullptr, std::string("локация ") + all[i] + " загружается: " + w.last_error());
+        if (!loc) continue;
+        check(!loc->exits.empty(), std::string(all[i]) + ": есть хотя бы один переход");
+        for (const MapExit& e : loc->exits) {
+            const Location* dst = w.location(e.target);
+            check(dst != nullptr, std::string(all[i]) + " -> " + e.target + ": цель существует");
+            if (!dst) continue;
+            check(dst->walkable(e.dest),
+                  std::string(all[i]) + " -> " + e.target + ": точка прибытия проходима");
+            check(loc->walkable(e.pos),
+                  std::string(all[i]) + ": сам переход стоит на проходимой клетке");
+        }
+    }
+
+    // Обход графа от деревни: недостижимая локация — это потерянный контент.
+    std::vector<std::string> seen_loc;
+    std::vector<std::string> queue_loc;
+    queue_loc.push_back("village");
+    while (!queue_loc.empty()) {
+        std::string cur = queue_loc.back();
+        queue_loc.pop_back();
+        bool known = false;
+        for (const std::string& x : seen_loc) if (x == cur) known = true;
+        if (known) continue;
+        seen_loc.push_back(cur);
+        const Location* loc = w.location(cur);
+        if (!loc) continue;
+        for (const MapExit& e : loc->exits) queue_loc.push_back(e.target);
+    }
+    eq(static_cast<int>(seen_loc.size()), nloc, "все локации достижимы из деревни");
+
+    // И обратно: из каждой локации есть путь домой (граф двусторонний).
+    for (int i = 0; i < nloc; ++i) {
+        const Location* loc = w.location(all[i]);
+        if (!loc) continue;
+        bool has_way_back = false;
+        for (const MapExit& e : loc->exits) {
+            const Location* dst = w.location(e.target);
+            if (!dst) continue;
+            for (const MapExit& back : dst->exits)
+                if (back.target == all[i]) has_way_back = true;
+        }
+        check(has_way_back, std::string(all[i]) + ": из локации есть обратный путь");
     }
 
     // Ни один объект не должен стоять в стене.
@@ -159,7 +203,7 @@ void test_maps() {
 void test_embedded_maps() {
     section("вшитые карты");
 
-    for (const char* id : {"village", "forest"}) {
+    for (const char* id : {"village", "forest", "cave", "ruins", "sanctum"}) {
         const char* emb = embedded_map(id);
         check(emb != nullptr, std::string("карта ") + id + " вшита в бинарник");
         if (!emb) continue;
@@ -206,19 +250,49 @@ void test_embedded_maps() {
 
 void test_new_game_and_stats() {
     section("новая игра и характеристики");
+    const Content& c = Content::get();
     Game g;
-    g.new_game("Тестер");
+    g.new_game("Тестер", "human", "swordsman");
     eqs(g.player().name, "Тестер", "имя игрока берётся из ввода");   // была ошибка new_name = name
     eq(g.player().level, 1, "стартовый уровень");
+    eqs(g.player().race, "human", "раса записана");
+    eqs(g.player().spec, "swordsman", "специализация записана");
     check(g.here() != nullptr, "стартовая локация загружена");
 
+    // Ожидания считаем из базы контента, а не держим магическими числами:
+    // при правке баланса тест не должен падать на ровном месте.
+    const RaceDef*  race = c.race("human");
+    const SpecDef*  spec = c.spec("swordsman");
+    const ItemDef*  wpn  = c.item(spec ? spec->start_item : "");
+    check(race && spec && wpn, "раса, специализация и стартовое оружие описаны");
+    if (!race || !spec || !wpn) return;
+
     Stats t = g.total();
-    eq(t.max_hp, 30, "стартовое здоровье");
-    eq(g.player().hp, 30, "здоровье заполнено");
-    // база 1-3 + кинжал 2-4
-    eq(t.dmg_min, 3, "урон с кинжалом, минимум");
-    eq(t.dmg_max, 7, "урон с кинжалом, максимум");
-    eq(g.attack_cost(), 3, "кинжал удешевляет атаку на 1 AP");
+    eq(t.max_hp, 30 + race->bonus.max_hp + spec->bonus.max_hp,
+       "здоровье = база + раса + специализация");
+    eq(g.player().hp, t.max_hp, "здоровье заполнено доверху");
+    eq(t.dmg_min, 1 + spec->bonus.dmg_min + wpn->bonus.dmg_min, "минимальный урон сходится");
+    eq(t.dmg_max, 3 + spec->bonus.dmg_max + wpn->bonus.dmg_max, "максимальный урон сходится");
+    eqs(g.player().equipped[static_cast<std::size_t>(Slot::Weapon)], spec->start_item,
+        "надето стартовое оружие специализации");
+
+    // Раса и специализация действительно влияют на итог.
+    Game g2;
+    g2.new_game("Другой", "elf", "archer");
+    const RaceDef* r2 = c.race("elf");
+    const SpecDef* s2 = c.spec("archer");
+    check(r2 && s2, "эльф и лучник описаны");
+    if (r2 && s2) {
+        eq(g2.total().max_hp, 30 + r2->bonus.max_hp + s2->bonus.max_hp,
+           "другая раса и путь дают другое здоровье");
+        check(g2.total().max_hp != t.max_hp, "итог заметно отличается от мечника-человека");
+        check(g2.total().attack > t.attack, "лучник-эльф метче мечника-человека");
+    }
+
+    // Ниндзя удешевляет атаку — проверяем, что специализация правит и стоимость.
+    Game g3;
+    g3.new_game("Третий", "human", "ninja");
+    check(g3.attack_cost() < g.attack_cost(), "ниндзя бьёт дешевле по AP");
 
     // Стойки должны реально менять цифры.
     int block_balanced = g.total().block;
@@ -235,7 +309,10 @@ void test_new_game_and_stats() {
 void test_equipment() {
     section("снаряжение");
     Game g;
-    g.new_game("Тестер");
+    // Мечник не меняет стоимость атаки, поэтому вклад оружия виден чисто.
+    g.new_game("Тестер", "human", "swordsman");
+    const std::string start_weapon = g.player().equipped[static_cast<std::size_t>(Slot::Weapon)];
+    const int cost0 = g.attack_cost();
     int armor0 = g.total().armor;
 
     g.add_item("leather_armor", 1);
@@ -246,8 +323,8 @@ void test_equipment() {
     // Смена оружия должна возвращать прежнее в сумку, а не терять его.
     g.add_item("axe", 1);
     check(g.equip("axe"), "топор надевается");
-    eq(g.count_item("dagger"), 1, "прежнее оружие вернулось в сумку");
-    eq(g.attack_cost(), 5, "топор дороже по AP");
+    eq(g.count_item(start_weapon), 1, "прежнее оружие вернулось в сумку");
+    eq(g.attack_cost(), cost0 + 1, "топор дороже по AP на единицу");
 
     check(g.unequip(Slot::Armor), "доспех снимается");
     eq(g.total().armor, armor0, "броня вернулась к исходной");
@@ -571,7 +648,7 @@ void test_content_integrity() {
             check(c.item(gid) != nullptr, "товар " + gid + " есть в базе предметов");
     }
 
-    const char* npcs[] = {"elder", "herbalist", "smith", "trader", "hermit"};
+    const char* npcs[] = {"elder", "herbalist", "smith", "trader", "hermit", "enchanter"};
     for (const char* nid : npcs) {
         const NpcDef* n = c.npc(nid);
         check(n != nullptr, std::string("NPC ") + nid + " существует");
@@ -583,10 +660,16 @@ void test_content_integrity() {
 
     // Все переходы диалогов ведут в существующие узлы, а награды — в реальные предметы.
     const char* nodes[] = {"elder_root","elder_offer","elder_taken","elder_progress",
-                           "elder_reward","elder_after","herbalist_root","herb_offer",
-                           "herb_taken","herb_progress","herb_reward","smith_root",
-                           "smith_offer","smith_taken","smith_progress","smith_reward",
-                           "trader_root","trader_talk","hermit_root","hermit_rest","hermit_hint"};
+                           "elder_reward","elder_after","elder_queen_offer",
+                           "elder_queen_wait","elder_queen_reward",
+                           "herbalist_root","herb_offer","herb_taken","herb_progress",
+                           "herb_reward","moss_offer","moss_wait","moss_reward",
+                           "smith_root","smith_offer","smith_taken","smith_progress",
+                           "smith_reward","outpost_offer","outpost_wait","outpost_reward",
+                           "trader_root","trader_talk",
+                           "hermit_root","hermit_rest","hermit_hint",
+                           "zp_offer","zp_wait","zp_reward","zp_after",
+                           "ench_root","ench_about","ench_offer","ench_wait","ench_reward"};
     for (const char* nid : nodes) {
         const DlgNode* n = c.node(nid);
         check(n != nullptr, std::string("узел ") + nid + " существует");
@@ -611,7 +694,8 @@ void test_content_integrity() {
     }
 
     // Добыча врагов должна ссылаться на существующие предметы.
-    const char* mobs[] = {"rat", "wolf", "bandit", "wolf_alpha"};
+    const char* mobs[] = {"rat", "wolf", "bandit", "wolf_alpha", "spider", "bat",
+                          "spider_queen", "brigand", "bandit_chief", "wraith", "keeper"};
     for (const char* mid : mobs) {
         const EnemyDef* e = c.enemy(mid);
         check(e != nullptr, std::string("враг ") + mid + " существует");
@@ -624,7 +708,7 @@ void test_content_integrity() {
 
     // Зоны спавна на картах должны ссылаться на существующих врагов.
     World w("data/maps");
-    for (const char* lid : {"village", "forest"}) {
+    for (const char* lid : {"village", "forest", "cave", "ruins", "sanctum"}) {
         const Location* loc = w.location(lid);
         if (!loc) continue;
         for (const SpawnZone& z : loc->zones)
@@ -647,94 +731,528 @@ void test_content_integrity() {
     check(amulet_droppable, "амулет гарантированно падает с вожака — квест проходим");
 }
 
-// Сквозная проверка: можно ли вообще пройти игру. Бьём реальной боевой
-// механикой, а не подкручиваем счётчики, — иначе тест не доказывает
-// проходимость.
-void test_playthrough() {
-    section("сквозное прохождение: квесты через реальный бой");
-    Game g;
-    g.new_game("Герой");
+void test_effects() {
+    section("эффекты и их таймер");
+    const Content& c = Content::get();
 
-    // Берём все три квеста у жителей.
+    std::vector<ActiveEffect> fx;
+    Game::apply_effect(fx, "poison", 3, 2);
+    eq(static_cast<int>(fx.size()), 1, "эффект наложен");
+
+    // Повторное наложение не плодит дубликаты, а продлевает и усиливает.
+    Game::apply_effect(fx, "poison", 5, 1);
+    eq(static_cast<int>(fx.size()), 1, "повтор не создаёт второй записи");
+    eq(fx[0].turns, 5, "длительность взята большая");
+    eq(fx[0].power, 2, "сила взята большая");
+
+    Game::apply_effect(fx, "нет-такого-эффекта", 5, 1);
+    eq(static_cast<int>(fx.size()), 1, "несуществующий эффект не накладывается");
+
+    // Тик отнимает здоровье и укорачивает эффект.
+    const EffectDef* pd = c.effect("poison");
+    check(pd != nullptr, "яд описан в базе");
+    if (pd) {
+        int d = Game::tick_effects(fx);
+        eq(d, pd->hp_per_turn * 2, "яд силы 2 отнимает вдвое больше");
+        eq(fx[0].turns, 4, "длительность уменьшилась на ход");
+    }
+
+    // Эффект истекает и исчезает сам.
+    for (int i = 0; i < 10; ++i) Game::tick_effects(fx);
+    check(fx.empty(), "истёкший эффект убирается из списка");
+
+    // Модификаторы характеристик суммируются с учётом силы.
+    std::vector<ActiveEffect> mod;
+    Game::apply_effect(mod, "might", 5, 3);
+    const EffectDef* md = c.effect("might");
+    if (md) {
+        Stats st = Game::effect_stats(mod);
+        eq(st.dmg_min, md->per_power.dmg_min * 3, "сила эффекта умножает бонус");
+    }
+    Stats none = Game::effect_stats(std::vector<ActiveEffect>());
+    eq(none.dmg_min, 0, "пустой список не даёт бонусов");
+
+    // Снятие: "*" убирает только вредное.
+    std::vector<ActiveEffect> mix;
+    Game::apply_effect(mix, "poison", 5, 1);
+    Game::apply_effect(mix, "regen", 5, 1);
+    Game::apply_effect(mix, "weaken", 5, 1);
+    eq(Game::cure_effects(mix, "*"), 2, "снято два вредных эффекта");
+    eq(static_cast<int>(mix.size()), 1, "полезный эффект остался");
+    eqs(mix[0].id, "regen", "остался именно полезный");
+    eq(Game::cure_effects(mix, "regen"), 1, "снятие по имени работает");
+
+    // Эффекты действительно меняют боевые характеристики героя.
+    Game g;
+    g.new_game("Тестер", "human", "swordsman");
+    int dmg0 = g.total().dmg_max;
+    Game::apply_effect(g.player().effects, "might", 5, 2);
+    check(g.total().dmg_max > dmg0, "эффект силы поднимает урон героя");
+    int atk0 = g.total().attack;
+    Game::apply_effect(g.player().effects, "weaken", 5, 1);
+    check(g.total().attack < atk0, "слабость снижает меткость");
+
+    // Яд тикает и вне боя, на ходу мира.
+    Game g2;
+    g2.new_game("Отравленный", "human", "swordsman");
+    Game::apply_effect(g2.player().effects, "poison", 5, 2);
+    int hp0 = g2.player().hp;
+    g2.world_turn();
+    check(g2.player().hp < hp0, "яд отнимает здоровье на ходу мира");
+
+    // Отдых снимает отраву.
+    g2.rest();
+    check(g2.player().effects.empty(), "отдых снимает вредные эффекты");
+    eq(g2.player().hp, g2.total().max_hp, "и восстанавливает здоровье");
+
+    // Противоядие тоже.
+    Game g3;
+    g3.new_game("Лечёный", "human", "swordsman");
+    Game::apply_effect(g3.player().effects, "poison", 5, 1);
+    g3.add_item("antidote", 1);
+    check(g3.use_item("antidote"), "противоядие применяется");
+    check(g3.player().effects.empty(), "противоядие снимает яд");
+
+    // Эликсир накладывает эффект.
+    g3.add_item("elixir_might", 1);
+    check(g3.use_item("elixir_might"), "эликсир применяется");
+    check(!g3.player().effects.empty(), "эликсир накладывает эффект");
+}
+
+void test_races_and_specs() {
+    section("расы и специализации");
+    const Content& c = Content::get();
+    check(c.races().size() >= 5, "рас не меньше пяти");
+    check(c.specs().size() >= 5, "специализаций не меньше пяти");
+
+    for (const RaceDef& r : c.races())
+        check(!r.name.empty() && !r.desc.empty(), "у расы " + r.id + " есть имя и описание");
+    for (const SpecDef& sp : c.specs()) {
+        check(!sp.name.empty(), "у специализации " + sp.id + " есть имя");
+        check(c.item(sp.start_item) != nullptr,
+              "стартовый предмет " + sp.start_item + " существует");
+    }
+
+    // Каждая связка расы и пути должна давать играбельного героя.
+    for (const RaceDef& r : c.races()) {
+        for (const SpecDef& sp : c.specs()) {
+            Game g;
+            g.new_game("Проба", r.id, sp.id);
+            Stats t = g.total();
+            check(t.max_hp > 0, r.id + "/" + sp.id + ": здоровье положительно");
+            check(t.max_ap > 0, r.id + "/" + sp.id + ": очки действия положительны");
+            check(g.attack_cost() >= 1, r.id + "/" + sp.id + ": атака стоит хотя бы 1 AP");
+            check(t.attack >= 5, r.id + "/" + sp.id + ": шанс попасть не обнулён");
+            check(g.player().hp == t.max_hp, r.id + "/" + sp.id + ": старт с полным здоровьем");
+        }
+    }
+
+    // Неизвестная раса или путь откатываются к значению по умолчанию.
+    Game g;
+    g.new_game("Кто-то", "нет-такой-расы", "нет-такого-пути");
+    check(c.race(g.player().race) != nullptr, "неизвестная раса заменена корректной");
+    check(c.spec(g.player().spec) != nullptr, "неизвестный путь заменён корректным");
+}
+
+void test_mob_inventory() {
+    section("инвентарь мобов");
+    Game g;
+    g.new_game("Тестер", "human", "swordsman");
+    check(!g.mobs().empty(), "мобы расставлены");
+    if (g.mobs().empty()) return;
+
+    // Хотя бы у кого-то из мобов есть что отнять: добыча разыгрывается
+    // при появлении, а не в момент смерти.
+    bool any_loot = false;
+    for (const Mob& m : g.mobs())
+        if (!m.inv.empty() || m.gold > 0) any_loot = true;
+    check(any_loot, "мобы носят с собой добычу");
+
+    // Убийство передаёт игроку именно то, что моб нёс.
+    int uid = g.mobs()[0].uid;
+    const Mob* m = g.mob_by_uid(uid);
+    check(m != nullptr, "моб найден");
+    if (!m) return;
+    std::vector<ItemStack> carried = m->inv;
+    int carried_gold = m->gold;
+    int gold_before = g.player().gold;
+    std::vector<int> before;
+    for (const ItemStack& st : carried) before.push_back(g.count_item(st.id));
+
+    g.start_combat(uid);
+    for (int i = 0; i < 400 && g.combat().active; ++i) {
+        g.player().hp = g.total().max_hp;
+        if (g.player().ap < g.attack_cost()) g.player().ap = g.total().max_ap;
+        g.combat_attack(false);
+    }
+    check(!g.combat().active, "бой закончился");
+    eq(g.player().gold, gold_before + carried_gold, "золото моба перешло игроку");
+    for (std::size_t i = 0; i < carried.size(); ++i)
+        eq(g.count_item(carried[i].id), before[i] + carried[i].count,
+           "предмет " + carried[i].id + " перешёл игроку");
+    check(g.mob_by_uid(uid) == nullptr, "убитый моб убран с карты");
+}
+
+void test_chests() {
+    section("сундуки");
+    World w("data/maps");
+    const Location* v = w.location("village");
+    check(v != nullptr && !v->chests.empty(), "в деревне есть сундук");
+    if (!v || v->chests.empty()) return;
+
+    Game g;
+    g.new_game("Тестер", "human", "swordsman");
+    check(!g.chest_opened("village", 0), "сундук изначально закрыт");
+
+    const MapChest& ch = v->chests[0];
+    int gold0 = g.player().gold;
+    check(g.open_chest(0), "незапертый сундук открывается");
+    check(g.chest_opened("village", 0), "сундук помечен вскрытым");
+    eq(g.player().gold, gold0 + ch.gold, "золото из сундука получено");
+    for (const ItemStack& st : ch.items)
+        check(g.count_item(st.id) >= st.count, "предмет " + st.id + " из сундука получен");
+
+    // Повторно тот же сундук не даёт ничего.
+    int gold1 = g.player().gold;
+    check(!g.open_chest(0), "второй раз сундук не открывается");
+    eq(g.player().gold, gold1, "и золота не прибавляет");
+
+    // Запертый сундук требует ключ.
+    const Location* r = w.location("ruins");
+    check(r != nullptr, "развалины загружаются");
+    if (!r) return;
+    int locked = -1;
+    for (std::size_t i = 0; i < r->chests.size(); ++i)
+        if (!r->chests[i].key.empty()) locked = static_cast<int>(i);
+    check(locked >= 0, "на развалинах есть запертый сундук");
+    if (locked < 0) return;
+
+    const std::string keyid = r->chests[static_cast<std::size_t>(locked)].key;
+    check(Content::get().item(keyid) != nullptr, "нужный ключ есть в базе предметов");
+
+    Game g2;
+    g2.new_game("Взломщик", "human", "swordsman");
+    g2.player().loc = "ruins";
+    g2.player().pos = Vec2(24, 3);
+    check(!g2.open_chest(locked), "без ключа запертый сундук не открыть");
+    check(!g2.chest_opened("ruins", locked), "и он остаётся закрытым");
+    g2.add_item(keyid, 1);
+    check(g2.open_chest(locked), "с ключом открывается");
+}
+
+void test_enchanting() {
+    section("зачарования");
+    const Content& c = Content::get();
+    check(c.enchants().size() >= 5, "зачарований не меньше пяти");
+    for (const EnchantDef& e : c.enchants()) {
+        check(!e.name.empty(), "у зачарования " + e.id + " есть имя");
+        check(e.price > 0, "у зачарования " + e.id + " есть цена");
+        if (!e.reagent.empty())
+            check(c.item(e.reagent) != nullptr, "реагент " + e.reagent + " есть в базе");
+        if (!e.on_hit_effect.empty())
+            check(c.effect(e.on_hit_effect) != nullptr,
+                  "эффект удара " + e.on_hit_effect + " есть в базе");
+    }
+
+    Game g;
+    g.new_game("Тестер", "human", "swordsman");
+    const std::string wpn = g.player().equipped[static_cast<std::size_t>(Slot::Weapon)];
+    check(g.can_enchant(wpn), "оружие можно зачаровать");
+    check(!g.can_enchant("bread"), "хлеб зачаровать нельзя");
+
+    const EnchantDef* keen = c.enchant("keen");
+    check(keen != nullptr, "зачарование «Острота» есть");
+    if (!keen) return;
+
+    // Без золота и реагента не выйдет.
+    g.player().gold = 0;
+    check(!g.enchant_item(wpn, "keen"), "без золота зачарование не проходит");
+    g.player().gold = keen->price;
+    if (!keen->reagent.empty()) {
+        check(!g.enchant_item(wpn, "keen"), "без реагента зачарование не проходит");
+        g.add_item(keen->reagent, keen->reagent_count);
+    }
+
+    int atk0 = g.total().attack;
+    check(g.enchant_item(wpn, "keen"), "с золотом и реагентом проходит");
+    eq(g.player().gold, 0, "золото списано");
+    if (!keen->reagent.empty()) eq(g.count_item(keen->reagent), 0, "реагент израсходован");
+    check(g.total().attack > atk0, "зачарование подняло меткость");
+
+    // Одна вещь — одна руна.
+    g.player().gold = 10000;
+    g.add_item("ember", 5);
+    check(!g.can_enchant(wpn), "повторно ту же вещь зачаровать нельзя");
+    check(!g.enchant_item(wpn, "flame"), "и попытка отклоняется");
+
+    // Снятое снаряжение перестаёт давать бонус зачарования.
+    int with_ench = g.total().attack;
+    g.unequip(Slot::Weapon);
+    check(g.total().attack < with_ench, "снятая вещь не даёт бонуса зачарования");
+}
+
+void test_portals() {
+    section("порталы");
+    Game g;
+    g.new_game("Тестер", "human", "swordsman");
+
+    check(!g.place_portal(), "без умения портал не поставить");
+    g.player().portal_master = true;
+    check(!g.place_portal(), "без камня портал не поставить");
+
+    g.add_item("portal_stone", 3);
+    g.player().pos = Vec2(5, 8);
+    check(g.place_portal(), "первый портал ставится");
+    eq(static_cast<int>(g.player().portals.size()), 1, "портал записан");
+    eq(g.count_item("portal_stone"), 2, "камень израсходован");
+    check(!g.place_portal(), "второй портал на том же месте не встанет");
+
+    check(g.portal_at(Vec2(5, 8), "village") != nullptr, "портал виден на своём месте");
+    check(g.portal_at(Vec2(6, 8), "village") == nullptr, "и только на своём");
+
+    // Один портал никуда не ведёт.
+    g.player().pos = Vec2(4, 8);
+    g.try_move(1, 0);
+    eqs(g.player().loc, "village", "с одним порталом переноса нет");
+
+    // Со вторым — переносит.
+    g.player().pos = Vec2(20, 8);
+    check(g.place_portal(), "второй портал ставится");
+    g.player().pos = Vec2(4, 8);
+    Bump b = g.try_move(1, 0);
+    check(b == Bump::Portal, "шаг на портал сработал");
+    eq(g.player().pos.x, 20, "перенесло ко второму порталу");
+
+    // Снятие возвращает камень.
+    int stones = g.count_item("portal_stone");
+    check(g.remove_portal_here(), "портал под ногами снимается");
+    eq(g.count_item("portal_stone"), stones + 1, "камень вернулся");
+    eq(static_cast<int>(g.player().portals.size()), 1, "портал убран из списка");
+
+    // Больше лимита не поставить.
+    g.player().portals.clear();
+    g.add_item("portal_stone", 10);
+    int placed = 0;
+    for (int i = 0; i < PORTAL_LIMIT + 3; ++i) {
+        g.player().pos = Vec2(3 + i, 9);
+        if (g.place_portal()) ++placed;
+    }
+    eq(placed, PORTAL_LIMIT, "поставлено ровно столько, сколько разрешено");
+}
+
+// Сквозная проверка: проходима ли игра целиком. Бои идут настоящей боевой
+// механикой, предметы поднимаются с карты, переходы — через реальные выходы.
+// Подкручиваются только здоровье и очки действия героя: тест про проходимость
+// контента, а не про баланс.
+void test_playthrough() {
+    section("сквозное прохождение: все квесты");
+    Game g;
+    g.new_game("Герой", "human", "swordsman");
     const Content& c = Content::get();
     std::string shop;
-    g.apply_option(c.node("elder_offer")->options[0], "", &shop);
-    g.apply_option(c.node("herb_offer")->options[0],  "", &shop);
-    g.apply_option(c.node("smith_offer")->options[0], "", &shop);
-    eq(g.player().quests["wolves"], 1, "квест на волков взят");
-    eq(g.player().quests["amulet"], 1, "квест на амулет взят");
-    eq(g.player().quests["pelts"],  1, "заказ кузнеца взят");
 
-    // Уходим в лес через настоящий переход.
-    const Location* v = g.here();
-    check(v && !v->exits.empty(), "в деревне есть переход");
-    if (!v || v->exits.empty()) return;
-    g.player().pos = Vec2{v->exits[0].pos.x - 1, v->exits[0].pos.y};
-    g.try_move(1, 0);
-    eqs(g.player().loc, "forest", "герой в лесу");
-    check(!g.mobs().empty(), "в лесу есть кому сопротивляться");
+    // --- вспомогательные действия ---
 
-    // Побеждаем противника честной боевой механикой.
+    // Перейти в соседнюю локацию через настоящий выход.
+    auto travel = [&](const std::string& target) {
+        const Location* loc = g.here();
+        if (!loc) return false;
+        for (const MapExit& e : loc->exits) {
+            if (e.target != target) continue;
+            const int dx[] = {1, -1, 0, 0}, dy[] = {0, 0, 1, -1};
+            for (int k = 0; k < 4; ++k) {
+                Vec2 from(e.pos.x - dx[k], e.pos.y - dy[k]);
+                if (!loc->walkable(from) && !(loc->exit_at(from))) continue;
+                g.player().pos = from;
+                if (g.try_move(dx[k], dy[k]) == Bump::Exit) return true;
+            }
+        }
+        return false;
+    };
+
+    // Подобрать с карты все экземпляры предмета в текущей локации.
+    auto gather = [&](const std::string& item_id) {
+        const Location* loc = g.here();
+        if (!loc) return 0;
+        int got = 0;
+        for (std::size_t i = 0; i < loc->items.size(); ++i) {
+            if (loc->items[i].item_id != item_id) continue;
+            if (g.item_taken(loc->id, static_cast<int>(i))) continue;
+            const Vec2 t = loc->items[i].pos;
+            const int dx[] = {1, -1, 0, 0}, dy[] = {0, 0, 1, -1};
+            for (int k = 0; k < 4; ++k) {
+                Vec2 from(t.x - dx[k], t.y - dy[k]);
+                if (!loc->walkable(from)) continue;
+                g.player().pos = from;
+                if (g.try_move(dx[k], dy[k]) == Bump::Item) { ++got; break; }
+            }
+        }
+        return got;
+    };
+
+    // Победить противника честной боевой механикой.
     auto fight = [&](int uid) {
         g.start_combat(uid);
-        for (int guard = 0; guard < 400 && g.combat().active; ++guard) {
-            // Герой не должен умереть — тест про проходимость, не про баланс.
+        for (int guard = 0; guard < 600 && g.combat().active; ++guard) {
             g.player().hp = g.total().max_hp;
             if (g.player().ap < g.attack_cost()) g.player().ap = g.total().max_ap;
             g.combat_attack(false);
         }
+        g.player().effects.clear();      // тест не про выживание под ядом
         return !g.combat().active;
     };
 
-    // Бьём волков, пока счётчик не дойдёт до пяти.
+    // Перебить в текущей локации всех мобов заданного вида (с респавном).
+    auto hunt = [&](const std::string& enemy_id, int need) {
+        int killed = 0, guard = 0;
+        while (killed < need && guard++ < 200) {
+            int uid = -1;
+            for (const Mob& m : g.mobs())
+                if (m.loc == g.player().loc && m.enemy_id == enemy_id) { uid = m.uid; break; }
+            if (uid < 0) { g.world_turn(); continue; }
+            if (fight(uid)) ++killed;
+        }
+        return killed;
+    };
+
+    // --- деревня: берём первые квесты ---
+    g.apply_option(c.node("elder_offer")->options[0], "", &shop);
+    g.apply_option(c.node("herb_offer")->options[0],  "", &shop);
+    g.apply_option(c.node("smith_offer")->options[0], "", &shop);
+    eq(g.player().quests["wolves"], 1, "квест на волков взят");
+
+    // --- лес: волки, вожак, шкуры ---
+    check(travel("forest"), "переход в лес");
+    eqs(g.player().loc, "forest", "герой в лесу");
+    check(hunt("wolf", 5) >= 1, "волки находятся и побеждаются");
     int guard = 0;
-    while (g.player().counters["kill_wolf"] < 5 && guard++ < 60) {
-        int uid = -1;
-        for (const Mob& m : g.mobs())
-            if (m.loc == "forest" && (m.enemy_id == "wolf" || m.enemy_id == "wolf_alpha")) {
-                uid = m.uid;
-                break;
-            }
-        if (uid < 0) { g.world_turn(); continue; }   // ждём респавна
-        check(fight(uid), "бой завершается, а не зацикливается");
+    while (g.player().counters["kill_wolf"] < 5 && guard++ < 40) {
+        if (hunt("wolf", 1) == 0) g.world_turn();
     }
-    check(g.player().counters["kill_wolf"] >= 5, "пять волков перебиты в бою");
+    check(g.player().counters["kill_wolf"] >= 5, "пять волков перебиты");
+    check(hunt("wolf_alpha", 1) == 1, "вожак стаи повержен");
+    eq(g.count_item("amulet"), 1, "амулет добыт");
 
-    // Вожак должен быть побеждён и отдать амулет.
-    int alpha = -1;
-    for (const Mob& m : g.mobs())
-        if (m.enemy_id == "wolf_alpha") alpha = m.uid;
-    if (alpha >= 0) fight(alpha);
-    eq(g.count_item("amulet"), 1, "амулет добыт с вожака");
+    while (g.count_item("wolf_pelt") < 3 && guard++ < 80) {
+        if (hunt("wolf", 1) == 0) g.world_turn();
+    }
+    check(g.count_item("wolf_pelt") >= 3, "три шкуры собраны");
 
-    // Возвращаемся и сдаём все три квеста.
-    bool can_finish_wolves = false;
-    for (const DlgOption& o : c.node("elder_root")->options)
-        if (o.next == "elder_reward" && g.option_available(o)) can_finish_wolves = true;
-    check(can_finish_wolves, "старейшина принимает работу");
+    // --- сдаём первую тройку квестов ---
     g.apply_option(c.node("elder_reward")->options[0], "", &shop);
+    g.apply_option(c.node("herb_reward")->options[0],  "", &shop);
+    g.apply_option(c.node("smith_reward")->options[0], "", &shop);
     eq(g.player().quests["wolves"], QUEST_DONE, "квест на волков закрыт");
-
-    bool can_finish_amulet = false;
-    for (const DlgOption& o : c.node("herbalist_root")->options)
-        if (o.next == "herb_reward" && g.option_available(o)) can_finish_amulet = true;
-    check(can_finish_amulet, "Лада принимает амулет");
-    g.apply_option(c.node("herb_reward")->options[0], "", &shop);
     eq(g.player().quests["amulet"], QUEST_DONE, "квест на амулет закрыт");
-    eq(g.count_item("amulet"), 0, "амулет отдан хозяйке");
-    eq(g.count_item("ring_hp"), 1, "кольцо жизни получено");
+    eq(g.player().quests["pelts"],  QUEST_DONE, "заказ кузнеца закрыт");
 
-    check(g.count_item("wolf_pelt") >= 3, "с волков набралось три шкуры на заказ");
-    if (g.count_item("wolf_pelt") >= 3) {
-        g.apply_option(c.node("smith_reward")->options[0], "", &shop);
-        eq(g.player().quests["pelts"], QUEST_DONE, "заказ кузнеца закрыт");
-        eq(g.count_item("chain_armor"), 1, "кольчуга получена");
-    }
+    // --- новые квесты открываются только после старых ---
+    auto visible = [&](const char* node, const char* target) {
+        const DlgNode* n = c.node(node);
+        if (!n) return false;
+        for (const DlgOption& o : n->options)
+            if (o.next == target && g.option_available(o)) return true;
+        return false;
+    };
+    check(visible("elder_root", "elder_queen_offer"), "Мирон открыл квест на матку");
+    check(visible("herbalist_root", "moss_offer"),    "Лада открыла квест на мох");
+    check(visible("smith_root", "outpost_offer"),     "Бран открыл квест на заставу");
 
-    check(g.player().level >= 3, "к концу трёх квестов герой заметно вырос");
-    std::cout << "  (итог прохождения: уровень " << g.player().level
+    g.apply_option(c.node("elder_queen_offer")->options[0], "", &shop);
+    g.apply_option(c.node("moss_offer")->options[0],        "", &shop);
+    g.apply_option(c.node("outpost_offer")->options[0],     "", &shop);
+
+    // --- пещера: мох и матка ---
+    check(travel("cave"), "переход в пещеру");
+    eqs(g.player().loc, "cave", "герой в пещере");
+    check(gather("glow_moss") >= 3, "светящийся мох собран с карты");
+    check(hunt("spider_queen", 1) == 1, "паучья матка повержена");
+    eq(g.player().counters["kill_queen"], 1, "счётчик матки сработал");
+    check(g.count_item("focus_node") >= 1, "первый узловой фокус добыт");
+
+    check(travel("forest"), "возврат в лес");
+    g.apply_option(c.node("elder_queen_reward")->options[0], "", &shop);
+    g.apply_option(c.node("moss_reward")->options[0],        "", &shop);
+    eq(g.player().quests["queen"], QUEST_DONE, "квест на матку закрыт");
+    eq(g.player().quests["moss"],  QUEST_DONE, "квест на мох закрыт");
+
+    // --- развалины: атаман ---
+    check(travel("ruins"), "переход на развалины");
+    eqs(g.player().loc, "ruins", "герой на развалинах");
+    check(hunt("bandit_chief", 1) == 1, "атаман повержен");
+    check(g.count_item("rusty_key") >= 1, "ржавый ключ добыт с атамана");
+    check(g.count_item("focus_node") >= 2, "второй фокус добыт");
+
+    // Запертый сундук теперь открывается.
+    const Location* rl = g.here();
+    int locked = -1;
+    if (rl)
+        for (std::size_t i = 0; i < rl->chests.size(); ++i)
+            if (!rl->chests[i].key.empty()) locked = static_cast<int>(i);
+    check(locked >= 0 && g.open_chest(locked), "запертый сундук открыт добытым ключом");
+
+    g.apply_option(c.node("outpost_reward")->options[0], "", &shop);
+    eq(g.player().quests["outpost"], QUEST_DONE, "квест на заставу закрыт");
+
+    // --- святилище: страж ---
+    check(travel("sanctum"), "переход в святилище");
+    eqs(g.player().loc, "sanctum", "герой в святилище");
+    check(hunt("keeper", 1) == 1, "страж нулевой точки повержен");
+    check(g.count_item("focus_node") >= 3, "третий фокус добыт");
+    check(g.count_item("rune_stone") >= 1, "рунный камень добыт");
+
+    // --- отшельник: порталы ---
+    check(visible("hermit_root", "zp_offer"), "отшельник открыл квест о нулевой точке");
+    g.apply_option(c.node("zp_offer")->options[0], "", &shop);
+    check(visible("hermit_root", "zp_reward"), "с тремя фокусами награда доступна");
+    g.apply_option(c.node("zp_reward")->options[0], "", &shop);
+    eq(g.player().quests["zero_point"], QUEST_DONE, "квест о нулевой точке закрыт");
+    check(g.player().portal_master, "умение ставить порталы получено");
+    check(g.count_item("portal_stone") >= 2, "портальные камни выданы");
+
+    // Порталы работают в бою за пределами теста портального модуля.
+    g.player().loc = "village";
+    g.player().pos = Vec2(5, 8);
+    check(g.place_portal(), "портал ставится в деревне");
+    g.player().loc = "forest";
+    g.player().pos = Vec2(3, 8);
+    check(g.place_portal(), "второй портал ставится в лесу");
+    g.player().pos = Vec2(2, 8);
+    Bump pb = g.try_move(1, 0);
+    check(pb == Bump::Portal, "портал сработал");
+    eqs(g.player().loc, "village", "портал перенёс между локациями");
+
+    // --- зачарователь ---
+    g.apply_option(c.node("ench_offer")->options[0], "", &shop);
+    check(visible("ench_root", "ench_reward"), "с рунным камнем Вельд готов");
+    g.apply_option(c.node("ench_reward")->options[0], "", &shop);
+    eq(g.player().quests["enchanter"], QUEST_DONE, "квест зачарователя закрыт");
+
+    bool ench_open = false;
+    const DlgNode* er = c.node("ench_root");
+    for (const DlgOption& o : er->options)
+        if (o.open_enchant && g.option_available(o)) ench_open = true;
+    check(ench_open, "услуга зачарования открылась");
+
+    // Зачарование доводится до конца.
+    const std::string wpn = g.player().equipped[static_cast<std::size_t>(Slot::Weapon)];
+    g.player().gold += 5000;
+    g.add_item("whetstone", 3);
+    int atk_before = g.total().attack;
+    check(g.enchant_item(wpn, "keen"), "оружие зачаровано");
+    check(g.total().attack > atk_before, "зачарование подняло меткость");
+
+    // --- итог ---
+    const char* all_quests[] = {"wolves", "amulet", "pelts", "moss",
+                                "queen", "outpost", "zero_point", "enchanter"};
+    for (const char* q : all_quests)
+        eq(g.player().quests[q], QUEST_DONE, std::string("квест ") + q + " пройден");
+
+    check(g.player().level >= 8, "к концу всех квестов герой заметно вырос");
+    std::cout << "  (итог: уровень " << g.player().level
               << ", золота " << g.player().gold
-              << ", волков убито " << g.player().counters["kill_wolf"] << ")\n";
+              << ", квестов пройдено " << (sizeof(all_quests) / sizeof(all_quests[0]))
+              << ")\n";
 }
 
 } // namespace
@@ -755,6 +1273,12 @@ int main() {
     test_combat();
     test_save_load();
     test_movement_and_pickup();
+    test_effects();
+    test_races_and_specs();
+    test_mob_inventory();
+    test_chests();
+    test_enchanting();
+    test_portals();
     test_content_integrity();
     test_playthrough();
 

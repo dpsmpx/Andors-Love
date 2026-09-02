@@ -73,6 +73,9 @@ std::vector<std::string> render_map(Game& g, const Location& loc, int vw, int vh
             if (loc.in_bounds(p)) {
                 ch = tile_glyph(loc.at(p));
                 if (loc.bed_at(p))  ch = glyph::BED;
+                int ci = loc.chest_index_at(p);
+                if (ci >= 0 && !g.chest_opened(loc.id, ci)) ch = glyph::CHEST;
+                if (g.portal_at(p, g.player().loc))         ch = glyph::PORTAL;
                 if (loc.exit_at(p)) ch = glyph::EXIT;
                 if (loc.sign_at(p)) ch = glyph::SIGN;
                 int ii = loc.item_index_at(p);
@@ -104,6 +107,8 @@ std::vector<std::string> panel_wide(Game& g, const Layout& L) {
     V.push_back("Кураж:  " + bar(p.momentum, MOMENTUM_MAX, MOMENTUM_MAX, '*', '-') +
                 " " + to_str(p.momentum) + "/" + to_str(MOMENTUM_MAX));
     if (p.skill_points > 0) V.push_back("Очков навыка: " + to_str(p.skill_points) + " (K)");
+    if (!p.effects.empty())
+        V.push_back("Эффекты: " + trunc(Game::effects_line(p.effects), 20));
     V.push_back("");
     V.push_back("Урон " + to_str(t.dmg_min) + "-" + to_str(t.dmg_max) +
                 "  меткость " + to_str(t.attack) + "%");
@@ -138,6 +143,7 @@ std::vector<std::string> panel_narrow(Game& g, const Layout& L) {
                 "  Кураж " + bar(p.momentum, MOMENTUM_MAX, MOMENTUM_MAX, '*', '-') +
                 "  Ур " + to_str(t.dmg_min) + "-" + to_str(t.dmg_max) +
                 " Мет " + to_str(t.attack) + "% Бр " + to_str(t.armor));
+    if (!p.effects.empty()) V.push_back("Эфф: " + Game::effects_line(p.effects));
     return V;
 }
 
@@ -255,6 +261,30 @@ std::string read_line(const std::string& prompt, const std::string& def) {
     return buf.empty() ? def : buf;
 }
 
+bool screen_create_hero(std::string* name, std::string* race, std::string* spec) {
+    const Content& c = Content::get();
+
+    *name = read_line("Как тебя звать?", "Странник");
+
+    std::vector<std::string> rows;
+    for (const RaceDef& r : c.races())
+        rows.push_back(pad(r.name, 10) + r.desc);
+    int sel = choose("Выбери расу\n", rows, "  ^v выбор · Enter принять · Esc отмена");
+    if (sel < 0) return false;
+    *race = c.races()[static_cast<std::size_t>(sel)].id;
+
+    rows.clear();
+    for (const SpecDef& sp : c.specs()) {
+        std::string start;
+        if (const ItemDef* d = c.item(sp.start_item)) start = " [" + d->name + "]";
+        rows.push_back(pad(sp.name, 10) + sp.desc + start);
+    }
+    sel = choose("Выбери путь\n", rows, "  ^v выбор · Enter принять · Esc отмена");
+    if (sel < 0) return false;
+    *spec = c.specs()[static_cast<std::size_t>(sel)].id;
+    return true;
+}
+
 void message_box(const std::string& title, const std::string& body) {
     const Layout L = layout();
     platform::clear_screen();
@@ -271,6 +301,7 @@ void help_screen() {
     message_box("Управление",
         "  Стрелки или WASD — идти\n"
         "  C — герой        I — сумка       Q — квесты      K — навыки\n"
+        "  F — эффекты      P — порталы\n"
         "  1 2 3            — стойка: осторожная / ровная / яростная\n"
         "  ?                — эта справка\n"
         "  Esc              — пауза: сохранить, загрузить, выйти\n"
@@ -284,6 +315,7 @@ void help_screen() {
         "  @ ты        N житель — шаг к нему заводит разговор\n"
         "  X враг      шаг к нему начинает бой\n"
         "  > переход   ! табличка   * предмет   & лежанка\n"
+        "  C сундук    O портал (поставленный тобой)\n"
         "  # стена     T дерево     ~ вода      . , = земля\n"
         "\n"
         "Все враги показаны одним знаком, все жители — другим:\n"
@@ -447,6 +479,114 @@ void screen_skills(Game& g) {
     }
 }
 
+void screen_effects(Game& g) {
+    const Content& c = Content::get();
+    const std::vector<ActiveEffect>& list = g.player().effects;
+    std::string s;
+    if (list.empty()) {
+        s = "  Ничего не действует.";
+    } else {
+        for (const ActiveEffect& a : list) {
+            const EffectDef* d = c.effect(a.id);
+            if (!d) continue;
+            s += std::string(d->harmful ? "  [-] " : "  [+] ") + d->name;
+            if (a.power > 1) s += " (сила " + to_str(a.power) + ")";
+            s += ", ходов: " + to_str(a.turns) + "\n      " + d->desc + "\n\n";
+        }
+    }
+    s += "\n  Вредные эффекты снимает противоядие и отдых на лежанке.";
+    message_box("Что на тебе действует", s);
+}
+
+void screen_enchant(Game& g) {
+    const Content& c = Content::get();
+    for (;;) {
+        // Зачаровать можно надетое и лежащее в сумке снаряжение.
+        std::vector<std::string> rows, ids;
+        for (int i = 0; i < static_cast<int>(Slot::Count); ++i) {
+            const std::string& id = g.player().equipped[static_cast<std::size_t>(i)];
+            if (id.empty()) continue;
+            const ItemDef* d = c.item(id);
+            auto e = g.player().enchants.find(id);
+            std::string mark = (e == g.player().enchants.end()) ? "—" : "уже зачарован";
+            if (e != g.player().enchants.end())
+                if (const EnchantDef* ed = c.enchant(e->second)) mark = "«" + ed->name + "»";
+            rows.push_back(pad(d ? d->name : id, 20) + "[надето] " + mark);
+            ids.push_back(id);
+        }
+        for (const ItemStack& st : g.player().inv) {
+            const ItemDef* d = c.item(st.id);
+            if (!d || slot_for(d->kind) == Slot::Count) continue;
+            auto e = g.player().enchants.find(st.id);
+            std::string mark = "—";
+            if (e != g.player().enchants.end())
+                if (const EnchantDef* ed = c.enchant(e->second)) mark = "«" + ed->name + "»";
+            rows.push_back(pad(d->name, 20) + "          " + mark);
+            ids.push_back(st.id);
+        }
+        if (rows.empty()) { message_box("Зачарование", "  Зачаровывать нечего."); return; }
+
+        int sel = choose("Что зачаровать? · золото: " + to_str(g.player().gold), rows,
+                         "  Enter — выбрать вещь, Esc — уйти");
+        if (sel < 0) return;
+        const std::string item = ids[static_cast<std::size_t>(sel)];
+
+        if (!g.can_enchant(item)) {
+            message_box("Зачарование", "  На этой вещи уже есть зачарование.\n"
+                                       "  Снять его нельзя.");
+            continue;
+        }
+
+        std::vector<std::string> erows, eids;
+        for (const EnchantDef& e : c.enchants()) {
+            std::string req = to_str(e.price) + " зол.";
+            if (!e.reagent.empty()) {
+                const ItemDef* rd = c.item(e.reagent);
+                req += " + " + std::string(rd ? rd->name : e.reagent) +
+                       " (" + to_str(g.count_item(e.reagent)) + "/" +
+                       to_str(e.reagent_count) + ")";
+            }
+            erows.push_back(pad(e.name, 10) + pad(req, 34) + e.desc);
+            eids.push_back(e.id);
+        }
+        int es = choose("Какое зачарование?", erows, "  Enter — наложить, Esc — назад");
+        if (es < 0) continue;
+        g.enchant_item(item, eids[static_cast<std::size_t>(es)]);
+    }
+}
+
+void screen_portals(Game& g) {
+    for (;;) {
+        if (!g.player().portal_master) {
+            message_box("Порталы", "  Ты пока не умеешь их ставить.\n"
+                                   "  Об этом знает отшельник в лесу.");
+            return;
+        }
+        std::vector<std::string> rows;
+        rows.push_back("Поставить портал здесь (нужен портальный камень: " +
+                       to_str(g.count_item("portal_stone")) + ")");
+        rows.push_back("Снять портал под ногами");
+        rows.push_back("Назад");
+
+        std::string list;
+        for (std::size_t i = 0; i < g.player().portals.size(); ++i) {
+            const Portal& pt = g.player().portals[i];
+            const Location* l = g.world().location(pt.loc);
+            list += "  " + to_str(static_cast<int>(i) + 1) + ". " +
+                    std::string(l ? l->name : pt.loc) +
+                    " (" + to_str(pt.pos.x) + "," + to_str(pt.pos.y) + ")\n";
+        }
+        if (list.empty()) list = "  (порталов нет)\n";
+
+        int sel = choose("Порталы · поставлено " +
+                         to_str(static_cast<int>(g.player().portals.size())) + " из " +
+                         to_str(PORTAL_LIMIT) + "\n" + list, rows);
+        if (sel < 0 || sel == 2) return;
+        if (sel == 0) g.place_portal();
+        if (sel == 1) g.remove_portal_here();
+    }
+}
+
 // ---------------------------------------------------------------- диалоги
 
 void run_shop(Game& g, const std::string& shop_id) {
@@ -522,8 +662,10 @@ void run_dialogue(Game& g, const std::string& npc_id) {
 
         const DlgOption* o = opts[static_cast<std::size_t>(sel)];
         std::string open_shop;
-        g.apply_option(*o, npc->shop, &open_shop);
+        bool open_ench = false;
+        g.apply_option(*o, npc->shop, &open_shop, &open_ench);
         if (!open_shop.empty()) { run_shop(g, open_shop); return; }
+        if (open_ench)          { screen_enchant(g); return; }
         node_id = o->next;
     }
 }
@@ -559,6 +701,10 @@ void run_combat(Game& g) {
                 " " + to_str(p.momentum) + "/" + to_str(MOMENTUM_MAX));
             out("  " + pad("Стойка: " + std::string(stance_name(p.stance)), 24) +
                 stance_hint(p.stance));
+            if (!p.effects.empty())
+                out("  " + pad("На тебе:", 24) + trunc(Game::effects_line(p.effects), 36));
+            if (m && !m->effects.empty())
+                out("  " + pad("На противнике:", 24) + trunc(Game::effects_line(m->effects), 36));
         } else {
             out(trunc(e->name, static_cast<std::size_t>(L.cols)));
             out("HP " + pad(to_str(g.combat().enemy_hp) + "/" + to_str(e->stats.max_hp), 8) +
@@ -571,6 +717,10 @@ void run_combat(Game& g) {
             out("AP " + to_str(p.ap) + "/" + to_str(t.max_ap) +
                 "  Кураж " + bar(p.momentum, MOMENTUM_MAX, MOMENTUM_MAX, '*', '-'));
             out("Стойка: " + std::string(stance_name(p.stance)));
+            if (!p.effects.empty())
+                out(trunc("Ты: " + Game::effects_line(p.effects), static_cast<std::size_t>(L.cols)));
+            if (m && !m->effects.empty())
+                out(trunc("Враг: " + Game::effects_line(m->effects), static_cast<std::size_t>(L.cols)));
         }
         rule(L.rule);
 

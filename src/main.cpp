@@ -109,6 +109,8 @@ void play(Game& g) {
             case 'i': case 'I': ui::screen_inventory(g); continue;
             case 'q': case 'Q': ui::screen_quests(g);    continue;
             case 'k': case 'K': ui::screen_skills(g);    continue;
+            case 'f': case 'F': ui::screen_effects(g);   continue;
+            case 'p': case 'P': ui::screen_portals(g);   continue;
             case '?':           ui::help_screen();       continue;
 
             case '1': g.combat_set_stance(Stance::Cautious);
@@ -158,6 +160,7 @@ void play(Game& g) {
                 continue;
             }
             case Bump::Blocked:
+            case Bump::Chest:            // сундук открывается на месте, шага нет
                 continue;
             case Bump::Combat:
                 continue;                       // бой обработается в начале цикла
@@ -188,8 +191,9 @@ int main(int argc, char** argv) {
         // Каждый пункт обрабатывается ровно один раз: «Справка» показывает
         // справку, «Выход» выходит.
         if (sel == 0) {
-            std::string name = ui::read_line("Как тебя звать?", "Странник");
-            g.new_game(name);
+            std::string name, race, spec;
+            if (!ui::screen_create_hero(&name, &race, &spec)) continue;
+            g.new_game(name, race, spec);
             if (!g.here()) {
                 ui::message_box("Не удалось начать игру",
                                 "  " + g.world().last_error() + "\n\n"

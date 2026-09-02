@@ -26,8 +26,17 @@ struct Player {
     std::string loc = "village";
     Vec2        pos;
 
+    std::string race = "human";
+    std::string spec = "swordsman";
+
     Stance      stance   = Stance::Balanced;
     int         momentum = 0;         // кураж, 0..MOMENTUM_MAX
+
+    std::vector<ActiveEffect> effects;
+    // Зачарования привязаны к коду предмета: код -> код зачарования.
+    std::map<std::string, std::string> enchants;
+    std::vector<Portal>       portals;
+    bool                      portal_master = false;
 
     std::array<std::string, static_cast<std::size_t>(Slot::Count)> equipped;
     std::vector<ItemStack>    inv;
@@ -43,6 +52,11 @@ struct Mob {
     Vec2        pos;
     int         hp = 0;
     int         zone = -1;            // индекс зоны спавна в локации
+    // Собственный инвентарь: заполняется при появлении и пополняется тем,
+    // что моб подобрал с земли. Всё это достаётся победителю.
+    std::vector<ItemStack>    inv;
+    int                       gold = 0;
+    std::vector<ActiveEffect> effects;
 };
 
 // Бой идёт в отдельном режиме: у игрока пул AP на раунд, действия его тратят.
@@ -60,8 +74,10 @@ constexpr int AP_ITEM_COST  = 3;
 constexpr int RESPAWN_TURNS = 40;
 
 enum class Bump {
-    Moved, Blocked, Npc, Sign, Bed, Exit, Item, Combat
+    Moved, Blocked, Npc, Sign, Bed, Exit, Item, Combat, Chest, Portal
 };
+
+constexpr int PORTAL_LIMIT = 4;
 
 // ------------------------------------------------------------------- играть
 
@@ -70,7 +86,9 @@ public:
     explicit Game(const std::string& data_root = "data/maps");
 
     // --- жизненный цикл ---
-    void new_game(const std::string& name);
+    void new_game(const std::string& name,
+                  const std::string& race = "human",
+                  const std::string& spec = "swordsman");
     bool load_from(const std::string& path);
     bool save_to(const std::string& path) const;
 
@@ -88,6 +106,32 @@ public:
     Mob*        mob_at(Vec2 p, const std::string& loc);
     const Mob*  mob_by_uid(int uid) const;
     Mob*        mob_by_uid(int uid);
+
+    // --- эффекты ---
+    // Наложение поверх такого же эффекта продлевает его и берёт большую силу,
+    // а не копит дубликаты в списке.
+    static void apply_effect(std::vector<ActiveEffect>& list, const std::string& id,
+                             int turns, int power);
+    static Stats effect_stats(const std::vector<ActiveEffect>& list);
+    // Прокручивает один ход: возвращает изменение здоровья (может быть < 0).
+    static int  tick_effects(std::vector<ActiveEffect>& list);
+    // which == "*" — снять все вредные; иначе конкретный эффект.
+    static int  cure_effects(std::vector<ActiveEffect>& list, const std::string& which);
+    static std::string effects_line(const std::vector<ActiveEffect>& list);
+
+    // --- сундуки ---
+    bool chest_opened(const std::string& loc_id, int index) const;
+    bool open_chest(int index);          // сундук в текущей локации
+
+    // --- порталы ---
+    const Portal* portal_at(Vec2 p, const std::string& loc_id) const;
+    bool place_portal();
+    bool remove_portal_here();
+
+    // --- зачарование ---
+    Stats enchant_bonus() const;         // от надетых вещей
+    bool  can_enchant(const std::string& item_id) const;
+    bool  enchant_item(const std::string& item_id, const std::string& ench_id);
 
     // --- характеристики ---
     Stats total() const;                    // база + снаряжение + навыки + стойка
@@ -118,7 +162,8 @@ public:
     // --- диалоги ---
     bool  option_available(const DlgOption& o) const;
     // Применяет последствия варианта. shop_out — id магазина, если открылась торговля.
-    void  apply_option(const DlgOption& o, const std::string& npc_shop, std::string* shop_out);
+    void  apply_option(const DlgOption& o, const std::string& npc_shop,
+                       std::string* shop_out, bool* enchant_out = nullptr);
 
     // --- торговля ---
     int   buy_price(const ShopDef& s, const ItemDef& d) const;
@@ -143,6 +188,7 @@ public:
     const std::string& error() const { return err_; }
 
 private:
+    void  fill_mob_inventory(Mob& m, const EnemyDef& e);
     void  spawn_initial(const Location& loc);
     void  respawn_tick();
     void  move_mobs();
@@ -164,6 +210,7 @@ private:
     int                      turn_ = 0;
     int                      respawn_left_ = RESPAWN_TURNS;
     std::set<std::string>    taken_;      // "локация:индекс" подобранных предметов
+    std::set<std::string>    chests_;     // "локация:индекс" вскрытых сундуков
     std::set<std::string>    visited_;    // локации, где уже расставлены мобы
     std::vector<std::string> log_;
     mutable std::string      err_;

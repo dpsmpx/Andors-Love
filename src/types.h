@@ -47,6 +47,8 @@ constexpr char EXIT   = '>';
 constexpr char SIGN   = '!';
 constexpr char ITEM   = '*';
 constexpr char BED    = '&';
+constexpr char CHEST  = 'C';   // сундук
+constexpr char PORTAL = 'O';   // портал, поставленный игроком
 } // namespace glyph
 
 char tile_glyph(Tile t);
@@ -97,7 +99,31 @@ struct ItemDef {
     Stats       bonus;          // для снаряжения
     int         heal_hp = 0;    // для расходников
     int         heal_ap = 0;
+    std::string effect;         // накладываемый эффект
+    int         effect_turns = 0;
+    int         effect_power = 1;
+    std::string cures;          // снимаемый эффект; "*" — все вредные
     std::string desc;
+};
+
+// ---------- эффекты ----------
+// Эффект либо тикает здоровьем каждый ход, либо подмешивает свои
+// характеристики в боевые. Сила эффекта — множитель: яд силы 3 снимает втрое
+// больше, чем силы 1.
+
+enum class EffectKind {
+    Damage,   // урон каждый ход (яд, кровотечение, горение)
+    Heal,     // лечение каждый ход (регенерация)
+    Stat      // модификатор боевых характеристик
+};
+
+// Наложенный эффект: у кого он висит, знает владелец списка.
+struct ActiveEffect {
+    std::string id;
+    int         turns = 0;   // осталось ходов
+    int         power = 1;   // сила
+    ActiveEffect() = default;
+    ActiveEffect(const std::string& i, int t, int p) : id(i), turns(t), power(p) {}
 };
 
 // Стопка предметов в инвентаре.
@@ -106,6 +132,17 @@ struct ItemStack {
     int         count = 0;
     ItemStack() = default;
     ItemStack(const std::string& i, int c) : id(i), count(c) {}
+};
+
+// ---------- порталы ----------
+// Игрок ставит их сам, получив соответствующий навык. Шаг на портал
+// переносит к следующему в списке — с двумя это двусторонняя связка.
+
+struct Portal {
+    std::string loc;
+    Vec2        pos;
+    Portal() = default;
+    Portal(const std::string& l, Vec2 p) : loc(l), pos(p) {}
 };
 
 // ---------- стойки ----------

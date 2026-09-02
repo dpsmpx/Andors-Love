@@ -25,11 +25,17 @@ std::string read_line(const std::string& prompt, const std::string& def);
 
 void message_box(const std::string& title, const std::string& body);
 
+// Создание героя: имя, раса, специализация. false — игрок отменил.
+bool screen_create_hero(std::string* name, std::string* race, std::string* spec);
+
 // Экраны героя.
 void screen_character(Game& g);
 void screen_inventory(Game& g);
 void screen_quests(Game& g);
 void screen_skills(Game& g);
+void screen_effects(Game& g);
+void screen_enchant(Game& g);
+void screen_portals(Game& g);
 
 // Диалог с NPC; при выборе торговли откроет магазин.
 void run_dialogue(Game& g, const std::string& npc_id);

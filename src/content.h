@@ -22,6 +22,11 @@ struct DlgOption {
     std::string req_quest;
     int         req_stage_min = -1;   // включительно; -1 — не проверять
     int         req_stage_max = -1;
+    // Второе условие по квесту: нужно, чтобы открывать задание только тем,
+    // кто уже закрыл предыдущее.
+    std::string req_quest2;
+    int         req_stage2_min = -1;
+    int         req_stage2_max = -1;
     std::string req_counter;
     int         req_counter_min = -1;
     int         req_counter_max = -1;
@@ -37,7 +42,9 @@ struct DlgOption {
     int         take_count = 0;
     int         give_gold  = 0;
     int         give_exp   = 0;
-    bool        open_shop  = false;
+    bool        open_shop    = false;
+    bool        open_enchant = false;
+    bool        portal_gift  = false;   // выдаёт умение ставить порталы
     bool        rest       = false;   // восстановить HP/AP
 };
 
@@ -45,6 +52,56 @@ struct DlgNode {
     std::string            id;
     std::string            text;
     std::vector<DlgOption> options;
+};
+
+// ---------- эффекты ----------
+
+struct EffectDef {
+    std::string id;
+    std::string name;
+    std::string desc;
+    EffectKind  kind    = EffectKind::Stat;
+    bool        harmful = false;
+    int         hp_per_turn = 0;   // для Damage/Heal, умножается на силу
+    Stats       per_power;         // для Stat, умножается на силу
+};
+
+// ---------- расы и специализации ----------
+// Выбираются один раз при создании героя и дальше только складываются
+// в итоговые характеристики.
+
+struct RaceDef {
+    std::string id;
+    std::string name;
+    std::string desc;
+    Stats       bonus;
+};
+
+struct SpecDef {
+    std::string id;
+    std::string name;
+    std::string desc;
+    Stats       bonus;
+    std::string start_item;   // чем вооружают на старте
+    int         start_count = 0;
+};
+
+// ---------- зачарования ----------
+// Привязываются к коду предмета: все экземпляры одного предмета делят
+// зачарование. Для снаряжения, которого по одному, это незаметно, зато
+// инвентарь остаётся простым списком стопок.
+
+struct EnchantDef {
+    std::string id;
+    std::string name;
+    std::string desc;
+    Stats       bonus;
+    std::string on_hit_effect;    // что накладывается при попадании
+    int         on_hit_chance = 0;
+    int         on_hit_power  = 1;
+    int         price = 0;
+    std::string reagent;          // предмет-реагент, нужен вдобавок к золоту
+    int         reagent_count = 0;
 };
 
 // ---------- существа и NPC ----------
@@ -73,6 +130,10 @@ struct EnemyDef {
     std::vector<Drop> drops;
     bool              aggressive = true;
     bool              female = false;   // для согласования: «повержен» / «повержена»
+    std::string       on_hit_effect;    // эффект, накладываемый ударом
+    int               on_hit_chance = 0;
+    int               on_hit_power  = 1;
+    std::vector<ActiveEffect> innate;   // эффекты, висящие с рождения
     int               detect = 5;      // радиус обнаружения игрока
     std::string       kill_counter;    // какой счётчик растёт при убийстве
 };
@@ -119,7 +180,11 @@ class Content {
 public:
     static const Content& get();
 
-    const ItemDef*  item(const std::string& id)  const;
+    const ItemDef*   item(const std::string& id)   const;
+    const EffectDef* effect(const std::string& id) const;
+    const RaceDef*   race(const std::string& id)   const;
+    const SpecDef*   spec(const std::string& id)   const;
+    const EnchantDef* enchant(const std::string& id) const;
     const EnemyDef* enemy(const std::string& id) const;
     const NpcDef*   npc(const std::string& id)   const;
     const ShopDef*  shop(const std::string& id)  const;
@@ -130,12 +195,19 @@ public:
     // Текст этапа квеста; пустая строка, если этап не описан.
     std::string quest_stage_text(const std::string& quest_id, int stage) const;
 
-    const std::vector<SkillDef>& skills() const { return skills_; }
-    const std::vector<QuestDef>& quests() const { return quests_; }
+    const std::vector<SkillDef>&   skills()   const { return skills_; }
+    const std::vector<QuestDef>&   quests()   const { return quests_; }
+    const std::vector<RaceDef>&    races()    const { return races_; }
+    const std::vector<SpecDef>&    specs()    const { return specs_; }
+    const std::vector<EnchantDef>& enchants() const { return enchants_; }
 
 private:
     Content();
     void build_items();
+    void build_effects();
+    void build_races();
+    void build_specs();
+    void build_enchants();
     void build_enemies();
     void build_skills();
     void build_quests();
@@ -148,6 +220,11 @@ private:
     std::map<std::string, NpcDef>   npcs_;
     std::map<std::string, ShopDef>  shops_;
     std::map<std::string, DlgNode>  nodes_;
-    std::vector<QuestDef>           quests_;
-    std::vector<SkillDef>           skills_;
+    std::map<std::string, EffectDef>  effects_;
+    std::map<std::string, EnchantDef>  enchant_map_;
+    std::vector<QuestDef>             quests_;
+    std::vector<SkillDef>             skills_;
+    std::vector<RaceDef>              races_;
+    std::vector<SpecDef>              specs_;
+    std::vector<EnchantDef>           enchants_;
 };

@@ -9,7 +9,7 @@
 namespace {
 
 constexpr const char* MAGIC   = "andors-love-save";
-constexpr int         VERSION = 1;
+constexpr int         VERSION = 2;
 
 void write_stats(std::ostream& os, const char* key, const Stats& s) {
     os << key << ' ' << s.max_hp << ' ' << s.max_ap << ' ' << s.attack << ' '
@@ -42,7 +42,10 @@ bool Game::save_to(const std::string& path) const {
     out << "ap " << plr_.ap << '\n';
     out << "loc " << plr_.loc << '\n';
     out << "pos " << plr_.pos.x << ' ' << plr_.pos.y << '\n';
+    out << "race " << plr_.race << '\n';
+    out << "spec " << plr_.spec << '\n';
     out << "stance " << static_cast<int>(plr_.stance) << '\n';
+    out << "portalmaster " << (plr_.portal_master ? 1 : 0) << '\n';
     out << "momentum " << plr_.momentum << '\n';
     out << "turn " << turn_ << '\n';
     out << "respawn " << respawn_left_ << '\n';
@@ -61,13 +64,27 @@ bool Game::save_to(const std::string& path) const {
         out << "quest " << kv.first << ' ' << kv.second << '\n';
     for (const auto& kv : plr_.counters)
         out << "counter " << kv.first << ' ' << kv.second << '\n';
+    for (const ActiveEffect& a : plr_.effects)
+        out << "effect " << a.id << ' ' << a.turns << ' ' << a.power << '\n';
+    for (const auto& kv : plr_.enchants)
+        out << "enchant " << kv.first << ' ' << kv.second << '\n';
+    for (const Portal& pt : plr_.portals)
+        out << "portal " << pt.loc << ' ' << pt.pos.x << ' ' << pt.pos.y << '\n';
     for (const std::string& t : taken_)
         out << "taken " << t << '\n';
+    for (const std::string& ch : chests_)
+        out << "chest " << ch << '\n';
     for (const std::string& v : visited_)
         out << "visited " << v << '\n';
-    for (const Mob& m : mobs_)
+    for (const Mob& m : mobs_) {
         out << "mob " << m.uid << ' ' << m.enemy_id << ' ' << m.loc << ' '
-            << m.pos.x << ' ' << m.pos.y << ' ' << m.hp << ' ' << m.zone << '\n';
+            << m.pos.x << ' ' << m.pos.y << ' ' << m.hp << ' ' << m.zone << ' '
+            << m.gold << '\n';
+        for (const ItemStack& st : m.inv)
+            out << "mobinv " << m.uid << ' ' << st.id << ' ' << st.count << '\n';
+        for (const ActiveEffect& a : m.effects)
+            out << "mobfx " << m.uid << ' ' << a.id << ' ' << a.turns << ' ' << a.power << '\n';
+    }
 
     out << "end\n";
     if (!out) {
@@ -104,10 +121,13 @@ bool Game::load_from(const std::string& path) {
     p.skills.clear();
     p.quests.clear();
     p.counters.clear();
+    p.effects.clear();
+    p.enchants.clear();
+    p.portals.clear();
     for (std::string& e : p.equipped) e.clear();
 
     std::vector<Mob>      mobs;
-    std::set<std::string> taken, visited;
+    std::set<std::string> taken, visited, chests;
     int      turn = 0, respawn = RESPAWN_TURNS, next_uid = 1;
     unsigned long long seed = 0;
 
@@ -130,6 +150,9 @@ bool Game::load_from(const std::string& path) {
         else if (key == "hp")       ls >> p.hp;
         else if (key == "ap")       ls >> p.ap;
         else if (key == "loc")      ls >> p.loc;
+        else if (key == "race")     ls >> p.race;
+        else if (key == "spec")     ls >> p.spec;
+        else if (key == "portalmaster") { int v = 0; ls >> v; p.portal_master = (v != 0); }
         else if (key == "pos")      ls >> p.pos.x >> p.pos.y;
         else if (key == "momentum") ls >> p.momentum;
         else if (key == "turn")     ls >> turn;
@@ -155,11 +178,38 @@ bool Game::load_from(const std::string& path) {
         else if (key == "quest")   { std::string id; int v = 0; if (ls >> id >> v) p.quests[id] = v; }
         else if (key == "counter") { std::string id; int v = 0; if (ls >> id >> v) p.counters[id] = v; }
         else if (key == "taken")   { std::string t; if (ls >> t) taken.insert(t); }
+        else if (key == "chest")   { std::string t; if (ls >> t) chests.insert(t); }
+        else if (key == "effect") {
+            std::string id; int t = 0, pw = 1;
+            if ((ls >> id >> t >> pw) && t > 0) p.effects.push_back(ActiveEffect(id, t, pw));
+        }
+        else if (key == "enchant") {
+            std::string item, ench;
+            if (ls >> item >> ench) p.enchants[item] = ench;
+        }
+        else if (key == "portal") {
+            Portal pt;
+            if (ls >> pt.loc >> pt.pos.x >> pt.pos.y) p.portals.push_back(pt);
+        }
+        else if (key == "mobinv") {
+            int uid = 0; ItemStack st;
+            if ((ls >> uid >> st.id >> st.count) && st.count > 0)
+                for (Mob& mm : mobs)
+                    if (mm.uid == uid) { mm.inv.push_back(st); break; }
+        }
+        else if (key == "mobfx") {
+            int uid = 0; std::string id; int t = 0, pw = 1;
+            if ((ls >> uid >> id >> t >> pw) && t > 0)
+                for (Mob& mm : mobs)
+                    if (mm.uid == uid) { mm.effects.push_back(ActiveEffect(id, t, pw)); break; }
+        }
         else if (key == "visited") { std::string v; if (ls >> v) visited.insert(v); }
         else if (key == "mob") {
             Mob m;
-            if (ls >> m.uid >> m.enemy_id >> m.loc >> m.pos.x >> m.pos.y >> m.hp >> m.zone)
+            if (ls >> m.uid >> m.enemy_id >> m.loc >> m.pos.x >> m.pos.y >> m.hp >> m.zone) {
+                ls >> m.gold;          // необязательное поле: пусто — останется 0
                 mobs.push_back(m);
+            }
         }
         // Неизвестные ключи пропускаем: старые сохранения не должны падать
         // на полях, добавленных позже.
@@ -179,6 +229,7 @@ bool Game::load_from(const std::string& path) {
     plr_          = p;
     mobs_         = mobs;
     taken_        = taken;
+    chests_       = chests;
     visited_      = visited;
     turn_         = turn;
     respawn_left_ = respawn > 0 ? respawn : RESPAWN_TURNS;
