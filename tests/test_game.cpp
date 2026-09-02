@@ -3,10 +3,13 @@
 #include "../src/game.h"
 #include "../src/world.h"
 
+#include "../src/embedded_maps.h"
 #include "../src/platform.h"
 
 #include <cstdio>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 namespace {
@@ -117,6 +120,54 @@ void test_maps() {
     // Несуществующая карта не должна ронять процесс (была ошибка fclose(NULL)).
     check(w.location("нет-такой-карты") == nullptr, "отсутствующая карта возвращает nullptr");
     check(!w.last_error().empty(), "и внятный текст ошибки");
+}
+
+void test_embedded_maps() {
+    section("вшитые карты");
+
+    for (const char* id : {"village", "forest"}) {
+        const char* emb = embedded_map(id);
+        check(emb != nullptr, std::string("карта ") + id + " вшита в бинарник");
+        if (!emb) continue;
+
+        // Вшитая копия должна совпадать с файлом, иначе после правки карты
+        // забыли выполнить «make embed» и игра в APK разойдётся с исходником.
+        std::ifstream f(std::string("data/maps/") + id + ".map");
+        check(static_cast<bool>(f), std::string("файл карты ") + id + " на месте");
+        if (!f) continue;
+        std::ostringstream buf;
+        buf << f.rdbuf();
+        std::string from_file = buf.str();
+        while (!from_file.empty() && (from_file.back() == '\n' || from_file.back() == '\r'))
+            from_file.pop_back();
+        check(from_file == emb,
+              std::string("вшитая копия ") + id + " совпадает с файлом (иначе: make embed)");
+    }
+
+    check(embedded_map("нет-такой") == nullptr, "неизвестная карта не выдумывается");
+    check(embedded_map(nullptr) == nullptr, "nullptr обрабатывается");
+
+    // Главный сценарий APK: каталога с картами нет вообще.
+    World none("каталога-точно-нет");
+    const Location* v = none.location("village");
+    check(v != nullptr, "локация грузится из вшитой копии при отсутствии файлов");
+    if (v) {
+        eq(v->w, 48, "размер вшитой карты верный");
+        eq(static_cast<int>(v->tiles.size()), 48 * 18, "сетка вшитой карты полная");
+        check(!v->npcs.empty(), "объекты вшитой карты разобраны");
+    }
+    const Location* f2 = none.location("forest");
+    check(f2 != nullptr, "вторая локация тоже доступна без файлов");
+
+    // Игра целиком должна подниматься без внешних данных.
+    Game g("каталога-точно-нет");
+    g.new_game("Безфайловый");
+    check(g.here() != nullptr, "новая игра стартует без каталога карт");
+    if (v && !v->exits.empty()) {
+        g.player().pos = Vec2(v->exits[0].pos.x - 1, v->exits[0].pos.y);
+        g.try_move(1, 0);
+        eqs(g.player().loc, "forest", "переход между вшитыми локациями работает");
+    }
 }
 
 void test_new_game_and_stats() {
@@ -659,6 +710,7 @@ int main() {
     test_text_helpers();
     test_wrap();
     test_maps();
+    test_embedded_maps();
     test_new_game_and_stats();
     test_equipment();
     test_level_up();

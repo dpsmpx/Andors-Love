@@ -1,6 +1,9 @@
 #include "world.h"
 
+#include "embedded_maps.h"
+
 #include <fstream>
+#include <istream>
 #include <sstream>
 
 const MapExit* Location::exit_at(Vec2 p) const {
@@ -40,7 +43,23 @@ const Location* World::location(const std::string& id) const {
     return &cache_[id];
 }
 
-// Формат файла локации (см. README, раздел «Формат карты»):
+// Карта берётся с диска, а если файла нет — из копии, вшитой в бинарник.
+// Второй путь нужен для APK и любой другой поставки одним файлом.
+bool World::load(const std::string& id) const {
+    const std::string path = root_ + "/" + id + ".map";
+    std::ifstream in(path);
+    if (in) return parse(in, id, path);
+
+    if (const char* data = embedded_map(id.c_str())) {
+        std::istringstream ss(data);
+        return parse(ss, id, "<встроенная карта: " + id + ">");
+    }
+
+    err_ = "карта не найдена: нет ни файла " + path + ", ни встроенной копии";
+    return false;
+}
+
+// Формат локации (см. README, раздел «Формат карты»):
 //   name  <название>
 //   size  <ширина> <высота>
 //   grid
@@ -48,21 +67,14 @@ const Location* World::location(const std::string& id) const {
 //   objects
 //   npc|item|exit|spawn|bed|sign ...
 //   end
-bool World::load(const std::string& id) const {
-    const std::string path = root_ + "/" + id + ".map";
-    std::ifstream in(path);
-    if (!in) {
-        err_ = "не удалось открыть файл карты: " + path;
-        return false;
-    }
-
+bool World::parse(std::istream& in, const std::string& id, const std::string& src) const {
     Location loc;
     loc.id = id;
 
     std::string line;
     int line_no = 0;
     auto fail = [&](const std::string& what) {
-        err_ = path + ":" + to_str(line_no) + ": " + what;
+        err_ = src + ":" + to_str(line_no) + ": " + what;
         return false;
     };
 

@@ -36,12 +36,15 @@ OBJ := $(SRC:src/%.cpp=build/%.o)
 DEP := $(OBJ:.o=.d)
 BIN := andors-love
 
-.PHONY: all run debug test clean
+.PHONY: all run debug test embed clean
 
 all: $(BIN)
 
+# CXXFLAGS передаём и в линковку: флаги вроде -pie и -s действуют именно на
+# этом шаге, а на Android исполняемый файл обязан быть PIE. Если их потерять,
+# система откажется запускать собранный бинарник.
 $(BIN): $(OBJ)
-	$(CXX) $(OBJ) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXSTD) $(CXXFLAGS) $(OBJ) -o $@ $(LDFLAGS)
 
 build/%.o: src/%.cpp | build
 	$(CXX) $(ALL_CXXFLAGS) -c $< -o $@
@@ -66,6 +69,12 @@ $(TEST_BIN): $(TEST_SRC) $(TEST_OBJ) | build
 debug: CXXFLAGS := -g -O0 $(WARN) -fsanitize=address,undefined
 debug: LDFLAGS  := -fsanitize=address,undefined
 debug: clean $(BIN)
+
+# Карты вшиты в src/embedded_maps.cpp, чтобы игра работала без внешних файлов
+# (сборка APK, копирование одним бинарником). Файл лежит в репозитории —
+# эта цель нужна только после правки карт и требует python3.
+embed:
+	@python3 tools/embed_maps.py
 
 clean:
 	@rm -rf build $(BIN)

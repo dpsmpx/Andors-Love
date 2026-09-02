@@ -1,6 +1,7 @@
 #pragma once
 #include "types.h"
 
+#include <iosfwd>
 #include <map>
 #include <string>
 #include <vector>
@@ -61,6 +62,8 @@ public:
 
 private:
     bool load(const std::string& id) const;
+    // Разбор из любого потока: файла на диске или вшитой в бинарник копии.
+    bool parse(std::istream& in, const std::string& id, const std::string& src) const;
 
     mutable std::map<std::string, Location> cache_;
     mutable std::string                     err_;
