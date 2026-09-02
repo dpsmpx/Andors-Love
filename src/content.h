@@ -37,6 +37,10 @@ struct DlgOption {
     // последствия выбора
     std::string set_quest;
     int         set_stage  = 0;
+    // Запомнить выбор игрока: нужно там, где правильного ответа нет и важно
+    // лишь, что он выбрал.
+    std::string set_counter;
+    int         set_counter_value = 0;
     std::string give_item;
     int         give_count = 0;
     std::string take_item;

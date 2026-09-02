@@ -117,6 +117,8 @@ forest.objects = [
     "exit 1 8 village 45 8",
     "exit 45 2 cave 3 9",
     "exit 24 16 ruins 24 3",
+    "exit 12 1 goatpath 24 15 quest=goatpath:1 "
+    "deny=Тропа наверх зарастает и никуда, кажется, не ведёт. Гурий что-то про неё говорил.",
 ]
 
 # -------------------------------------------------------------- ПЕЩЕРА
@@ -237,7 +239,199 @@ vault.objects = [
     "exit 2 9 sanctum 31 6",
 ]
 
-MAPS = [village, forest, cave, ruins, sanctum, vault]
+# ===================== РЕГИОН II · ШОВ =====================
+
+# --- Козья тропа: узкая, вьётся вверх, разводит на два края Шва ---
+goatpath = Map("goatpath", "Козья тропа", "#")
+goatpath.rect(22, 13, 26, 16, ",")       # низ, выход обратно в лес
+goatpath.rect(22, 10, 26, 13, ",")
+goatpath.rect(8, 10, 26, 12, ",")        # длинный траверс налево
+goatpath.rect(6, 4, 10, 12, ",")         # подъём к стеклянному полю
+goatpath.rect(26, 9, 44, 12, ",")        # ветка направо, смыкается с траверсом
+goatpath.rect(40, 4, 44, 10, ",")        # подъём к мельнице
+goatpath.rect(14, 8, 16, 10, ",")        # карман с запиской
+goatpath.rect(32, 6, 34, 9, ",")
+goatpath.objects = [
+    "sign 24 14 Тропа круче, чем помнится. Перевал всё не кончается.",
+    "note 15 9 goat",
+    "item 33 7 old_coin 1",
+    "item 9 5 bread 1",
+    "chest 15 8 80 - herb_potion:2 old_coin:1",
+    "spawn 12 11 stray 2 4",
+    "spawn 30 11 stray 2 4",
+    "spawn 42 7 mill_rat 2 3",
+    "exit 24 16 forest 10 2",
+    "exit 7 4 glassfield 3 9",
+    "exit 42 4 mill 24 15",
+]
+
+# --- Стеклянное поле: открытое, режущее ---
+glassfield = Map("glassfield", "Стеклянное поле", ",")
+for (x, y, n) in [(6,3,4),(20,2,5),(34,4,4),(10,14,5),(28,13,4),(40,11,3)]:
+    glassfield.rect(x, y, x + n - 1, y, "#")     # гряды спёкшегося стекла
+glassfield.rect(18, 7, 24, 9, "#")
+glassfield.rect(2, 8, 12, 10, ".")               # тропа от перевала
+glassfield.rect(30, 7, 44, 10, ".")
+glassfield.objects = [
+    "npc 14 9 glazier",
+    "sign 5 9 Земля здесь спеклась за одну ночь. И не от огня.",
+    "note 25 5 glass",
+    "item 8 12 glass_shard 1",
+    "item 31 3 glass_shard 1",
+    "item 43 14 glass_shard 1",
+    "item 16 15 old_coin 1",
+    "chest 42 3 140 - glass_dust:1 antidote:2",
+    "spawn 10 5 glass_hound 3 5",
+    "spawn 36 13 glass_hound 3 5",
+    "spawn 24 12 glass_hound 2 4",
+    "exit 2 9 goatpath 8 5",
+    "exit 45 9 market 3 9",
+    "exit 24 16 bridge 24 3",
+]
+
+# --- Мельница на Тихой: река втекает и не вытекает ---
+mill = Map("mill", "Мельница на Тихой", ",")
+mill.rect(1, 6, 46, 8, "~")                      # русло Тихой
+mill.rect(18, 6, 22, 8, "#")                     # плотина и колесо
+mill.rect(20, 6, 20, 8, ".")                     # проход по гребню плотины
+mill.rect(14, 9, 26, 13, ".")                    # двор мельницы
+mill.rect(16, 10, 18, 12, "#")                   # сама мельница
+mill.rect(2, 9, 14, 11, ".")
+mill.rect(26, 9, 44, 12, ".")
+mill.rect(30, 13, 34, 16, ".")                   # спуск к затвору
+for (x, y, n) in [(4,2,4),(28,2,5),(40,3,4),(6,14,3),(42,14,3)]:
+    mill.rect(x, y, x + n - 1, y, "T")
+mill.objects = [
+    "npc 22 11 miller",
+    "npc 32 15 digger",
+    "sign 24 10 Колесо стоит третий год. Воды хватает, а тяги нет.",
+    "note 12 10 mill",
+    "item 40 11 bread 2",
+    "chest 44 10 110 - salve:1 old_coin:2",
+    "spawn 8 10 mill_rat 3 4",
+    "spawn 36 11 mill_rat 3 4",
+    "spawn 24 15 stray 1 3",
+    "exit 24 15 goatpath 42 5",
+    "exit 32 16 saltmines 24 3 key=mill_key "
+    "deny=Нижний затвор заперт наглухо. Мельник говорил, что ключ у него.",
+]
+
+# --- Рынок Шва: узел региона, ничей ---
+market = Map("market", "Рынок Шва", ",")
+for row in (5, 8, 11):                           # торговые ряды
+    market.rect(6, row, 20, row, "#")
+    market.rect(26, row, 40, row, "#")
+market.rect(2, 8, 6, 10, ".")
+market.rect(20, 2, 26, 16, "=")                  # главный проход
+market.rect(40, 8, 46, 10, ".")
+market.objects = [
+    "npc 23 9 warden",
+    "sign 23 12 Уложение Рынка: у товара не спрашивают года, у человека — лоскута.",
+    "note 23 4 market",
+    "item 8 6 old_coin 1",
+    "item 38 12 spice_bag 1",
+    "chest 8 12 160 - caravan_stew:2 old_coin:2",
+    "chest 38 6 190 - trader_hood:1 herb_potion:2",
+    "spawn 12 14 stray 2 4",
+    "spawn 34 14 stray 2 4",
+    "exit 2 9 glassfield 44 9",
+    "exit 23 2 caravanserai 24 15",
+    "exit 45 9 doubled 3 9",
+]
+
+# --- Подвесной мост в никуда ---
+bridge = Map("bridge", "Подвесной мост в никуда", "#")
+bridge.rect(20, 2, 28, 6, ",")                   # площадка у входа
+bridge.rect(22, 6, 26, 13, "=")                  # сам мост
+bridge.rect(20, 13, 28, 15, "=")                 # обрыв: дальше ничего
+bridge.rect(16, 3, 20, 5, ",")
+bridge.rect(28, 3, 34, 5, ",")
+bridge.objects = [
+    "sign 24 5 Мост висел через ущелье. Ущелья нет, а мост есть.",
+    "note 24 14 bridge",
+    "item 18 4 rope_end 1",
+    "chest 32 4 130 - frost_shard:1 elixir_guard:1",
+    "spawn 24 10 bridge_walker 1 2",
+    "spawn 31 4 caravan_shade 1 2",
+    "exit 24 2 glassfield 24 15",
+]
+
+# --- Соляные шахты: соль держит то, что не должна ---
+saltmines = Map("saltmines", "Соляные шахты", "#")
+saltmines.rect(22, 2, 26, 6, ".")                # ствол сверху
+saltmines.rect(10, 6, 38, 8, ".")                # верхний горизонт
+saltmines.rect(8, 8, 12, 14, ".")                # западная штольня
+saltmines.rect(6, 12, 20, 14, ".")
+saltmines.rect(34, 8, 40, 15, ".")               # восточная штольня
+saltmines.rect(20, 10, 36, 12, ".")              # нижний горизонт
+saltmines.rect(24, 12, 28, 16, ".")              # заложенная нижняя
+saltmines.objects = [
+    "sign 24 4 Стены белые и мокрые. Соль скрипит под ногой.",
+    "note 10 13 salt",
+    "item 37 9 salt_lump 1",
+    "item 12 7 old_coin 1",
+    "chest 18 13 210 - salt_lump:2 antidote:2 old_coin:2",
+    "chest 39 14 260 - brine_ring:1 salt_lump:2",
+    "spawn 14 7 salt_ghoul 3 5",
+    "spawn 32 11 salt_ghoul 3 5",
+    "spawn 37 12 salt_ghoul 2 4",
+    "spawn 26 15 salt_mother 1 2",
+    "exit 24 2 mill 32 15",
+]
+
+# --- Пустой караван-сарай: накрыто на сорок человек ---
+caravanserai = Map("caravanserai", "Пустой караван-сарай", "#")
+caravanserai.rect(8, 4, 40, 14, ".")             # двор под навесом
+caravanserai.rect(12, 6, 18, 8, "#")             # столы
+caravanserai.rect(22, 6, 28, 8, "#")
+caravanserai.rect(32, 6, 36, 8, "#")
+caravanserai.rect(12, 11, 18, 12, "#")
+caravanserai.rect(30, 11, 36, 12, "#")
+caravanserai.rect(20, 14, 28, 16, ".")           # ворота
+caravanserai.objects = [
+    "sign 24 13 Двенадцать подвод распряжены. Лошадей нет.",
+    "note 20 7 caravan",
+    "item 30 9 caravan_stew 1",
+    "item 11 13 old_coin 2",
+    "item 38 5 spice_bag 1",
+    "chest 38 13 240 - caravan_stew:2 spice_bag:1 old_coin:3",
+    "chest 10 5 180 - old_coin:3 herb_potion:1",
+    "spawn 16 10 caravan_shade 3 5",
+    "spawn 33 10 caravan_shade 3 5",
+    "spawn 24 5 caravan_shade 2 4",
+    "exit 24 15 market 23 3",
+]
+
+# --- Хутор Двоеданный: два двора, два Прохора ---
+doubled = Map("doubled", "Хутор Двоеданный", ",")
+doubled.rect(2, 8, 10, 10, ".")                  # дорога с рынка
+doubled.rect(10, 4, 20, 7, "#")                  # левый двор
+doubled.rect(12, 5, 18, 6, ".")
+doubled.rect(15, 7, 15, 7, ".")                  # калитка на межу
+doubled.rect(10, 11, 20, 14, "#")                # правый двор — зеркально
+doubled.rect(12, 12, 18, 13, ".")
+doubled.rect(15, 11, 15, 11, ".")
+doubled.rect(10, 8, 40, 10, ".")                 # межа между дворами
+doubled.rect(28, 4, 38, 7, "#")
+doubled.rect(30, 5, 36, 6, ".")
+doubled.rect(33, 7, 33, 7, ".")
+doubled.rect(28, 11, 38, 14, "#")
+doubled.rect(30, 12, 36, 13, ".")
+doubled.rect(33, 11, 33, 11, ".")
+doubled.objects = [
+    "npc 15 6 prohor_l",
+    "npc 15 12 prohor_r",
+    "sign 24 9 Межа посреди хутора. По обе стороны всё одинаковое.",
+    "note 33 5 prohor",
+    "item 33 12 bread 2",
+    "chest 40 9 170 - salve:2 old_coin:2",
+    "spawn 44 12 stray 1 3",
+    "exit 2 9 market 44 9",
+]
+
+MAPS = [village, forest, cave, ruins, sanctum, vault,
+        goatpath, glassfield, mill, market, bridge, saltmines,
+        caravanserai, doubled]
 
 # --------------------------------------------------------------- проверки
 def reachable(m, start):
@@ -258,7 +452,10 @@ def check():
     ok = True
     by_id = {m.id: m for m in MAPS}
     entries = {"village": (5, 8), "forest": (2, 8), "cave": (3, 9),
-               "ruins": (24, 3), "sanctum": (3, 9), "vault": (3, 9)}
+               "ruins": (24, 3), "sanctum": (3, 9), "vault": (3, 9),
+               "goatpath": (24, 15), "glassfield": (3, 9), "mill": (24, 15),
+               "market": (3, 9), "bridge": (24, 3), "saltmines": (24, 3),
+               "caravanserai": (24, 15), "doubled": (3, 9)}
 
     for m in MAPS:
         start = entries[m.id]

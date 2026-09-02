@@ -1045,6 +1045,7 @@ void Game::apply_option(const DlgOption& o, const std::string& npc_shop,
         else if (o.set_stage == 1)     msg("Взят квест: «" + qname + "».");
         else                           msg("Квест «" + qname + "» продвинулся.");
     }
+    if (!o.set_counter.empty()) plr_.counters[o.set_counter] = o.set_counter_value;
     // Забираем до выдачи, чтобы обмен «предмет за предмет» не упирался в порядок.
     if (!o.take_item.empty() && o.take_count > 0) {
         if (remove_item(o.take_item, o.take_count)) {

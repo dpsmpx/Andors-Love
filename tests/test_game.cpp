@@ -137,7 +137,7 @@ void test_maps() {
     // Граф мира: каждый переход ведёт в существующую локацию на проходимую
     // клетку, и все локации достижимы из деревни. Ошибка здесь означает
     // локацию, куда нельзя попасть или откуда нельзя выйти.
-    const char* all[] = {"village", "forest", "cave", "ruins", "sanctum", "vault"};
+    const char* all[] = {"village", "forest", "cave", "ruins", "sanctum", "vault", "goatpath", "glassfield", "mill", "market", "bridge", "saltmines", "caravanserai", "doubled"};
     const int   nloc  = static_cast<int>(sizeof(all) / sizeof(all[0]));
 
     for (int i = 0; i < nloc; ++i) {
@@ -204,7 +204,7 @@ void test_maps() {
 void test_embedded_maps() {
     section("вшитые карты");
 
-    for (const char* id : {"village", "forest", "cave", "ruins", "sanctum", "vault"}) {
+    for (const char* id : {"village", "forest", "cave", "ruins", "sanctum", "vault", "goatpath", "glassfield", "mill", "market", "bridge", "saltmines", "caravanserai", "doubled"}) {
         const char* emb = embedded_map(id);
         check(emb != nullptr, std::string("карта ") + id + " вшита в бинарник");
         if (!emb) continue;
@@ -640,7 +640,8 @@ void test_content_integrity() {
     const Content& c = Content::get();
 
     // Каждая ссылка на предмет/врага/узел из контента должна разрешаться.
-    const char* shops[] = {"shop_smith", "shop_general", "shop_herbs"};
+    const char* shops[] = {"shop_smith", "shop_general", "shop_herbs", "shop_books",
+                           "shop_glass", "shop_market"};
     for (const char* sid : shops) {
         const ShopDef* s = c.shop(sid);
         check(s != nullptr, std::string("магазин ") + sid + " существует");
@@ -649,7 +650,8 @@ void test_content_integrity() {
             check(c.item(gid) != nullptr, "товар " + gid + " есть в базе предметов");
     }
 
-    const char* npcs[] = {"elder", "herbalist", "smith", "trader", "hermit", "enchanter"};
+    const char* npcs[] = {"elder", "herbalist", "smith", "trader", "hermit", "enchanter",
+                          "glazier", "miller", "warden", "digger", "prohor_l", "prohor_r"};
     for (const char* nid : npcs) {
         const NpcDef* n = c.npc(nid);
         check(n != nullptr, std::string("NPC ") + nid + " существует");
@@ -671,7 +673,16 @@ void test_content_integrity() {
                            "hermit_root","hermit_rest","hermit_hint",
                            "zp_offer","zp_wait","zp_reward","zp_after",
                            "ench_root","ench_about","ench_offer","ench_wait","ench_reward",
-                           "books_offer","books_wait","books_reward","cinch_talk"};
+                           "books_offer","books_wait","books_reward","cinch_talk",
+                           "goat_offer","goat_wait","goat_reward",
+                           "glazier_root","glass_offer","glass_wait","glass_reward",
+                           "miller_root","mill_offer","mill_wait","mill_reward",
+                           "warden_root","market_offer","market_wait","market_reward","market_rules",
+                           "digger_root","digger_why","digger_hint",
+                           "prohor_l_root","prohor_r_root","prohor_offer",
+                           "prohor_l_chosen","prohor_r_chosen",
+                           "prohor_l_after","prohor_r_after",
+                           "prohor_l_lost","prohor_r_lost"};
     for (const char* nid : nodes) {
         const DlgNode* n = c.node(nid);
         check(n != nullptr, std::string("узел ") + nid + " существует");
@@ -704,7 +715,8 @@ void test_content_integrity() {
     // Добыча врагов должна ссылаться на существующие предметы.
     const char* mobs[] = {"rat", "wolf", "bandit", "wolf_alpha", "spider", "bat",
                           "spider_queen", "brigand", "bandit_chief", "wraith", "keeper",
-                          "archivist"};
+                          "archivist", "stray", "glass_hound", "mill_rat", "salt_ghoul",
+                          "caravan_shade", "salt_mother", "bridge_walker"};
     for (const char* mid : mobs) {
         const EnemyDef* e = c.enemy(mid);
         check(e != nullptr, std::string("враг ") + mid + " существует");
@@ -717,7 +729,7 @@ void test_content_integrity() {
 
     // Зоны спавна на картах должны ссылаться на существующих врагов.
     World w("data/maps");
-    for (const char* lid : {"village", "forest", "cave", "ruins", "sanctum", "vault"}) {
+    for (const char* lid : {"village", "forest", "cave", "ruins", "sanctum", "vault", "goatpath", "glassfield", "mill", "market", "bridge", "saltmines", "caravanserai", "doubled"}) {
         const Location* loc = w.location(lid);
         if (!loc) continue;
         for (const SpawnZone& z : loc->zones)
@@ -1283,7 +1295,7 @@ void test_gates_and_secret_quests() {
     check(!to_vault->gate.denied.empty(), "отказ объясняется словами, а не молчанием");
 
     // Каждое условие врат должно ссылаться на существующие вещи.
-    for (const char* lid : {"village", "forest", "cave", "ruins", "sanctum", "vault"}) {
+    for (const char* lid : {"village", "forest", "cave", "ruins", "sanctum", "vault", "goatpath", "glassfield", "mill", "market", "bridge", "saltmines", "caravanserai", "doubled"}) {
         const Location* loc = w.location(lid);
         if (!loc) continue;
         for (const MapExit& e : loc->exits) {
@@ -1390,7 +1402,9 @@ void test_books_and_notes() {
 
     // --- записки в базе ---
     const char* note_ids[] = {"ink", "miner", "watch", "zero", "child", "proto", "hermit",
-                              "seam", "cinch", "order", "double"};
+                              "seam", "cinch", "order", "double",
+                              "goat", "glass", "mill", "market", "prohor",
+                              "caravan", "salt", "bridge"};
     for (const char* id : note_ids) {
         const NoteDef* n = c.note(id);
         check(n != nullptr, std::string("записка ") + id + " описана");
@@ -1855,10 +1869,131 @@ void test_playthrough() {
     check(g.enchant_item(wpn, "keen"), "оружие зачаровано");
     check(g.total().attack > atk_before, "зачарование подняло меткость");
 
+    // ================= РЕГИОН II · ШОВ =================
+
+    // Тропа закрыта, пока Гурий про неё не расскажет.
+    check(travel("village") || true, "");
+    g.player().loc = "forest";
+    check(!travel("goatpath"), "без разговора с Гурием тропа не пускает");
+
+    check(visible("trader_root", "goat_offer"), "Гурий открыл квест о пропавшем обозе");
+    g.apply_option(c.node("goat_offer")->options[0], "", &shop);
+    eq(g.quest_stage("goatpath"), 1, "квест об обозе взят");
+
+    g.player().loc = "forest";
+    check(travel("goatpath"), "с открытым квестом тропа пускает");
+    eqs(g.player().loc, "goatpath", "герой на Козьей тропе");
+    check(gather_note("goat"), "путевой лист обоза найден");
+    check(hunt("stray", 2) >= 1, "приблудные встречаются и побеждаются");
+
+    // --- Стеклянное поле ---
+    check(travel("glassfield"), "переход на Стеклянное поле");
+    check(visible("glazier_root", "glass_offer"), "Ферапонт предлагает работу");
+    g.apply_option(c.node("glass_offer")->options[0], "", &shop);
+    check(gather_note("glass"), "свидетельство стекольщика найдено");
+    gather("glass_shard");
+    guard = 0;
+    while (g.count_item("glass_shard") < 6 && guard++ < 60) {
+        if (hunt("glass_hound", 1) == 0) g.world_turn();
+    }
+    check(g.count_item("glass_shard") >= 6, "шесть осколков собраны");
+    g.apply_option(c.node("glass_reward")->options[0], "", &shop);
+    eq(g.quest_stage("glass"), QUEST_DONE, "квест «Стекло помнит» закрыт");
+    check(g.count_item("glass_blade") >= 1, "стеклянный резак получен");
+
+    // --- Мост: тайна от найденной вещи ---
+    check(travel("bridge"), "переход на мост");
+    gather("rope_end");
+    if (g.count_item("rope_end") == 0) { hunt("bridge_walker", 1); }
+    check(g.count_item("rope_end") >= 1, "обрывок каната добыт");
+    eq(g.quest_stage("bridge"), 1, "вещь сама открыла тайну «Обрезанный канат»");
+    check(gather_note("bridge"), "донесение о мосте найдено");
+    eq(g.quest_stage("bridge"), QUEST_DONE, "тайна о мосте разгадана записью");
+    check(travel("glassfield"), "возврат с моста");
+
+    // --- Рынок Шва ---
+    check(travel("market"), "переход на Рынок Шва");
+    eq(g.quest_stage("goatpath"), 2, "приход на Рынок продвинул квест Гурия сам");
+    check(gather_note("market"), "уложение Рынка найдено");
+    check(visible("warden_root", "market_offer"), "Смотритель предлагает счёт");
+    g.apply_option(c.node("market_offer")->options[0], "", &shop);
+
+    // --- Караван-сарай: тайна от входа ---
+    check(travel("caravanserai"), "переход в караван-сарай");
+    eq(g.quest_stage("caravan"), 1, "вход открыл тайну «Столы накрыты»");
+    check(gather_note("caravan"), "опись каравана найдена");
+    eq(g.quest_stage("caravan"), QUEST_DONE, "тайна о караване разгадана");
+    gather("old_coin");
+    guard = 0;
+    while (g.count_item("old_coin") < 8 && guard++ < 80) {
+        if (hunt("caravan_shade", 1) == 0) g.world_turn();
+    }
+    check(travel("market"), "возврат на Рынок");
+    check(g.count_item("old_coin") >= 8, "восемь монет чужой чеканки собраны");
+    g.apply_option(c.node("market_reward")->options[0], "", &shop);
+    eq(g.quest_stage("market"), QUEST_DONE, "квест «Не той чеканки» закрыт");
+
+    // --- Хутор Двоеданный: выбор без правильного ответа ---
+    check(travel("doubled"), "переход на хутор");
+    check(gather_note("prohor"), "записка Прохора о Прохоре найдена");
+    g.apply_option(c.node("prohor_offer")->options[0], "", &shop);
+    eq(g.quest_stage("doubled"), 1, "спор принят к рассмотрению");
+
+    // Оба варианта должны быть доступны — правильного нет.
+    auto choice_visible = [&](const char* node) {
+        const DlgNode* n = c.node(node);
+        if (!n) return false;
+        for (const DlgOption& o : n->options)
+            if (o.set_counter == "prohor_choice" && g.option_available(o)) return true;
+        return false;
+    };
+    check(choice_visible("prohor_l_root"), "левого Прохора можно признать настоящим");
+    check(choice_visible("prohor_r_root"), "и правого тоже");
+
+    for (const DlgOption& o : c.node("prohor_l_root")->options)
+        if (o.set_counter == "prohor_choice") { g.apply_option(o, "", &shop); break; }
+    eq(g.quest_stage("doubled"), QUEST_DONE, "спор рассужен");
+    eq(g.player().counters["prohor_choice"], 1, "выбор запомнен");
+    check(!choice_visible("prohor_r_root"), "второй раз выбрать уже нельзя");
+
+    // --- Мельница и соляные шахты ---
+    check(travel("market"), "возврат на Рынок");
+    check(travel("glassfield"), "возврат на поле");
+    check(travel("goatpath"), "возврат на тропу");
+    check(travel("mill"), "переход на мельницу");
+    check(gather_note("mill"), "расчёт мельника найден");
+
+    g.player().loc = "mill";
+    check(!travel("saltmines"), "без ключа затвор не открыть");
+    check(visible("miller_root", "mill_offer"), "мельник предлагает разобраться с водой");
+    g.apply_option(c.node("mill_offer")->options[0], "", &shop);
+    check(g.count_item("mill_key") >= 1, "ключ от затвора получен");
+
+    g.player().loc = "mill";
+    check(travel("saltmines"), "с ключом затвор открывается");
+    eqs(g.player().loc, "saltmines", "герой в соляных шахтах");
+    check(gather_note("salt"), "наказ копача найден");
+    eq(g.quest_stage("salt"), 1, "наказ открыл тайну «Соль помнит»");
+    check(hunt("salt_mother", 1) == 1, "Соляная матерь повержена");
+    eq(g.quest_stage("salt"), QUEST_DONE, "тайна «Соль помнит» разгадана убийством");
+
+    check(travel("mill"), "возврат на мельницу");
+    g.apply_option(c.node("mill_reward")->options[0], "", &shop);
+    eq(g.quest_stage("mill"), QUEST_DONE, "квест «Куда уходит вода» закрыт");
+
+    // --- обратно к Гурию ---
+    g.apply_option(c.node("goat_reward")->options[0], "", &shop);
+    eq(g.quest_stage("goatpath"), QUEST_DONE, "квест об обозе закрыт");
+
+    // Ключ не тратится: игрок не может запереть себя снаружи.
+    check(g.count_item("mill_key") >= 1, "ключ остался у игрока после прохода");
+
     // --- итог ---
     const char* all_quests[] = {"wolves", "amulet", "pelts", "moss", "books",
                                 "queen", "outpost", "zero_point", "enchanter",
-                                "seam", "cinch"};
+                                "seam", "cinch",
+                                "goatpath", "glass", "mill", "market", "doubled",
+                                "caravan", "salt", "bridge"};
     for (const char* q : all_quests)
         eq(g.player().quests[q], QUEST_DONE, std::string("квест ") + q + " пройден");
 
@@ -1866,7 +2001,7 @@ void test_playthrough() {
     check(g.books().size() >= 2, "библиотека наполнилась находками и своими книгами");
     check(g.book(diary) != nullptr, "своя книга дожила до конца прохождения");
 
-    check(g.player().level >= 8, "к концу всех квестов герой заметно вырос");
+    check(g.player().level >= 12, "к концу двух регионов герой заметно вырос");
     std::cout << "  (итог: уровень " << g.player().level
               << ", золота " << g.player().gold
               << ", квестов пройдено " << (sizeof(all_quests) / sizeof(all_quests[0]))

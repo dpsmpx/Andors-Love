@@ -195,6 +195,53 @@ void Content::build_items() {
                             "Переплёт и полсотни страниц. Применить, чтобы начать её.");
     add(blank);
 
+    // --- Регион II: Шов ---
+    add(mk_item("glass_shard", "Осколок поля", ItemKind::Misc, 22,
+                "Стекло не заводское: земля спеклась сама. Режет сквозь рукавицу."));
+    add(mk_item("salt_lump", "Ком соли", ItemKind::Misc, 16,
+                "Соль из нижних штолен. Держит запах того, что в ней лежало."));
+    add(mk_item("old_coin", "Монета не той чеканки", ItemKind::Misc, 30,
+                "Профиль незнакомый, год — за сорок лет до Стяжения."));
+    add(mk_item("spice_bag", "Мешочек пряностей", ItemKind::Misc, 45,
+                "Пахнет так, будто его завязали вчера. Караван шёл двести лет."));
+    add(mk_item("rope_end", "Обрывок каната", ItemKind::Misc, 20,
+                "Срез ровный. Канат не перетёрся — его отрезало."));
+    add(mk_item("salt_heart", "Соляное сердце", ItemKind::Misc, 0,
+                "Тяжёлое, тёплое. Внутри что-то есть, и лучше не смотреть."));
+    add(mk_item("mill_key", "Ключ от нижнего затвора", ItemKind::Misc, 0,
+                "Мельник берёг его сорок лет и ни разу не открывал."));
+
+    ItemDef glass_blade = mk_item("glass_blade", "Стеклянный резак", ItemKind::Weapon, 330,
+                                  "Осколок поля в рукояти. Бьёт больно и рвёт рану.");
+    glass_blade.bonus.dmg_min = 5; glass_blade.bonus.dmg_max = 12;
+    glass_blade.bonus.crit = 7; glass_blade.bonus.attack = -3;
+    add(glass_blade);
+
+    ItemDef salt_mail = mk_item("salt_mail", "Просоленный доспех", ItemKind::Armor, 360,
+                                "Кожа, вымоченная в рассоле. Не гниёт и не поддаётся.");
+    salt_mail.bonus.armor = 5; salt_mail.bonus.block = 5;
+    add(salt_mail);
+
+    ItemDef brine_ring = mk_item("brine_ring", "Кольцо рассола", ItemKind::Ring, 380,
+                                 "Холодит палец. Тело перестаёт торопиться.");
+    brine_ring.bonus.max_hp = 8; brine_ring.bonus.armor = 2; brine_ring.bonus.max_ap = 1;
+    add(brine_ring);
+
+    ItemDef trader_hood = mk_item("trader_hood", "Куколь торговца", ItemKind::Helmet, 240,
+                                  "На Рынке Шва в таких ходят все. Так проще.");
+    trader_hood.bonus.armor = 2; trader_hood.bonus.block = 4; trader_hood.bonus.attack = 3;
+    add(trader_hood);
+
+    ItemDef caravan_stew = mk_item("caravan_stew", "Похлёбка каравана", ItemKind::Consumable, 60,
+                                   "Ещё горячая. Не думай об этом.");
+    caravan_stew.heal_hp = 40; caravan_stew.heal_ap = 3;
+    add(caravan_stew);
+
+    ItemDef glass_dust = mk_item("glass_dust", "Стеклянная пыль", ItemKind::Consumable, 80,
+                                 "Вдохнуть — и глаз находит слабое место сам.");
+    glass_dust.effect = "clarity"; glass_dust.effect_turns = 10; glass_dust.effect_power = 2;
+    add(glass_dust);
+
     ItemDef seal = mk_item("order_seal", "Печать Ордена", ItemKind::Ring, 700,
                            "Узел из серебра. Тёплая, будто её только что держали.");
     seal.bonus.max_hp = 12; seal.bonus.attack = 5; seal.bonus.armor = 2; seal.bonus.crit = 4;
@@ -405,6 +452,114 @@ void Content::build_notes() {
         "Староста наш ездил разбирать и вернулся",
         "мрачный. Сказал только: межу не проведёшь",
         "там, где земля сама себя догнала.»"
+    });
+
+    // --- Регион II: Шов ---
+
+    add("goat", "Путевой лист обоза", {
+        "«Вышли шестого, четыре подводы, соль и лён.",
+        "Козьей тропой, как всегда.",
+        "",
+        "Седьмого: тропа длиннее, чем помню. Шли весь",
+        "день, а перевал всё тот же.",
+        "",
+        "Восьмого: вышли не туда. Внизу поле, всё",
+        "стеклянное. Такого нет ни на одной карте.",
+        "Возвращаться некуда — тропа за спиной другая.",
+        "",
+        "Гурию скажите, что не по нашей вине.»"
+    });
+
+    add("glass", "Свидетельство стекольщика", {
+        "«Отец говорил: поле спеклось за одну ночь,",
+        "и не от огня. Земля не горела — она сошлась",
+        "сама с собой, и в месте схождения потекла.",
+        "",
+        "Стекло с того поля помнит, чем было. Если",
+        "смотреть в осколок долго, видно поле до",
+        "Стяжения: рожь и межа.",
+        "",
+        "Я смотрел. Больше не смотрю.»"
+    });
+
+    add("mill", "Расчёт мельника", {
+        "«Считал три года. В Тихую втекает вода,",
+        "а вытекает вполовину меньше. Разницу",
+        "не найти: ни в земле, ни в озере.",
+        "",
+        "Пошёл по руслу вниз, дошёл до старого",
+        "затвора. За ним слышно воду. Много.",
+        "Открывать не стал: за затвором солёное,",
+        "а до моря отсюда четыреста вёрст.",
+        "",
+        "Ключ держу при себе. И держать буду.»"
+    });
+
+    add("market", "Уложение Рынка Шва", {
+        "«Правило первое: у товара не спрашивают года.",
+        "Правило второе: у человека не спрашивают",
+        "лоскута.",
+        "Правило третье: кто спросил — тот и платит.",
+        "",
+        "Рынок стоит на шве и никому не принадлежит.",
+        "Здесь сходятся те, кого Стяжение развело",
+        "на четыреста лет, и торгуют, как ни в чём",
+        "не бывало. Это единственное, что у нас есть",
+        "общего: цена.»"
+    });
+
+    add("prohor", "Записка Прохора о Прохоре", {
+        "«Пишу, чтоб не сойти с ума.",
+        "",
+        "Он знает всё, что знаю я. Помнит, как мать",
+        "звала со двора. Помнит, где у меня шрам,",
+        "и шрам у него на том же месте.",
+        "",
+        "Я думал: пусть уходит. А потом понял —",
+        "он думает то же самое про меня, и с тем же",
+        "правом. Один из нас лишний, и никто из нас",
+        "не знает, который.",
+        "",
+        "Если придёт чужой и рассудит — приму любое."
+    });
+
+    add("caravan", "Опись каравана", {
+        "«Двенадцать подвод, сорок душ, пряности",
+        "и соль. Ночуем в сарае у Шва.",
+        "",
+        "Хозяин накрыл столы, но сам не сел. Сказал:",
+        "«Ешьте, а я подожду, пока пройдёт.»",
+        "Мы спросили — что пройдёт?",
+        "Он сказал: «Оно уже идёт.»",
+        "",
+        "Похлёбка ещё горячая. Пишу и не понимаю,",
+        "почему пишу.»"
+    });
+
+    add("salt", "Наказ копача", {
+        "«В нижних штольнях соль другая. Она держит.",
+        "Мышь, попавшая туда осенью, весной как живая,",
+        "только не дышит.",
+        "",
+        "Мы вынули из пласта человека. Одежда",
+        "орденская, узел на вороте. Пролежал двести",
+        "лет и не истлел.",
+        "",
+        "Он открыл глаза. Мы заложили штольню.",
+        "Кто прочтёт — не разбирай кладку.»"
+    });
+
+    add("bridge", "Донесение о мосте", {
+        "«Мост висел через ущелье и вёл к трём дворам",
+        "на той стороне. После Стяжения ущелья нет,",
+        "а мост есть. Обрывается в воздухе на середине.",
+        "",
+        "Канат осмотрели. Не перетёрся: срез ровный,",
+        "как ножом. Только резать было нечем и некому —",
+        "обрыв висит в двадцати саженях над ничем.",
+        "",
+        "На той стороне иногда виден дым. Значит,",
+        "дворы уцелели. Значит, они дрейфуют.»"
     });
 
     add("hermit", "Страница из дневника", {
@@ -627,6 +782,85 @@ void Content::build_enemies() {
     keeper.on_hit_effect = "slow"; keeper.on_hit_chance = 35; keeper.on_hit_power = 1;
     add(keeper);
 
+    // --- Регион II: Шов ---
+
+    EnemyDef stray;
+    stray.id = "stray"; stray.name = "Приблудный";
+    stray.stats.max_hp = 42; stray.stats.max_ap = 9; stray.stats.attack = 72;
+    stray.stats.dmg_min = 4; stray.stats.dmg_max = 9; stray.stats.block = 12;
+    stray.stats.armor = 2;   stray.stats.ap_atk = 4;
+    stray.exp = 34; stray.gold_min = 8; stray.gold_max = 26;
+    stray.drops = { Drop("bread", 45), Drop("old_coin", 40), Drop("dagger", 15) };
+    stray.detect = 6; stray.kill_counter = "kill_stray";
+    add(stray);
+
+    EnemyDef ghound;
+    ghound.id = "glass_hound"; ghound.name = "Стеклянный пёс";
+    ghound.stats.max_hp = 48; ghound.stats.max_ap = 10; ghound.stats.attack = 76;
+    ghound.stats.dmg_min = 5; ghound.stats.dmg_max = 10; ghound.stats.block = 8;
+    ghound.stats.armor = 3;   ghound.stats.ap_atk = 4;
+    ghound.exp = 44; ghound.gold_min = 0; ghound.gold_max = 6;
+    ghound.drops = { Drop("glass_shard", 70) };
+    ghound.detect = 7; ghound.kill_counter = "kill_hound";
+    ghound.on_hit_effect = "bleed"; ghound.on_hit_chance = 40; ghound.on_hit_power = 2;
+    add(ghound);
+
+    EnemyDef mrat;
+    mrat.id = "mill_rat"; mrat.name = "Мучной крыс";
+    mrat.stats.max_hp = 24; mrat.stats.max_ap = 8; mrat.stats.attack = 64;
+    mrat.stats.dmg_min = 2; mrat.stats.dmg_max = 6; mrat.stats.block = 6;
+    mrat.stats.armor = 1;   mrat.stats.ap_atk = 3;
+    mrat.exp = 17; mrat.gold_min = 0; mrat.gold_max = 5;
+    mrat.drops = { Drop("rat_tail", 60), Drop("bread", 30) };
+    mrat.detect = 5; mrat.kill_counter = "kill_millrat";
+    add(mrat);
+
+    EnemyDef ghoul;
+    ghoul.id = "salt_ghoul"; ghoul.name = "Солевик";
+    ghoul.stats.max_hp = 58; ghoul.stats.max_ap = 9; ghoul.stats.attack = 74;
+    ghoul.stats.dmg_min = 5; ghoul.stats.dmg_max = 11; ghoul.stats.block = 10;
+    ghoul.stats.armor = 4;   ghoul.stats.ap_atk = 4;
+    ghoul.exp = 52; ghoul.gold_min = 4; ghoul.gold_max = 18;
+    ghoul.drops = { Drop("salt_lump", 65), Drop("old_coin", 30) };
+    ghoul.detect = 6; ghoul.kill_counter = "kill_ghoul";
+    ghoul.on_hit_effect = "slow"; ghoul.on_hit_chance = 35; ghoul.on_hit_power = 1;
+    add(ghoul);
+
+    EnemyDef shade;
+    shade.id = "caravan_shade"; shade.name = "Тень каравана"; shade.female = true;
+    shade.stats.max_hp = 50; shade.stats.max_ap = 10; shade.stats.attack = 78;
+    shade.stats.dmg_min = 4; shade.stats.dmg_max = 10; shade.stats.block = 18;
+    shade.stats.armor = 2;   shade.stats.ap_atk = 4;
+    shade.exp = 48; shade.gold_min = 10; shade.gold_max = 30;
+    shade.drops = { Drop("old_coin", 70), Drop("spice_bag", 35) };
+    shade.detect = 7; shade.kill_counter = "kill_shade";
+    shade.on_hit_effect = "weaken"; shade.on_hit_chance = 35; shade.on_hit_power = 1;
+    add(shade);
+
+    EnemyDef smother;
+    smother.id = "salt_mother"; smother.name = "Соляная матерь"; smother.female = true;
+    smother.stats.max_hp = 135; smother.stats.max_ap = 11; smother.stats.attack = 82;
+    smother.stats.dmg_min = 7; smother.stats.dmg_max = 15; smother.stats.block = 16;
+    smother.stats.armor = 6;    smother.stats.ap_atk = 4;
+    smother.exp = 200; smother.gold_min = 50; smother.gold_max = 95;
+    smother.drops = { Drop("salt_lump", 100), Drop("salt_heart", 100),
+                      Drop("brine_ring", 40) };
+    smother.detect = 7; smother.kill_counter = "kill_saltmother";
+    smother.on_hit_effect = "slow"; smother.on_hit_chance = 50; smother.on_hit_power = 2;
+    add(smother);
+
+    EnemyDef walker;
+    walker.id = "bridge_walker"; walker.name = "Мостовой";
+    walker.stats.max_hp = 118; walker.stats.max_ap = 11; walker.stats.attack = 84;
+    walker.stats.dmg_min = 8; walker.stats.dmg_max = 14; walker.stats.block = 20;
+    walker.stats.armor = 5;    walker.stats.ap_atk = 4;
+    walker.exp = 185; walker.gold_min = 40; walker.gold_max = 80;
+    walker.drops = { Drop("rope_end", 100), Drop("glass_shard", 100),
+                     Drop("frost_shard", 50) };
+    walker.detect = 8; walker.kill_counter = "kill_walker";
+    walker.on_hit_effect = "bleed"; walker.on_hit_chance = 40; walker.on_hit_power = 2;
+    add(walker);
+
     EnemyDef archivist;
     archivist.id = "archivist"; archivist.name = "Архивариус Ордена";
     archivist.stats.max_hp = 150; archivist.stats.max_ap = 12; archivist.stats.attack = 88;
@@ -732,6 +966,74 @@ void Content::build_quests() {
     };
     quests_.push_back(q);
 
+    // --- Регион II: Шов ---
+
+    q = QuestDef();
+    q.id = "goatpath"; q.name = "Обоз не вернулся";
+    q.stages = {
+        QuestStageDef(1, "Гурий потерял обоз на Козьей тропе. Пройти её и узнать, куда он делся."),
+        QuestStageDef(2, "Тропа вывела в Шов — край, которого нет на картах. Вернуться к Гурию."),
+        QuestStageDef(QUEST_DONE, "Гурий узнал, где кончился его обоз.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "glass"; q.name = "Стекло помнит";
+    q.stages = {
+        QuestStageDef(1, "Ферапонту нужны 6 осколков со Стеклянного поля."),
+        QuestStageDef(QUEST_DONE, "Ферапонт получил осколки и рассказал, что в них видно.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "mill"; q.name = "Куда уходит вода";
+    q.stages = {
+        QuestStageDef(1, "Мельник дал ключ от нижнего затвора. За ним — соляные штольни."),
+        QuestStageDef(2, "Соляная матерь мертва. Вода пойдёт как прежде. Сказать мельнику."),
+        QuestStageDef(QUEST_DONE, "Тихая снова вытекает столько же, сколько втекает.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "market"; q.name = "Не той чеканки";
+    q.stages = {
+        QuestStageDef(1, "Смотрителю Улью нужны 8 монет чужой чеканки — для расчёта, насколько сошлись лоскуты."),
+        QuestStageDef(QUEST_DONE, "Улей посчитал. Ответ ему не понравился.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "doubled"; q.name = "Два Прохора";
+    q.stages = {
+        QuestStageDef(1, "На хуторе Двоеданном два Прохора, и оба настоящие. Оба просят рассудить."),
+        QuestStageDef(QUEST_DONE, "Ты рассудил. Правильного ответа не было.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "caravan"; q.name = "Столы накрыты"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "В караван-сарае накрыто на сорок человек. Похлёбка горячая. Двести лет."),
+        QuestStageDef(QUEST_DONE, "Опись каравана объясняет, чего они ждали. Лучше бы не объясняла.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "salt"; q.name = "Соль помнит"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "Копачи заложили нижнюю штольню и написали: не разбирай кладку."),
+        QuestStageDef(QUEST_DONE, "Разобрал. То, что соль держала двести лет, больше не держится.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "bridge"; q.name = "Обрезанный канат"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "Срез каната ровный. Его отрезало, а резать было нечем и некому."),
+        QuestStageDef(QUEST_DONE, "Донесение о мосте: на той стороне дым. Значит, дворы уцелели и дрейфуют.")
+    };
+    quests_.push_back(q);
+
     q = QuestDef();
     q.id = "seam"; q.name = "Шов за алтарём"; q.secret = true;
     q.stages = {
@@ -795,6 +1097,20 @@ void Content::build_shops() {
     shops_[s.id] = s;
 
     s = ShopDef();
+    s.id = "shop_glass"; s.name = "Стекло Ферапонта";
+    s.goods = {"glass_blade", "glass_dust", "glass_shard", "antidote"};
+    s.buy_pct = 105; s.sell_pct = 45;
+    shops_[s.id] = s;
+
+    s = ShopDef();
+    s.id = "shop_market"; s.name = "Рынок Шва";
+    s.goods = {"trader_hood", "caravan_stew", "salt_mail", "brine_ring",
+               "herb_potion", "antidote", "elixir_haste", "portal_stone",
+               "spice_bag", "whetstone"};
+    s.buy_pct = 95; s.sell_pct = 55;      // на Шве и берут, и дают честнее
+    shops_[s.id] = s;
+
+    s = ShopDef();
     s.id = "shop_herbs"; s.name = "Травы Лады";
     s.goods = {"herb_potion", "ap_tonic", "bread", "antidote", "salve",
                "elixir_might", "elixir_guard", "elixir_haste"};
@@ -817,6 +1133,14 @@ void Content::build_npcs() {
     add("trader",    "Торговец Гурий",   "trader_root",    "shop_general");
     add("hermit",    "Отшельник Свет",   "hermit_root",    "");
     add("enchanter", "Зачарователь Вельд", "ench_root",    "");
+
+    // --- Регион II: Шов ---
+    add("glazier",  "Стекольщик Ферапонт", "glazier_root", "shop_glass");
+    add("miller",   "Мельник Онисим",      "miller_root",  "");
+    add("warden",   "Смотритель Улей",     "warden_root",  "shop_market");
+    add("digger",   "Копач Тишка",         "digger_root",  "");
+    add("prohor_l", "Прохор",              "prohor_l_root", "");
+    add("prohor_r", "Прохор",              "prohor_r_root", "");
 }
 
 // ---------------------------------------------------------------- события
@@ -848,6 +1172,29 @@ void Content::build_triggers() {
     // Отчёт в схроне открывает следующую тайну.
     add(TriggerKind::NoteTaken, "cinch", 1, "cinch", 1, 0,
         "Отчёт о Стяжении меняет всё. Открыта тайна: «Стяжение не кончилось».");
+
+    // --- Регион II ---
+    // Тропа выводит в Шов — квест Гурия двигается самим приходом на Рынок.
+    add(TriggerKind::LocationEntered, "market", 1, "goatpath", 2, 1,
+        "Так вот куда выводит тропа. Гурию будет что рассказать.");
+
+    // Накрытые столы сами по себе — уже загадка.
+    add(TriggerKind::LocationEntered, "caravanserai", 1, "caravan", 1, 0,
+        "Столы накрыты на сорок человек, и похлёбка ещё горячая. Открыта тайна: «Столы накрыты».");
+    add(TriggerKind::NoteTaken, "caravan", 1, "caravan", QUEST_DONE, 1,
+        "Опись каравана дочитана. Тайна «Столы накрыты» разгадана.");
+
+    // Наказ копача открывает тайну, а Соляная матерь её закрывает.
+    add(TriggerKind::NoteTaken, "salt", 1, "salt", 1, 0,
+        "«Не разбирай кладку». Открыта тайна: «Соль помнит».");
+    add(TriggerKind::MobKilled, "kill_saltmother", 1, "salt", QUEST_DONE, 1,
+        "То, что соль держала двести лет, больше не держится. Тайна «Соль помнит» разгадана.");
+
+    // Обрывок каната — вещь, с которой начинается вопрос.
+    add(TriggerKind::ItemGained, "rope_end", 1, "bridge", 1, 0,
+        "Срез каната ровный, будто ножом. Открыта тайна: «Обрезанный канат».");
+    add(TriggerKind::NoteTaken, "bridge", 1, "bridge", QUEST_DONE, 1,
+        "Донесение о мосте объясняет и срез, и дым на той стороне.");
 }
 
 // ----------------------------------------------------------------- диалоги
@@ -1283,6 +1630,25 @@ void Content::build_dialogues() {
         b_wait.req_quest = "books"; b_wait.req_stage_min = 1; b_wait.req_stage_max = 1;
         n.options.push_back(b_wait);
 
+        DlgOption gp_offer;
+        gp_offer.text = "Обозы все дошли?";
+        gp_offer.next = "goat_offer";
+        gp_offer.req_quest  = "goatpath"; gp_offer.req_stage_min  = QUEST_NONE; gp_offer.req_stage_max = QUEST_NONE;
+        gp_offer.req_quest2 = "outpost";  gp_offer.req_stage2_min = QUEST_DONE; gp_offer.req_stage2_max = QUEST_DONE;
+        n.options.push_back(gp_offer);
+
+        DlgOption gp_done;
+        gp_done.text = "Твоя тропа выводит в край, которого нет на картах.";
+        gp_done.next = "goat_reward";
+        gp_done.req_quest = "goatpath"; gp_done.req_stage_min = 2; gp_done.req_stage_max = 2;
+        n.options.push_back(gp_done);
+
+        DlgOption gp_wait;
+        gp_wait.text = "Ещё не дошёл до перевала.";
+        gp_wait.next = "goat_wait";
+        gp_wait.req_quest = "goatpath"; gp_wait.req_stage_min = 1; gp_wait.req_stage_max = 1;
+        n.options.push_back(gp_wait);
+
         DlgOption b_shop;
         b_shop.text = "Показывай книги.";
         b_shop.open_shop = true;
@@ -1335,6 +1701,456 @@ void Content::build_dialogues() {
         take.give_item = "book_blank"; take.give_count = 1;
         take.give_exp = 120;
         n.options.push_back(take);
+        add(n);
+    }
+
+    {
+        DlgNode n; n.id = "goat_offer";
+        n.text = "Улыбка сходит.\n"
+                 "— Нет. Один не дошёл. Четыре подводы, соль и лён, Козьей тропой\n"
+                 "на север — и как в воду. Тропа-то в двух шагах от леса, я по ней\n"
+                 "мальчишкой бегал. А теперь смотрю на неё — и не по себе.\n"
+                 "Сходи, а? Мне надо знать, где кончились мои люди.";
+        DlgOption take;
+        take.text = "Схожу.";
+        take.next = "goat_wait";
+        take.set_quest = "goatpath"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Своих ищи сам."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "goat_wait";
+        n.text = "— Тропа от северной опушки. Возьми чего покрепче: там, говорят,\n"
+                 "ходят приблудные — не наши, не разбойники. Просто чужие.";
+        n.options.push_back(bye("Понял."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "goat_reward";
+        n.text = "Гурий слушает и садится прямо на прилавок.\n"
+                 "— Стеклянное поле. Рынок какой-то на шве. Значит, они дошли —\n"
+                 "только не туда, куда шли.\n"
+                 "Держи. И вот что: если там торгуют — я туда повезу. Дорога\n"
+                 "дорогой, а торг торгом.";
+        DlgOption take;
+        take.text = "Принять плату. [250 золотых, 260 опыта]";
+        take.set_quest = "goatpath"; take.set_stage = QUEST_DONE;
+        take.give_gold = 250; take.give_exp = 260;
+        take.give_item = "portal_stone"; take.give_count = 1;
+        n.options.push_back(take);
+        add(n);
+    }
+
+    // --- Стекольщик Ферапонт: осколки поля ---
+    {
+        DlgNode n; n.id = "glazier_root";
+        n.text = "Человек в толстых рукавицах сидит на корточках и перебирает\n"
+                 "осколки, поднося каждый к глазу.\n"
+                 "— Осторожнее ступай. Поле режет тех, кто спешит.";
+
+        DlgOption offer;
+        offer.text = "Что ты в них высматриваешь?";
+        offer.next = "glass_offer";
+        offer.req_quest = "glass"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption done;
+        done.text = "Шесть осколков, как просил.";
+        done.next = "glass_reward";
+        done.req_quest = "glass"; done.req_stage_min = 1; done.req_stage_max = 1;
+        done.req_item = "glass_shard"; done.req_item_count = 6;
+        n.options.push_back(done);
+
+        DlgOption wait;
+        wait.text = "Ещё собираю.";
+        wait.next = "glass_wait";
+        wait.req_quest = "glass"; wait.req_stage_min = 1; wait.req_stage_max = 1;
+        n.options.push_back(wait);
+
+        DlgOption trade;
+        trade.text = "Показывай товар.";
+        trade.open_shop = true;
+        n.options.push_back(trade);
+
+        n.options.push_back(bye("Пойду дальше."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "glass_offer";
+        n.text = "— Прошлое. Стекло с этого поля помнит, чем было до того, как\n"
+                 "потекло. Смотришь в осколок — видишь рожь и межу.\n"
+                 "Мне нужно шесть чистых, крупных. Псы их не любят и грызут,\n"
+                 "так что придётся отбирать.";
+        DlgOption take;
+        take.text = "Отберу.";
+        take.next = "glass_wait";
+        take.set_quest = "glass"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Мне и настоящего хватает."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "glass_wait";
+        n.text = "— Шесть. И не смотри в них подолгу, пока не принесёшь.\n"
+                 "Я смотрел. Больше не смотрю.";
+        n.options.push_back(bye("Учту."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "glass_reward";
+        n.text = "Ферапонт складывает осколки в ряд и долго молчит.\n"
+                 "— Всё та же рожь. Каждый год всё та же рожь.\n"
+                 "Держи резак. Из седьмого осколка, который я никому не показывал.";
+        DlgOption take;
+        take.text = "Принять резак. [280 опыта]";
+        take.set_quest = "glass"; take.set_stage = QUEST_DONE;
+        take.take_item = "glass_shard"; take.take_count = 6;
+        take.give_item = "glass_blade"; take.give_count = 1;
+        take.give_gold = 120; take.give_exp = 280;
+        n.options.push_back(take);
+        add(n);
+    }
+
+    // --- Мельник Онисим: куда уходит вода ---
+    {
+        DlgNode n; n.id = "miller_root";
+        n.text = "Мельница стоит, колесо не крутится. Мельник сидит на пороге\n"
+                 "и смотрит на реку.\n"
+                 "— Втекает больше, чем вытекает. Третий год.";
+
+        DlgOption offer;
+        offer.text = "Куда девается разница?";
+        offer.next = "mill_offer";
+        offer.req_quest = "mill"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption done;
+        done.text = "За затвором больше некому пить твою воду.";
+        done.next = "mill_reward";
+        done.req_quest = "mill"; done.req_stage_min = 1; done.req_stage_max = 2;
+        done.req_counter = "kill_saltmother"; done.req_counter_min = 1;
+        n.options.push_back(done);
+
+        DlgOption wait;
+        wait.text = "Ещё не дошёл до затвора.";
+        wait.next = "mill_wait";
+        wait.req_quest = "mill"; wait.req_stage_min = 1; wait.req_stage_max = 1;
+        n.options.push_back(wait);
+
+        n.options.push_back(bye("Пойду."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "mill_offer";
+        n.text = "— Считал три года. Внизу по руслу старый затвор, за ним слышно\n"
+                 "воду. Много воды. И солёную — а до моря отсюда четыреста вёрст.\n"
+                 "Ключ у меня. Сорок лет держал и ни разу не открывал.\n"
+                 "Возьми. Мне уже всё равно, а мельница стоит.";
+        DlgOption take;
+        take.text = "Возьму ключ.";
+        take.next = "mill_wait";
+        take.set_quest = "mill"; take.set_stage = 1;
+        take.give_item = "mill_key"; take.give_count = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Держи при себе."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "mill_wait";
+        n.text = "— Затвор ниже по руслу. Открывать — на твою голову.\n"
+                 "И вот что: там солоно. Соль держит. Что она удержала за двести\n"
+                 "лет, то и выйдет тебе навстречу.";
+        n.options.push_back(bye("Пойду смотреть."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "mill_reward";
+        n.text = "Мельник встаёт впервые за разговор.\n"
+                 "— Слышишь? Колесо. Третий год не слышал.\n"
+                 "Бери, что есть. Мне теперь мука пойдёт.";
+        DlgOption take;
+        take.text = "Принять награду. [320 опыта]";
+        take.set_quest = "mill"; take.set_stage = QUEST_DONE;
+        take.give_gold = 260; take.give_exp = 320;
+        take.give_item = "salt_mail"; take.give_count = 1;
+        n.options.push_back(take);
+        add(n);
+    }
+
+    // --- Смотритель Улей: счёт по монетам ---
+    {
+        DlgNode n; n.id = "warden_root";
+        n.text = "Смотритель в куколе стоит посреди рядов и ничего не продаёт.\n"
+                 "— На Шве не спрашивают года у товара и лоскута у человека.\n"
+                 "Спросишь — платишь.";
+
+        DlgOption offer;
+        offer.text = "А ты чем занят, если не торгуешь?";
+        offer.next = "market_offer";
+        offer.req_quest = "market"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption done;
+        done.text = "Восемь монет чужой чеканки.";
+        done.next = "market_reward";
+        done.req_quest = "market"; done.req_stage_min = 1; done.req_stage_max = 1;
+        done.req_item = "old_coin"; done.req_item_count = 8;
+        n.options.push_back(done);
+
+        DlgOption wait;
+        wait.text = "Собираю.";
+        wait.next = "market_wait";
+        wait.req_quest = "market"; wait.req_stage_min = 1; wait.req_stage_max = 1;
+        n.options.push_back(wait);
+
+        DlgOption trade;
+        trade.text = "Показывай ряды.";
+        trade.open_shop = true;
+        n.options.push_back(trade);
+
+        DlgOption rules;
+        rules.text = "Почему рынок стоит именно здесь?";
+        rules.next = "market_rules";
+        n.options.push_back(rules);
+
+        n.options.push_back(bye("Хорошего торга."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "market_rules";
+        n.text = "— Потому что шов не принадлежит никому. По одну сторону ряда\n"
+                 "человек из года, которого ты не застал; по другую — из года,\n"
+                 "которого не застанет он. Общего у нас ровно одно: цена.\n"
+                 "Пока торгуем — не режем друг друга. Вот и всё уложение.";
+        n.options.push_back(bye("Разумно."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "market_offer";
+        n.text = "— Считаю. Каждая монета — это год и место, где её били.\n"
+                 "Чем больше чужих монет ходит по Шву, тем ближе сошлись лоскуты.\n"
+                 "Мне нужно восемь. Приблудные их носят, солевики держат при себе,\n"
+                 "и в караван-сарае их полно — только туда никто не ходит.";
+        DlgOption take;
+        take.text = "Соберу восемь.";
+        take.next = "market_wait";
+        take.set_quest = "market"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Считай сам."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "market_wait";
+        n.text = "— Восемь, и разных. Одинаковые ничего не скажут.";
+        n.options.push_back(bye("Понял."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "market_reward";
+        n.text = "Улей раскладывает монеты по годам и считает вслух. Потом ещё раз.\n"
+                 "Потом снимает куколь — под ним лицо старика, которому страшно.\n"
+                 "— Двенадцать лет назад разброс был вдвое шире. Значит, сходится\n"
+                 "быстрее, чем мы думали. Значит, я это увижу.\n"
+                 "Бери, что хочешь, и не говори никому. Здесь торгуют, а не паникуют.";
+        DlgOption take;
+        take.text = "Принять расчёт. [300 опыта]";
+        take.set_quest = "market"; take.set_stage = QUEST_DONE;
+        take.take_item = "old_coin"; take.take_count = 8;
+        take.give_item = "trader_hood"; take.give_count = 1;
+        take.give_gold = 300; take.give_exp = 300;
+        n.options.push_back(take);
+        add(n);
+    }
+
+    // --- Копач Тишка: подсказки о шахтах ---
+    {
+        DlgNode n; n.id = "digger_root";
+        n.text = "Копач сидит спиной к штольне и не оборачивается на шаги.\n"
+                 "— Не спрашивай, что там. Спроси лучше, почему я снаружи.";
+        DlgOption why;
+        why.text = "Почему ты снаружи?";
+        why.next = "digger_why";
+        n.options.push_back(why);
+        DlgOption hint;
+        hint.text = "Что там, внизу?";
+        hint.next = "digger_hint";
+        n.options.push_back(hint);
+        n.options.push_back(bye("Ясно."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "digger_why";
+        n.text = "— Потому что мы заложили нижнюю штольню своими руками и написали\n"
+                 "наказ: не разбирай кладку. А теперь сижу и сторожу — вдруг\n"
+                 "кто грамотный придёт и решит, что это иносказание.";
+        n.options.push_back(bye("Не иносказание. Понял."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "digger_hint";
+        n.text = "— Соль там другая. Держит. Мышь осенью попала — весной как живая,\n"
+                 "только не дышит.\n"
+                 "А ещё там мокро, хотя воде взяться неоткуда. Мельник наш всё\n"
+                 "считает, куда его река девается. Я ему не говорю.";
+        n.options.push_back(bye("Спасибо."));
+        add(n);
+    }
+
+    // --- Два Прохора: выбор без правильного ответа ---
+    {
+        DlgNode n; n.id = "prohor_l_root";
+        n.text = "Мужик у левого двора чинит городьбу. Руки в занозах, взгляд усталый.\n"
+                 "— Ты чужой. Значит, не знаешь ещё. Он тоже Прохор. И двор его —\n"
+                 "тоже мой.";
+
+        DlgOption offer;
+        offer.text = "Как такое вышло?";
+        offer.next = "prohor_offer";
+        offer.req_quest = "doubled"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption choose_l;
+        choose_l.text = "Ты настоящий. Двор твой.";
+        choose_l.next = "prohor_l_chosen";
+        choose_l.req_quest = "doubled"; choose_l.req_stage_min = 1; choose_l.req_stage_max = 1;
+        choose_l.set_quest = "doubled"; choose_l.set_stage = QUEST_DONE;
+        choose_l.set_counter = "prohor_choice"; choose_l.set_counter_value = 1;
+        choose_l.give_item = "brine_ring"; choose_l.give_count = 1;
+        choose_l.give_exp = 240;
+        n.options.push_back(choose_l);
+
+        DlgOption after_win;
+        after_win.text = "Как хозяйство?";
+        after_win.next = "prohor_l_after";
+        after_win.req_quest = "doubled"; after_win.req_stage_min = QUEST_DONE; after_win.req_stage_max = QUEST_DONE;
+        after_win.req_counter = "prohor_choice"; after_win.req_counter_min = 1; after_win.req_counter_max = 1;
+        n.options.push_back(after_win);
+
+        DlgOption after_lose;
+        after_lose.text = "...";
+        after_lose.next = "prohor_l_lost";
+        after_lose.req_quest = "doubled"; after_lose.req_stage_min = QUEST_DONE; after_lose.req_stage_max = QUEST_DONE;
+        after_lose.req_counter = "prohor_choice"; after_lose.req_counter_min = 2; after_lose.req_counter_max = 2;
+        n.options.push_back(after_lose);
+
+        n.options.push_back(bye("Мне надо подумать."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "prohor_r_root";
+        n.text = "Мужик у правого двора точит косу. Руки в занозах, взгляд усталый.\n"
+                 "Те же руки. Тот же взгляд.\n"
+                 "— Он тебе уже сказал, что я самозванец? Он всем говорит.";
+
+        DlgOption offer;
+        offer.text = "Как такое вышло?";
+        offer.next = "prohor_offer";
+        offer.req_quest = "doubled"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption choose_r;
+        choose_r.text = "Ты настоящий. Двор твой.";
+        choose_r.next = "prohor_r_chosen";
+        choose_r.req_quest = "doubled"; choose_r.req_stage_min = 1; choose_r.req_stage_max = 1;
+        choose_r.set_quest = "doubled"; choose_r.set_stage = QUEST_DONE;
+        choose_r.set_counter = "prohor_choice"; choose_r.set_counter_value = 2;
+        choose_r.give_item = "brine_ring"; choose_r.give_count = 1;
+        choose_r.give_exp = 240;
+        n.options.push_back(choose_r);
+
+        DlgOption after_win;
+        after_win.text = "Как хозяйство?";
+        after_win.next = "prohor_r_after";
+        after_win.req_quest = "doubled"; after_win.req_stage_min = QUEST_DONE; after_win.req_stage_max = QUEST_DONE;
+        after_win.req_counter = "prohor_choice"; after_win.req_counter_min = 2; after_win.req_counter_max = 2;
+        n.options.push_back(after_win);
+
+        DlgOption after_lose;
+        after_lose.text = "...";
+        after_lose.next = "prohor_r_lost";
+        after_lose.req_quest = "doubled"; after_lose.req_stage_min = QUEST_DONE; after_lose.req_stage_max = QUEST_DONE;
+        after_lose.req_counter = "prohor_choice"; after_lose.req_counter_min = 1; after_lose.req_counter_max = 1;
+        n.options.push_back(after_lose);
+
+        n.options.push_back(bye("Мне надо подумать."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "prohor_offer";
+        n.text = "— А вот так. Проснулись — а двор напротив. И в нём я.\n"
+                 "Он знает, как мать звала со двора. Знает, где у меня шрам,\n"
+                 "и шрам у него на том же месте.\n"
+                 "\n"
+                 "Я сперва думал: пусть уходит. Потом понял — он думает про меня\n"
+                 "то же самое и с тем же правом. Один лишний, и никто не знает,\n"
+                 "который.\n"
+                 "\n"
+                 "Рассуди, чужой. Мы оба примем.";
+        DlgOption take;
+        take.text = "Я посмотрю на обоих.";
+        take.next = "";
+        take.set_quest = "doubled"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Это не моё дело."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "prohor_l_chosen";
+        n.text = "Он кивает, будто ждал.\n"
+                 "— Ладно. Пойду скажу ему.\n"
+                 "\n"
+                 "Уходит к правому двору. Разговора не слышно. Через час правый\n"
+                 "Прохор выходит с узлом за плечом и идёт на север, не оглядываясь.\n"
+                 "Левый долго смотрит вслед, потом возвращается к городьбе.\n"
+                 "\n"
+                 "— Спасибо, — говорит он, не поднимая головы. — Наверное.";
+        n.options.push_back(bye("Наверное."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "prohor_r_chosen";
+        n.text = "Он кивает, будто ждал.\n"
+                 "— Ладно. Пойду скажу ему.\n"
+                 "\n"
+                 "Уходит к левому двору. Разговора не слышно. Через час левый\n"
+                 "Прохор выходит с узлом за плечом и идёт на север, не оглядываясь.\n"
+                 "Правый долго смотрит вслед, потом возвращается к косе.\n"
+                 "\n"
+                 "— Спасибо, — говорит он, не поднимая головы. — Наверное.";
+        n.options.push_back(bye("Наверное."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "prohor_l_after";
+        n.text = "— Хозяйство? Хозяйство идёт.\n"
+                 "Только я теперь на его двор не хожу. И на север не смотрю.";
+        n.options.push_back(bye("Понимаю."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "prohor_r_after";
+        n.text = "— Идёт помаленьку. Косу вон наточил.\n"
+                 "Ты не думай, я на тебя зла не держу. Ты рассудил, как умел.";
+        n.options.push_back(bye("Бывай."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "prohor_l_lost";
+        n.text = "Левый двор пуст. Городьба недочинена, инструмент лежит там,\n"
+                 "где его положили. Дверь не заперта.\n"
+                 "\n"
+                 "На столе початый хлеб.";
+        n.options.push_back(bye("Уйти."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "prohor_r_lost";
+        n.text = "Правый двор пуст. Коса прислонена к стене, точило рядом.\n"
+                 "Дверь не заперта.\n"
+                 "\n"
+                 "На столе початый хлеб.";
+        n.options.push_back(bye("Уйти."));
         add(n);
     }
 
