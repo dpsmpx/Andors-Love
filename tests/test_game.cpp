@@ -74,6 +74,40 @@ void test_wrap() {
     check(ind.size() >= 2 && ind[1].substr(0, 4) == "    ", "отступ переносится на следующую строку");
 }
 
+void test_glyphs() {
+    section("символы карты");
+
+    // Символы объектов не должны совпадать друг с другом и с тайлами: иначе
+    // на карте не отличить врага от дерева, а предмет от земли.
+    const char objs[] = { glyph::PLAYER, glyph::NPC, glyph::MOB,
+                          glyph::EXIT, glyph::SIGN, glyph::ITEM, glyph::BED };
+    const int  n = static_cast<int>(sizeof(objs));
+
+    bool unique = true;
+    for (int i = 0; i < n; ++i)
+        for (int j = i + 1; j < n; ++j)
+            if (objs[i] == objs[j]) unique = false;
+    check(unique, "символы объектов попарно различны");
+
+    bool clear_of_tiles = true;
+    for (int t = 0; t < static_cast<int>(Tile::Count); ++t) {
+        char tg = tile_glyph(static_cast<Tile>(t));
+        for (int i = 0; i < n; ++i)
+            if (objs[i] == tg) clear_of_tiles = false;
+    }
+    check(clear_of_tiles, "символы объектов не совпадают с символами тайлов");
+
+    check(glyph::MOB != glyph::NPC, "враг и житель различимы между собой");
+
+    // Все тайлы тоже должны быть различимы.
+    bool tiles_unique = true;
+    for (int a = 0; a < static_cast<int>(Tile::Count); ++a)
+        for (int b = a + 1; b < static_cast<int>(Tile::Count); ++b)
+            if (tile_glyph(static_cast<Tile>(a)) == tile_glyph(static_cast<Tile>(b)))
+                tiles_unique = false;
+    check(tiles_unique, "символы тайлов попарно различны");
+}
+
 void test_maps() {
     section("карты");
     World w("data/maps");
@@ -709,6 +743,7 @@ int main() {
     std::cout << "Тесты «Любви Эндора»\n";
     test_text_helpers();
     test_wrap();
+    test_glyphs();
     test_maps();
     test_embedded_maps();
     test_new_game_and_stats();

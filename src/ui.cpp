@@ -72,16 +72,14 @@ std::vector<std::string> render_map(Game& g, const Location& loc, int vw, int vh
             char ch = ' ';
             if (loc.in_bounds(p)) {
                 ch = tile_glyph(loc.at(p));
-                if (loc.bed_at(p))  ch = '&';
-                if (loc.exit_at(p)) ch = '>';
-                if (loc.sign_at(p)) ch = '!';
+                if (loc.bed_at(p))  ch = glyph::BED;
+                if (loc.exit_at(p)) ch = glyph::EXIT;
+                if (loc.sign_at(p)) ch = glyph::SIGN;
                 int ii = loc.item_index_at(p);
-                if (ii >= 0 && !g.item_taken(loc.id, ii)) ch = '*';
-                if (const Mob* m = g.mob_at(p, g.player().loc))
-                    if (const EnemyDef* e = Content::get().enemy(m->enemy_id)) ch = e->glyph;
-                if (const MapNpc* n = loc.npc_at(p))
-                    if (const NpcDef* d = Content::get().npc(n->npc_id)) ch = d->glyph;
-                if (p == g.player().pos) ch = '@';
+                if (ii >= 0 && !g.item_taken(loc.id, ii)) ch = glyph::ITEM;
+                if (g.mob_at(p, g.player().loc)) ch = glyph::MOB;
+                if (loc.npc_at(p))               ch = glyph::NPC;
+                if (p == g.player().pos)         ch = glyph::PLAYER;
             }
             row += ch;
         }
@@ -283,10 +281,14 @@ void help_screen() {
         "  1 2 3            — сменить стойку (раз за раунд)\n"
         "\n"
         "Знаки карты:\n"
-        "  @ ты   > переход   ! табличка   * предмет   & лежанка\n"
-        "  # стена   T дерево   ~ вода   . , = земля\n"
-        "  M Мирон  L Лада  B Бран  G Гурий  H отшельник\n"
-        "  r крыса  w волк  W вожак  b разбойник");
+        "  @ ты        N житель — шаг к нему заводит разговор\n"
+        "  X враг      шаг к нему начинает бой\n"
+        "  > переход   ! табличка   * предмет   & лежанка\n"
+        "  # стена     T дерево     ~ вода      . , = земля\n"
+        "\n"
+        "Все враги показаны одним знаком, все жители — другим:\n"
+        "в текстовом режиме символов на всех не хватит. Кто перед\n"
+        "тобой, видно по имени в диалоге и в окне боя.");
 }
 
 // ------------------------------------------------------------------ герой

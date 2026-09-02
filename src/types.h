@@ -34,6 +34,21 @@ enum class Tile : unsigned char {
     Count
 };
 
+// Символы карты собраны здесь. В текстовом режиме их приходится экономить:
+// уникальный знак на каждого моба и NPC не масштабируется, когда контента
+// становится много. Поэтому все враги рисуются одним символом, все NPC —
+// другим; различать их предстоит будущему графическому режиму, а пока —
+// по имени в диалоге и в бою.
+namespace glyph {
+constexpr char PLAYER = '@';
+constexpr char NPC    = 'N';   // любой житель, с которым можно говорить
+constexpr char MOB    = 'X';   // любой враг
+constexpr char EXIT   = '>';
+constexpr char SIGN   = '!';
+constexpr char ITEM   = '*';
+constexpr char BED    = '&';
+} // namespace glyph
+
 char tile_glyph(Tile t);
 bool tile_walkable(Tile t);
 Tile tile_from_char(char c);

@@ -119,7 +119,7 @@ void Content::build_enemies() {
     auto add = [&](EnemyDef d) { enemies_[d.id] = d; };
 
     EnemyDef rat;
-    rat.id = "rat"; rat.name = "Амбарная крыса"; rat.glyph = 'r';
+    rat.id = "rat"; rat.name = "Амбарная крыса";
     rat.stats.max_hp = 9;  rat.stats.max_ap = 6; rat.stats.attack = 55;
     rat.stats.dmg_min = 1; rat.stats.dmg_max = 3; rat.stats.block = 2;
     rat.stats.ap_atk = 3;
@@ -129,7 +129,7 @@ void Content::build_enemies() {
     add(rat);
 
     EnemyDef wolf;
-    wolf.id = "wolf"; wolf.name = "Лесной волк"; wolf.glyph = 'w';
+    wolf.id = "wolf"; wolf.name = "Лесной волк";
     wolf.stats.max_hp = 20; wolf.stats.max_ap = 8; wolf.stats.attack = 65;
     wolf.stats.dmg_min = 2; wolf.stats.dmg_max = 5; wolf.stats.block = 5;
     wolf.stats.armor = 1;   wolf.stats.ap_atk = 4;
@@ -139,7 +139,7 @@ void Content::build_enemies() {
     add(wolf);
 
     EnemyDef bandit;
-    bandit.id = "bandit"; bandit.name = "Разбойник"; bandit.glyph = 'b';
+    bandit.id = "bandit"; bandit.name = "Разбойник";
     bandit.stats.max_hp = 28; bandit.stats.max_ap = 8; bandit.stats.attack = 70;
     bandit.stats.dmg_min = 3; bandit.stats.dmg_max = 7; bandit.stats.block = 10;
     bandit.stats.armor = 2;   bandit.stats.ap_atk = 4;
@@ -150,7 +150,7 @@ void Content::build_enemies() {
 
     // Вожак носит амулет Лады — цель квеста, а не случайная добыча.
     EnemyDef alpha;
-    alpha.id = "wolf_alpha"; alpha.name = "Вожак стаи"; alpha.glyph = 'W';
+    alpha.id = "wolf_alpha"; alpha.name = "Вожак стаи";
     alpha.stats.max_hp = 48; alpha.stats.max_ap = 10; alpha.stats.attack = 75;
     alpha.stats.dmg_min = 5; alpha.stats.dmg_max = 10; alpha.stats.block = 12;
     alpha.stats.armor = 3;   alpha.stats.ap_atk = 4;
@@ -238,17 +238,17 @@ void Content::build_shops() {
 // --------------------------------------------------------------------- NPC
 
 void Content::build_npcs() {
-    auto add = [&](const std::string& id, const std::string& name, char glyph,
+    auto add = [&](const std::string& id, const std::string& name,
                    const std::string& root, const std::string& shop) {
-        NpcDef n; n.id = id; n.name = name; n.glyph = glyph; n.root = root; n.shop = shop;
+        NpcDef n; n.id = id; n.name = name; n.root = root; n.shop = shop;
         npcs_[id] = n;
     };
 
-    add("elder",     "Старейшина Мирон", 'M', "elder_root",     "");
-    add("herbalist", "Травница Лада",    'L', "herbalist_root", "shop_herbs");
-    add("smith",     "Кузнец Бран",      'B', "smith_root",     "shop_smith");
-    add("trader",    "Торговец Гурий",   'G', "trader_root",    "shop_general");
-    add("hermit",    "Отшельник Свет",   'H', "hermit_root",    "");
+    add("elder",     "Старейшина Мирон", "elder_root",     "");
+    add("herbalist", "Травница Лада",    "herbalist_root", "shop_herbs");
+    add("smith",     "Кузнец Бран",      "smith_root",     "shop_smith");
+    add("trader",    "Торговец Гурий",   "trader_root",    "shop_general");
+    add("hermit",    "Отшельник Свет",   "hermit_root",    "");
 }
 
 // ----------------------------------------------------------------- диалоги

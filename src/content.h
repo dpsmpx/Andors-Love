@@ -52,7 +52,6 @@ struct DlgNode {
 struct NpcDef {
     std::string id;
     std::string name;
-    char        glyph = '@';
     std::string root;     // корневой узел диалога
     std::string shop;     // id магазина, если торгует
 };
@@ -67,7 +66,6 @@ struct Drop {
 struct EnemyDef {
     std::string       id;
     std::string       name;
-    char              glyph = 'e';
     Stats             stats;
     int               exp = 0;
     int               gold_min = 0;

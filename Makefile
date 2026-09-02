@@ -34,7 +34,9 @@ ALL_CXXFLAGS := $(CXXSTD) $(CXXFLAGS) $(DEPFLAGS)
 SRC := $(wildcard src/*.cpp)
 OBJ := $(SRC:src/%.cpp=build/%.o)
 DEP := $(OBJ:.o=.d)
-BIN := andors-love
+# Переопределяется: make BIN=result — некоторые сборщики (в том числе C4Droid)
+# ожидают исполняемый файл под своим именем.
+BIN ?= andors-love
 
 .PHONY: all run debug test embed clean
 
