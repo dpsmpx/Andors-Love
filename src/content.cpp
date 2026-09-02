@@ -29,6 +29,7 @@ Content::Content() {
     build_shops();
     build_npcs();
     build_dialogues();
+    build_endings();
     build_triggers();
 }
 
@@ -396,6 +397,61 @@ void Content::build_items() {
                             "Сорван и не вянет. Пока держишь — не устаёшь.");
     gleaf.heal_ap = 8; gleaf.effect = "haste"; gleaf.effect_turns = 10; gleaf.effect_power = 2;
     add(gleaf);
+
+    // --- Регион VI: Изнанка ---
+    add(mk_item("line_thread", "Нить линии", ItemKind::Misc, 70,
+                "Тонкая до невидимости. На ощупь — как натянутая струна."));
+    add(mk_item("seam_word", "Честное слово", ItemKind::Misc, 0,
+                "Расписка Первого Мастера. Ею и держится самый старый стык."));
+    add(mk_item("heart_cog", "Зуб стяжного хода", ItemKind::Misc, 130,
+                "Ход не крутится и не тикает. Зуб всё равно стёрт."));
+    add(mk_item("line_dust", "Пыль линий", ItemKind::Misc, 85,
+                "Осыпается там, где линия трётся о линию. Годится в зачарование."));
+
+    // Мера — единственная вещь, которой не должно быть: расстояние,
+    // взятое в руку. Ею и открывается Развязка.
+    add(mk_item("measure", "Мера расстояния", ItemKind::Misc, 0,
+                "Держишь — и до всего ровно столько, сколько ты решил."));
+
+    ItemDef lblade = mk_item("line_blade", "Клинок по линии", ItemKind::Weapon, 1400,
+                             "Заточен вдоль линии, а не поперёк. Режет то, что держит.");
+    lblade.bonus.dmg_min = 16; lblade.bonus.dmg_max = 28;
+    lblade.bonus.attack = 12; lblade.bonus.crit = 8;
+    add(lblade);
+
+    ItemDef iplate = mk_item("inside_plate", "Доспех изнанки", ItemKind::Armor, 1450,
+                             "Швы наружу. Изнутри гладко — там ему и место.");
+    iplate.bonus.armor = 14; iplate.bonus.block = 10; iplate.bonus.max_hp = 14;
+    add(iplate);
+
+    ItemDef shelm = mk_item("seam_helm", "Шлем сторожа шва", ItemKind::Helmet, 1050,
+                            "Елисей носил его двести лет и ни разу не снял на ночь.");
+    shelm.bonus.armor = 6; shelm.bonus.max_hp = 12; shelm.bonus.max_ap = 2;
+    add(shelm);
+
+    ItemDef zshield = mk_item("zero_shield", "Щит нулевой точки", ItemKind::Shield, 1350,
+                              "Удар до него не доходит: расстояние до щита равно нулю.");
+    zshield.bonus.block = 24; zshield.bonus.armor = 8; zshield.bonus.max_hp = 10;
+    zshield.bonus.attack = -4;
+    add(zshield);
+
+    ItemDef firstr = mk_item("first_ring", "Кольцо Первого узла", ItemKind::Ring, 1600,
+                             "С него всё началось. Оно об этом не знает.");
+    firstr.bonus.max_hp = 24; firstr.bonus.attack = 10; firstr.bonus.crit = 10;
+    firstr.bonus.armor = 4; firstr.bonus.max_ap = 1;
+    add(firstr);
+
+    ItemDef cdraught = mk_item("cinch_draught", "Настой изнанки", ItemKind::Consumable, 190,
+                               "Пахнет пылью линий. Держит, пока держишься сам.");
+    cdraught.heal_hp = 90; cdraught.heal_ap = 6;
+    cdraught.effect = "might"; cdraught.effect_turns = 10; cdraught.effect_power = 2;
+    add(cdraught);
+
+    ItemDef wstaff = mk_item("walk_staff", "Посох ходока", ItemKind::Weapon, 1250,
+                             "Стёрт снизу на две ладони. Двести лет — это много шагов.");
+    wstaff.bonus.dmg_min = 12; wstaff.bonus.dmg_max = 22;
+    wstaff.bonus.attack = 14; wstaff.bonus.block = 10; wstaff.bonus.max_ap = 2;
+    add(wstaff);
 
     // ключи и квестовое
     add(mk_item("rusty_key",  "Ржавый ключ", ItemKind::Misc, 0,
@@ -1125,6 +1181,137 @@ void Content::build_notes() {
         "медленнее, чем нам казалось, и мы внутри.»"
     });
 
+    // --- Регион VI: Изнанка ---
+
+    add("oldseam", "Опись Первого Шва", {
+        "«Стык первый. Соединены лоскут северный",
+        "и лоскут южный. Крепление: слово.",
+        "",
+        "Так и записано в описи: слово. Не замок,",
+        "не узел, не скоба — слово.",
+        "",
+        "Первый Мастер сказал: «Держать буду я»,",
+        "и это внесли в опись как крепление,",
+        "потому что другого не было.",
+        "",
+        "Стык держит до сих пор. Значит, он ещё",
+        "не отказался от своих слов.»"
+    });
+
+    add("readlines", "Как читать линии", {
+        "«Линия видна, если не смотреть на неё прямо.",
+        "Смотри чуть мимо — и увидишь.",
+        "",
+        "Толстая линия — короткая дорога. Тонкая —",
+        "длинная. Оборванная — та, по которой кто-то",
+        "прошёл в последний раз.",
+        "",
+        "Оборванных теперь больше половины. Мы это",
+        "называли «износ» и чинили. Потом перестали",
+        "чинить, потому что перестали успевать.",
+        "",
+        "Ниже, другой рукой: «Не износ. Их подтянули",
+        "нарочно, чтобы стало ближе. Ближе стало.»"
+    });
+
+    add("roomrule", "Правило комнаты", {
+        "«В этой комнате расстояние — вещь.",
+        "Её можно взять в руку, положить в суму,",
+        "потерять.",
+        "",
+        "Мерой мерили, прежде чем тянуть: сколько",
+        "убрать и сколько оставить. Оставить хотели",
+        "половину.",
+        "",
+        "Мера уцелела одна. Держащий её решает,",
+        "далеко ли до всего остального.",
+        "",
+        "Осторожно. Тут был человек, который решил,",
+        "что до всего далеко, и мы его больше",
+        "не нашли — хотя он не выходил.»"
+    });
+
+    add("walkers", "Список ушедших внутрь", {
+        "«В сеть уходили не только по глупости.",
+        "",
+        "Первый Мастер — сам, после Зала Отказа.",
+        "Разметчик Пров — за ним, догонять.",
+        "Сторож Елисей — держать стык, пока не вернутся.",
+        "Ещё двадцать девять — по разным причинам.",
+        "",
+        "Вернулся один и ничего не рассказал.",
+        "Сказал только: там некуда возвращаться,",
+        "потому что оттуда никуда не уходил.",
+        "",
+        "Мы его не поняли. Теперь, кажется, понимаем.»"
+    });
+
+    add("firstnode", "Узел Первый", {
+        "«Первый вязали втроём и без чертежа —",
+        "чертить было ещё нечего.",
+        "",
+        "Он вышел кривой. Все остальные вязали",
+        "по нему, и потому кривые все.",
+        "",
+        "Развязать его нельзя: он не завязан,",
+        "он сросся. Разрезать можно, но тогда",
+        "разойдётся всё, что вязали после.",
+        "",
+        "Мы записали это как «особенность»",
+        "и больше к ней не возвращались.»"
+    });
+
+    add("cinchwork", "Устройство хода", {
+        "«Ход не крутится и не тикает. Он тянет.",
+        "",
+        "Тянет тем, что расстояние между двумя",
+        "точками для него всегда чуть меньше, чем",
+        "было мгновение назад. Он не делает ничего",
+        "лишнего. Он просто не умеет иначе.",
+        "",
+        "Остановить его можно. Он не сопротивляется —",
+        "он даже не знает, что кто-то пришёл.",
+        "",
+        "Только помни: пока он тянет, всё держится",
+        "вместе. Мы не проверяли, что будет, если",
+        "перестанет.»"
+    });
+
+    add("allatonce", "Что здесь есть", {
+        "«Точка Ноль. Расстояние до всего — ноль.",
+        "",
+        "Отсюда видно Ольховку, Рынок Шва, обе",
+        "половины Города, дно океана и то место,",
+        "где ты стоял вчера. Всё сразу.",
+        "",
+        "И потому здесь нет ничего: чтобы что-то",
+        "было, оно должно быть в стороне от",
+        "остального, а сторон тут нет.",
+        "",
+        "Мы приходили сюда мерить. Померили один раз",
+        "и больше не приходили: мерить нечего,",
+        "и меряющего тоже нечем отделить.»"
+    });
+
+    add("threeways", "Три исхода", {
+        "Лист лежит на камне, придавленный кольцом.",
+        "Рука Первого Мастера, писано без спешки.",
+        "",
+        "«Дотянуть. Все рядом, никто никуда не идёт.",
+        "Разрезать. Все далеко, и каждый сам.",
+        "Удержать. Всё как есть, и держать вечно.",
+        "",
+        "Я стою здесь двести лет и не выбрал.",
+        "Не потому, что не решаюсь: потому, что",
+        "выбирать должен тот, кому потом жить.",
+        "",
+        "Мне-то уже всё равно, а это плохая",
+        "рекомендация для выбирающего.",
+        "",
+        "Кто прочтёт — выбирай сам. И знай, что",
+        "правильного нет. Есть только твой.»"
+    });
+
     add("hermit", "Страница из дневника", {
         "Двадцать лет назад я тоже думал, что",
         "сила решает. Ходил в ярости, бил первым.",
@@ -1755,6 +1942,101 @@ void Content::build_enemies() {
     ewind.on_hit_effect = "slow"; ewind.on_hit_chance = 50; ewind.on_hit_power = 3;
     add(ewind);
 
+    // --- Регион VI: Изнанка ---
+
+    EnemyDef smoth;
+    smoth.id = "seam_moth"; smoth.name = "Мотылёк шва"; smoth.female = false;
+    smoth.stats.max_hp = 250; smoth.stats.max_ap = 15; smoth.stats.attack = 104;
+    smoth.stats.dmg_min = 16; smoth.stats.dmg_max = 27; smoth.stats.block = 26;
+    smoth.stats.armor = 8;    smoth.stats.ap_atk = 3;
+    smoth.exp = 460; smoth.gold_min = 60; smoth.gold_max = 170;
+    smoth.drops = { Drop("line_dust", 55), Drop("cinch_draught", 35) };
+    smoth.detect = 9; smoth.kill_counter = "kill_smoth";
+    smoth.on_hit_effect = "weaken"; smoth.on_hit_chance = 40; smoth.on_hit_power = 3;
+    add(smoth);
+
+    EnemyDef lwalker;
+    lwalker.id = "line_walker"; lwalker.name = "Ходящий по линии";
+    lwalker.stats.max_hp = 285; lwalker.stats.max_ap = 15; lwalker.stats.attack = 106;
+    lwalker.stats.dmg_min = 18; lwalker.stats.dmg_max = 30; lwalker.stats.block = 30;
+    lwalker.stats.armor = 11;   lwalker.stats.ap_atk = 4;
+    lwalker.exp = 520; lwalker.gold_min = 80; lwalker.gold_max = 210;
+    lwalker.drops = { Drop("line_thread", 60), Drop("line_dust", 45) };
+    lwalker.detect = 10; lwalker.kill_counter = "kill_lwalker";
+    lwalker.on_hit_effect = "bleed"; lwalker.on_hit_chance = 45; lwalker.on_hit_power = 4;
+    add(lwalker);
+
+    EnemyDef mthing;
+    mthing.id = "measure_thing"; mthing.name = "Мера, ставшая вещью"; mthing.female = true;
+    mthing.stats.max_hp = 305; mthing.stats.max_ap = 14; mthing.stats.attack = 105;
+    mthing.stats.dmg_min = 17; mthing.stats.dmg_max = 29; mthing.stats.block = 32;
+    mthing.stats.armor = 12;   mthing.stats.ap_atk = 4;
+    mthing.exp = 545; mthing.gold_min = 90; mthing.gold_max = 230;
+    mthing.drops = { Drop("line_dust", 50), Drop("cinch_draught", 40) };
+    mthing.detect = 9; mthing.kill_counter = "kill_mthing";
+    mthing.on_hit_effect = "slow"; mthing.on_hit_chance = 50; mthing.on_hit_power = 3;
+    add(mthing);
+
+    EnemyDef fguard;
+    fguard.id = "first_guard"; fguard.name = "Страж Первого узла";
+    fguard.stats.max_hp = 340; fguard.stats.max_ap = 15; fguard.stats.attack = 108;
+    fguard.stats.dmg_min = 19; fguard.stats.dmg_max = 32; fguard.stats.block = 34;
+    fguard.stats.armor = 13;   fguard.stats.ap_atk = 4;
+    fguard.exp = 590; fguard.gold_min = 110; fguard.gold_max = 260;
+    fguard.drops = { Drop("line_dust", 45), Drop("rune_stone", 60),
+                     Drop("first_ring", 20) };
+    fguard.detect = 10; fguard.kill_counter = "kill_fguard";
+    fguard.on_hit_effect = "weaken"; fguard.on_hit_chance = 50; fguard.on_hit_power = 3;
+    add(fguard);
+
+    EnemyDef cengine;
+    cengine.id = "cinch_engine"; cengine.name = "Стяжной ход";
+    cengine.stats.max_hp = 360; cengine.stats.max_ap = 14; cengine.stats.attack = 109;
+    cengine.stats.dmg_min = 20; cengine.stats.dmg_max = 34; cengine.stats.block = 30;
+    cengine.stats.armor = 15;   cengine.stats.ap_atk = 4;
+    cengine.exp = 630; cengine.gold_min = 130; cengine.gold_max = 290;
+    cengine.drops = { Drop("heart_cog", 65), Drop("scrap_iron", 60) };
+    cengine.detect = 9; cengine.kill_counter = "kill_cengine";
+    cengine.on_hit_effect = "slow"; cengine.on_hit_chance = 50; cengine.on_hit_power = 4;
+    add(cengine);
+
+    // Сердце тянет всё, до чего дотянется, и потому бьёт чаще, чем должно.
+    EnemyDef cheart;
+    cheart.id = "cinch_heart"; cheart.name = "Сердце Стяжения"; cheart.female = true;
+    cheart.stats.max_hp = 430; cheart.stats.max_ap = 16; cheart.stats.attack = 112;
+    cheart.stats.dmg_min = 22; cheart.stats.dmg_max = 38; cheart.stats.block = 34;
+    cheart.stats.armor = 15;   cheart.stats.ap_atk = 3;
+    cheart.exp = 1000; cheart.gold_min = 400; cheart.gold_max = 700;
+    cheart.drops = { Drop("heart_cog", 100), Drop("inside_plate", 70),
+                     Drop("portal_stone", 100), Drop("rune_stone", 100) };
+    cheart.detect = 11; cheart.kill_counter = "kill_cheart";
+    cheart.on_hit_effect = "bleed"; cheart.on_hit_chance = 55; cheart.on_hit_power = 4;
+    add(cheart);
+
+    EnemyDef zecho;
+    zecho.id = "zero_echo"; zecho.name = "Эхо Нулевой точки"; zecho.female = false;
+    zecho.stats.max_hp = 320; zecho.stats.max_ap = 16; zecho.stats.attack = 110;
+    zecho.stats.dmg_min = 19; zecho.stats.dmg_max = 33; zecho.stats.block = 33;
+    zecho.stats.armor = 12;   zecho.stats.ap_atk = 3;
+    zecho.exp = 610; zecho.gold_min = 120; zecho.gold_max = 280;
+    zecho.drops = { Drop("line_dust", 55), Drop("cinch_draught", 45) };
+    zecho.detect = 11; zecho.kill_counter = "kill_zecho";
+    zecho.on_hit_effect = "weaken"; zecho.on_hit_chance = 50; zecho.on_hit_power = 4;
+    add(zecho);
+
+    // «Всё сразу» — то, чем Точка Ноль отвечает на любого, кто до неё дошёл.
+    EnemyDef allat;
+    allat.id = "all_at_once"; allat.name = "Всё сразу"; allat.female = true;
+    allat.stats.max_hp = 470; allat.stats.max_ap = 16; allat.stats.attack = 114;
+    allat.stats.dmg_min = 24; allat.stats.dmg_max = 40; allat.stats.block = 36;
+    allat.stats.armor = 16;   allat.stats.ap_atk = 4;
+    allat.exp = 1200; allat.gold_min = 500; allat.gold_max = 850;
+    allat.drops = { Drop("zero_shield", 100), Drop("line_blade", 70),
+                    Drop("first_ring", 60), Drop("portal_stone", 100) };
+    allat.detect = 12; allat.kill_counter = "kill_allat";
+    allat.on_hit_effect = "burn"; allat.on_hit_chance = 55; allat.on_hit_power = 4;
+    add(allat);
+
     // Вожак носит амулет Лады — цель квеста, а не случайная добыча.
     EnemyDef alpha;
     alpha.id = "wolf_alpha"; alpha.name = "Вожак стаи";
@@ -2152,6 +2434,75 @@ void Content::build_quests() {
     };
     quests_.push_back(q);
 
+    // --- Регион VI: Изнанка ---
+
+    q = QuestDef();
+    q.id = "inside"; q.name = "Тот, кто шагнул";
+    q.stages = {
+        QuestStageDef(1, "Тихон рассказал про того, кто шагнул с Края. Он не разбился: "
+                         "падать там некуда. Шагнуть следом — единственный способ проверить."),
+        QuestStageDef(QUEST_DONE, "Изнанка сети. Внутри она держится на честном слове, "
+                                  "и это не оборот речи.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "firstjoint"; q.name = "На честном слове";
+    q.stages = {
+        QuestStageDef(1, "Елисей держит Первый Шов двести лет, потому что крепления нет. "
+                         "В описи крепление названо словом — значит, слово где-то записано."),
+        QuestStageDef(QUEST_DONE, "Расписка Первого Мастера легла в стык. Елисей отпустил.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "lines"; q.name = "По линиям";
+    q.stages = {
+        QuestStageDef(1, "Разметчику Прову нужны 5 нитей линии: он хочет знать, "
+                         "рвутся они сами или их подтянули."),
+        QuestStageDef(QUEST_DONE, "Не рвутся. Подтянуты, все до одной, ровно и нарочно.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "remembers"; q.name = "Тот, кто помнит дорогу";
+    q.stages = {
+        QuestStageDef(1, "У Первого узла стоит человек, который ушёл из обители "
+                         "двести лет назад и с тех пор идёт."),
+        QuestStageDef(QUEST_DONE, "Он рассказал дорогу до конца и пошёл следом. "
+                                  "Выбирать будет не он.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "finale"; q.name = "Развязка";
+    q.stages = {
+        QuestStageDef(1, "Три исхода записаны на листе, придавленном кольцом. "
+                         "Правильного нет. Есть только твой."),
+        QuestStageDef(QUEST_DONE, "Ты выбрал. Обратно не переигрывается.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "measure"; q.name = "Мера"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "В Комнате Измерений расстояние — вещь. Её можно взять в руку "
+                         "и потерять, и был человек, который потерялся сам."),
+        QuestStageDef(QUEST_DONE, "Мера у тебя. Теперь до всего ровно столько, "
+                                  "сколько ты решишь.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "heart"; q.name = "Сердце Стяжения"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "Ход не крутится и не тикает: он просто не умеет иначе, "
+                         "чем тянуть. Никто не проверял, что будет, если перестанет."),
+        QuestStageDef(QUEST_DONE, "Проверил. Сердце остановлено, и мир не рассыпался — "
+                                  "он просто перестал стягиваться сам собой.")
+    };
+    quests_.push_back(q);
+
     q = QuestDef();
     q.id = "seam"; q.name = "Шов за алтарём"; q.secret = true;
     q.stages = {
@@ -2255,6 +2606,13 @@ void Content::build_shops() {
     shops_[s.id] = s;
 
     s = ShopDef();
+    s.id = "shop_inside"; s.name = "Короб Елисея";
+    s.goods = {"cinch_draught", "line_dust", "rune_stone", "seam_helm",
+               "zero_shield", "portal_stone", "still_water", "antidote"};
+    s.buy_pct = 120; s.sell_pct = 60;    // сюда мало кто доходит, и он это знает
+    shops_[s.id] = s;
+
+    s = ShopDef();
     s.id = "shop_herbs"; s.name = "Травы Лады";
     s.goods = {"herb_potion", "ap_tonic", "bread", "antidote", "salve",
                "elixir_might", "elixir_guard", "elixir_haste"};
@@ -2306,6 +2664,109 @@ void Content::build_npcs() {
     add("soldier",    "Ратмир, десятник", "soldier_root",    "");
     add("grovekeeper","Ерофей, сидящий",  "grovekeeper_root","");
     add("pathkeeper", "Проводник Тихон",  "pathkeeper_root", "shop_drift");
+
+    // --- Регион VI: Изнанка ---
+    // Первый Мастер стоит дважды: у Первого узла, где рассказывает дорогу,
+    // и в Развязке, где молчит и ждёт ответа. Это один человек, но два
+    // разговора, и второй не должен быть доступен из первого.
+    add("seamwatch",  "Сторож Елисей",    "seamwatch_root",  "shop_inside");
+    add("surveyor",   "Разметчик Пров",   "surveyor_root",   "");
+    add("master",     "Первый Мастер",    "master_root",     "");
+    add("master_end", "Первый Мастер",    "finale_root",     "");
+}
+
+// ---------------------------------------------------------------- развязки
+
+void Content::build_endings() {
+    auto add = [&](const std::string& id, const std::string& name,
+                   const std::vector<std::string>& lines) {
+        EndingDef e; e.id = id; e.name = name; e.lines = lines;
+        endings_[id] = e;
+    };
+
+    add("pull", "Дотянуть", {
+        "Ты доводишь замысел Ордена до конца.",
+        "",
+        "Расстояние отменяется не сразу. Сначала пропадает дорога между",
+        "Ольховкой и лесом — просто оказывается, что идти там некуда,",
+        "потому что уже пришёл. Потом то же самое делается с Рынком Шва,",
+        "с Половиной Города, с обеими половинами разом.",
+        "",
+        "Лада поднимает голову от трав и видит Пелагею, которая правит",
+        "списки. Пелагея видит Улиту у котла. Улита видит Гурия, и Гурий",
+        "наконец пересчитывает свои сорок душ по головам, все сорок,",
+        "и садится прямо на землю.",
+        "",
+        "Никто больше не пропадёт. Некуда пропадать.",
+        "",
+        "Ратмир говорит: «Вот и подмога». Ерофей выходит из рощи первым",
+        "шагом за сто четыре зарубки. Севир садится и не встаёт.",
+        "",
+        "А потом становится тихо, и тишина эта не кончается, потому что",
+        "кончаться ей больше некуда. Ты хочешь отойти в сторону и понимаешь,",
+        "что стороны нет. Есть двор, и на нём весь мир, и все на нём рядом,",
+        "и это навсегда.",
+        "",
+        "Игнат подходит и говорит: «Спасибо. Он вышел».",
+        "И правда: рядом стоит послушник из кельи одиннадцатой, живой,",
+        "и держит оловянного солдатика.",
+        "",
+        "Ты сделал так, что все нашлись. Ценой того, что никто больше",
+        "никуда не пойдёт."
+    });
+
+    add("cut", "Разрезать", {
+        "Ты режешь сеть.",
+        "",
+        "Расстояние возвращается сразу и целиком, как вода в прорванную",
+        "запруду. Мир делается огромным и честным.",
+        "",
+        "До Ольховки отсюда полгода пути, и Лада не узнает, что ты выбрал:",
+        "письмо будет идти дольше, чем она проживёт. Гурий довезёт товар",
+        "до Рынка Шва за четыре месяца вместо двух дней и скажет, что так",
+        "и надо, что раньше было неправильно.",
+        "",
+        "Лоскуты расходятся по своим настоящим местам. Дом на отшибе",
+        "опускается на землю где-то далеко на севере, и Улита выходит утром",
+        "во двор — впервые утром, — и видит незнакомые горы.",
+        "",
+        "Половина Города соединяется со своей половиной. За тысячу вёрст",
+        "отсюда, на пустом месте, встаёт целый город, и Мучная улица идёт",
+        "насквозь, и Пелагея кричит через неё имя, и ей отвечают.",
+        "",
+        "А один лоскут опускается в океан, потому что настоящее место у него",
+        "там. Ты видел его с Края и не знал, чей он.",
+        "",
+        "Ратмир доходит до своих через шесть недель. Опоздал, но дошёл.",
+        "",
+        "Ты вернул миру размер. Это оказалось дорого, и заплатили не все",
+        "поровну."
+    });
+
+    add("hold", "Удержать", {
+        "Ты не делаешь ничего. Это самое трудное из трёх.",
+        "",
+        "Сердце Стяжения тянет, как тянуло, и ты держишь, как держал Второй",
+        "узел двести лет — ровно с той силой, с какой тянет сеть. Устанешь —",
+        "стянется. Значит, не уставать.",
+        "",
+        "Мир остаётся такой, какой есть: криво сшитый, с половинами имён,",
+        "с обозом, числящимся в пути, с рощей, где не темнеет. Все, кого",
+        "ты встретил, остаются там, где ты их оставил. Ничего не",
+        "исправлено, и ничего больше не сломано.",
+        "",
+        "Через год ты замечаешь, что перестал считать дни, и вспоминаешь",
+        "Ерофея и его сто четыре зарубки. Через пять — что не хочется есть.",
+        "Через сорок к твоему костру выходит Игнат, садится, ничего",
+        "не спрашивает и уходит утром.",
+        "",
+        "Потом приходит кто-то новый. Молодой, с чужой печатью на пальце,",
+        "и печать ему передал не человек.",
+        "",
+        "Ты подвигаешься и говоришь:",
+        "",
+        "— Садись. Огня хватит на двоих."
+    });
 }
 
 // ---------------------------------------------------------------- события
@@ -2430,6 +2891,25 @@ void Content::build_triggers() {
         "Семнадцать лоскутов идут в одну сторону. Открыта тайна: «Край Лоскута».");
     add(TriggerKind::MobKilled, "kill_edgewind", 1, "edgeq", QUEST_DONE, 1,
         "Ветер Края улёгся. Стало видно, куда всё это сносит.");
+
+    // --- Регион VI ---
+    // Шаг с Края — сам по себе ответ на вопрос Тихона.
+    add(TriggerKind::LocationEntered, "firstseam", 1, "inside", QUEST_DONE, 1,
+        "Ты не разбился: падать здесь некуда. Это изнанка сети.");
+
+    add(TriggerKind::LocationEntered, "measures", 1, "measure", 1, 0,
+        "Расстояние тут лежит на полке. Открыта тайна: «Мера».");
+    add(TriggerKind::ItemGained, "measure", 1, "measure", QUEST_DONE, 1,
+        "Мера у тебя в руке, и рука не стала тяжелее.");
+
+    add(TriggerKind::NoteTaken, "cinchwork", 1, "heart", 1, 0,
+        "Устройство хода записано в трёх абзацах. Открыта тайна: «Сердце Стяжения».");
+    add(TriggerKind::MobKilled, "kill_cheart", 1, "heart", QUEST_DONE, 1,
+        "Сердце остановлено. Мир не рассыпался — он просто перестал стягиваться.");
+
+    // Лист под кольцом — то, ради чего сюда шли.
+    add(TriggerKind::NoteTaken, "threeways", 1, "finale", 1, 0,
+        "Три исхода, писано рукой Первого Мастера. Правильного нет.");
 
     // Половина имени — вещь, с которой начинается вопрос о второй половине.
     add(TriggerKind::ItemGained, "half_name", 1, "halves", 1, 0,
@@ -4350,6 +4830,20 @@ void Content::build_dialogues() {
         trade.open_shop = true;
         n.options.push_back(trade);
 
+        // Изнанка: Тихон рассказывает про Край только тому, кто там уже был.
+        DlgOption in_offer;
+        in_offer.text = "Ты говорил про того, кто шагнул с Края.";
+        in_offer.next = "inside_offer";
+        in_offer.req_quest  = "inside"; in_offer.req_stage_min  = QUEST_NONE; in_offer.req_stage_max  = QUEST_NONE;
+        in_offer.req_quest2 = "edgeq";  in_offer.req_stage2_min = QUEST_DONE; in_offer.req_stage2_max = QUEST_DONE;
+        n.options.push_back(in_offer);
+
+        DlgOption in_after;
+        in_after.text = "Я был там. Внутри.";
+        in_after.next = "inside_after";
+        in_after.req_quest = "inside"; in_after.req_stage_min = QUEST_DONE; in_after.req_stage_max = QUEST_DONE;
+        n.options.push_back(in_after);
+
         n.options.push_back(bye("Пойду дальше."));
         add(n);
     }
@@ -4381,6 +4875,527 @@ void Content::build_dialogues() {
                  "\n"
                  "А ты говори, если считаешь нужным. Ты уйдёшь, а мне тут жить.";
         n.options.push_back(bye("Никому не скажу."));
+        add(n);
+    }
+
+    // ================= Регион VI: Изнанка =================
+
+    {
+        DlgNode n; n.id = "inside_offer";
+        n.text = "Тихон долго смотрит в сторону Края и наконец решается.\n"
+                 "\n"
+                 "— Я тебе про того, который шагнул, не всё сказал.\n"
+                 "\n"
+                 "Я потом ходил смотреть. Тела нет. И внизу нет — потому что\n"
+                 "внизу вообще нет ничего, я проверял камнем: камень не падает,\n"
+                 "он просто перестаёт быть виден.\n"
+                 "\n"
+                 "Значит, он не разбился. Значит, он куда-то попал.\n"
+                 "\n"
+                 "Он поправляет мешок и говорит уже совсем тихо:\n"
+                 "\n"
+                 "— Это был мой брат. Я двенадцать лет хожу мимо Края и не могу.\n"
+                 "А ты можешь: тебе тут не жить.";
+        DlgOption take;
+        take.text = "Шагну.";
+        take.next = "";
+        take.set_quest = "inside"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Не сегодня."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "inside_after";
+        n.text = "— Значит, правда. Значит, он там.\n"
+                 "\n"
+                 "Тихон садится прямо на тропу, чего за двенадцать лет,\n"
+                 "кажется, не делал ни разу.\n"
+                 "\n"
+                 "— Не пойду за ним. Мне тут дорогу показывать. Но теперь\n"
+                 "хоть знаю, куда он делся, а это, оказывается, много.";
+        n.options.push_back(bye("Бывай, Тихон."));
+        add(n);
+    }
+
+    // --- Сторож Елисей: стык на честном слове ---
+    {
+        DlgNode n; n.id = "seamwatch_root";
+        n.text = "Человек стоит, упершись ладонями в пустоту перед собой,\n"
+                 "и по напряжению рук видно, что там что-то есть.\n"
+                 "— Тише. Не толкни.";
+
+        DlgOption offer;
+        offer.text = "Что ты держишь?";
+        offer.next = "firstjoint_offer";
+        offer.req_quest = "firstjoint"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption done;
+        done.text = "Вот расписка. Честное слово, писаное.";
+        done.next = "firstjoint_reward";
+        done.req_quest = "firstjoint"; done.req_stage_min = 1; done.req_stage_max = 1;
+        done.req_item = "seam_word"; done.req_item_count = 1;
+        n.options.push_back(done);
+
+        DlgOption wait;
+        wait.text = "Ещё ищу слово.";
+        wait.next = "firstjoint_wait";
+        wait.req_quest = "firstjoint"; wait.req_stage_min = 1; wait.req_stage_max = 1;
+        n.options.push_back(wait);
+
+        DlgOption after;
+        after.text = "Как руки?";
+        after.next = "firstjoint_after";
+        after.req_quest = "firstjoint"; after.req_stage_min = QUEST_DONE; after.req_stage_max = QUEST_DONE;
+        n.options.push_back(after);
+
+        DlgOption trade;
+        trade.text = "Торгуешь чем-нибудь?";
+        trade.open_shop = true;
+        n.options.push_back(trade);
+
+        n.options.push_back(bye("Держи."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "firstjoint_offer";
+        n.text = "— Стык. Первый, самый старый. Северный лоскут и южный.\n"
+                 "\n"
+                 "В описи сказано: крепление — слово. Я думал, ошибка писаря,\n"
+                 "пока не встал сюда и не понял, что держать нечем: скобы нет,\n"
+                 "узла нет, есть только то, что Мастер сказал «держать буду я».\n"
+                 "\n"
+                 "Он ушёл дальше. Я встал вместо него — на неделю, пока вернётся.\n"
+                 "\n"
+                 "Он поводит плечом, не отрывая ладоней.\n"
+                 "\n"
+                 "— Найди его слово писаным. Расписку, запись, что угодно.\n"
+                 "Слово, положенное в стык, держит не хуже руки. Так в описи\n"
+                 "и сказано, а я в опись верю: больше не во что.";
+        DlgOption take;
+        take.text = "Поищу расписку.";
+        take.next = "firstjoint_wait";
+        take.set_quest = "firstjoint"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Стой дальше."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "firstjoint_wait";
+        n.text = "— Ищи дальше по галерее. Там кто-то ходит взад-вперёд, я слышу\n"
+                 "шаги вторую сотню лет. Окликать не пробовал: отпущу — разойдётся.";
+        n.options.push_back(bye("Найду."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "firstjoint_reward";
+        n.text = "Елисей читает, не опуская рук. Потом кивает, и ты кладёшь\n"
+                 "расписку в стык — в пустоту, где ничего нет.\n"
+                 "\n"
+                 "Лист не падает.\n"
+                 "\n"
+                 "Елисей осторожно отнимает одну ладонь. Потом вторую. Стоит,\n"
+                 "растопырив пальцы, и смотрит на них, как на чужие.\n"
+                 "\n"
+                 "— Двести лет. Я думал, будет громче.\n"
+                 "\n"
+                 "Он опускает руки и морщится: плечи не слушаются.\n"
+                 "\n"
+                 "— Шлем возьми. Мне в нём стоять было, а ходить я в нём\n"
+                 "не умею.";
+        DlgOption take;
+        take.text = "Принять шлем. [1100 опыта]";
+        take.set_quest = "firstjoint"; take.set_stage = QUEST_DONE;
+        take.take_item = "seam_word"; take.take_count = 1;
+        take.give_item = "seam_helm"; take.give_count = 1;
+        take.give_gold = 600; take.give_exp = 1100;
+        n.options.push_back(take);
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "firstjoint_after";
+        n.text = "— Болят. Первый раз за двести лет болят, и это, знаешь,\n"
+                 "приятно: значит, они мои.\n"
+                 "\n"
+                 "Стык держит. Я проверяю каждый час, но он держит.";
+        n.options.push_back(bye("Отдыхай, Елисей."));
+        add(n);
+    }
+
+    // --- Разметчик Пров: линии подтянуты нарочно ---
+    {
+        DlgNode n; n.id = "surveyor_root";
+        n.text = "Человек стоит посреди галереи, чуть отвернув голову, и смотрит\n"
+                 "мимо всего, что перед ним.\n"
+                 "— Прямо не гляди. Прямо их не видно.";
+
+        DlgOption offer;
+        offer.text = "Что тут видно непрямо?";
+        offer.next = "lines_offer";
+        offer.req_quest = "lines"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption done;
+        done.text = "Пять нитей.";
+        done.next = "lines_reward";
+        done.req_quest = "lines"; done.req_stage_min = 1; done.req_stage_max = 1;
+        done.req_item = "line_thread"; done.req_item_count = 5;
+        n.options.push_back(done);
+
+        DlgOption wait;
+        wait.text = "Ещё собираю нити.";
+        wait.next = "lines_wait";
+        wait.req_quest = "lines"; wait.req_stage_min = 1; wait.req_stage_max = 1;
+        n.options.push_back(wait);
+
+        DlgOption brother;
+        brother.text = "Тебя не Тихон ли ищет?";
+        brother.next = "surveyor_brother";
+        brother.req_quest = "inside"; brother.req_stage_min = QUEST_DONE; brother.req_stage_max = QUEST_DONE;
+        n.options.push_back(brother);
+
+        n.options.push_back(bye("Размечай."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "lines_offer";
+        n.text = "— Линии. Вся сеть, как она есть, без чертежа и без вранья.\n"
+                 "\n"
+                 "Толстая линия — коротко. Тонкая — далеко. Оборванная — та,\n"
+                 "по которой прошли в последний раз.\n"
+                 "\n"
+                 "Оборванных больше половины, и вот что меня держит тут\n"
+                 "двенадцатый год: я не могу понять, сами они рвутся или их\n"
+                 "рвут. Разница вся.\n"
+                 "\n"
+                 "Принеси пять нитей с тех, кто по ним ходит. Посмотрю на обрыв.\n"
+                 "Рваное от резаного я отличу, я разметчик.";
+        DlgOption take;
+        take.text = "Принесу пять.";
+        take.next = "lines_wait";
+        take.set_quest = "lines"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Смотри дальше."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "lines_wait";
+        n.text = "— Пять. Меньше нельзя: по одной не поймёшь, по двум соврёшь.";
+        n.options.push_back(bye("Понял."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "lines_reward";
+        n.text = "Пров раскладывает нити на ладони и смотрит на них мимо, боком,\n"
+                 "долго. Потом сжимает кулак.\n"
+                 "\n"
+                 "— Резаное. Все пять.\n"
+                 "\n"
+                 "— Никакого износа. Их подтягивали: режут длинную и связывают\n"
+                 "покороче, и мир делается теснее на этот кусок. Ровно, аккуратно,\n"
+                 "по всей сети. Двести лет.\n"
+                 "\n"
+                 "Он садится на пол галереи.\n"
+                 "\n"
+                 "— Я двенадцать лет надеялся, что оно само. Само — это беда.\n"
+                 "А так выходит, что кто-то до сих пор режет.\n"
+                 "\n"
+                 "Клинок возьми. Он тут валялся, а мне резать нечего.";
+        DlgOption take;
+        take.text = "Принять клинок. [1200 опыта]";
+        take.set_quest = "lines"; take.set_stage = QUEST_DONE;
+        take.take_item = "line_thread"; take.take_count = 5;
+        take.give_item = "line_blade"; take.give_count = 1;
+        take.give_gold = 700; take.give_exp = 1200;
+        n.options.push_back(take);
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "surveyor_brother";
+        n.text = "Пров впервые поворачивается прямо.\n"
+                 "\n"
+                 "— Тихон. Живой, значит.\n"
+                 "\n"
+                 "— Я не шагал с Края, чужак, я вошёл через шов, как все.\n"
+                 "Это он себе придумал, будто я сорвался, и двенадцать лет\n"
+                 "об этом думает. Я знал и не поправил.\n"
+                 "\n"
+                 "Он снова отворачивает голову вбок.\n"
+                 "\n"
+                 "— Потому что если поправить, надо возвращаться. А я тут\n"
+                 "линии считаю. Двенадцать лет считаю.\n"
+                 "\n"
+                 "— Скажи ему, что я досчитал. Теперь можно и назад.";
+        n.options.push_back(bye("Скажу."));
+        add(n);
+    }
+
+    // --- Первый Мастер у Первого узла ---
+    {
+        DlgNode n; n.id = "master_root";
+        n.text = "У кривого узла стоит старик с посохом, стёртым снизу на две\n"
+                 "ладони. Он не оборачивается — он тебя ждал.\n"
+                 "— Долго. Я уж думал, никто не дойдёт.";
+
+        DlgOption offer;
+        offer.text = "Ты кто?";
+        offer.next = "remembers_offer";
+        offer.req_quest = "remembers"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption word;
+        word.text = "Елисей двести лет держит твой стык.";
+        word.next = "master_word";
+        word.req_quest = "firstjoint"; word.req_stage_min = 1; word.req_stage_max = 1;
+        n.options.push_back(word);
+
+        DlgOption ring;
+        ring.text = "Твоё кольцо у меня. Из Зала Отказа.";
+        ring.next = "master_ring_talk";
+        ring.req_item = "master_ring"; ring.req_item_count = 1;
+        n.options.push_back(ring);
+
+        DlgOption way;
+        way.text = "Расскажи дорогу до конца.";
+        way.next = "remembers_way";
+        way.req_quest = "remembers"; way.req_stage_min = 1; way.req_stage_max = 1;
+        n.options.push_back(way);
+
+        DlgOption after;
+        after.text = "Ты идёшь за мной?";
+        after.next = "remembers_after";
+        after.req_quest = "remembers"; after.req_stage_min = QUEST_DONE; after.req_stage_max = QUEST_DONE;
+        n.options.push_back(after);
+
+        n.options.push_back(bye("Мне дальше."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "remembers_offer";
+        n.text = "— Тот, кто сказал «не связывайте» и остался в меньшинстве.\n"
+                 "\n"
+                 "Он говорит это буднично, как называют ремесло.\n"
+                 "\n"
+                 "— Я снял кольцо, вышел и пошёл. Думал — до ближайшего узла,\n"
+                 "посмотреть своими глазами. Посмотрел. Пошёл до следующего.\n"
+                 "Так и иду.\n"
+                 "\n"
+                 "— На могиле моей, говорят, приписано «я ещё хожу». Не моей\n"
+                 "рукой, но по правде.\n"
+                 "\n"
+                 "— Спрашивай, чужак. Я двести лет не с кем.";
+        DlgOption take;
+        take.text = "Спрошу.";
+        take.next = "remembers_way";
+        take.set_quest = "remembers"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Потом."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "remembers_way";
+        n.text = "— Дорога короткая, и она вся отсюда видна.\n"
+                 "\n"
+                 "За узлом — Сердце. Оно тянет. Не злое, не разумное: просто\n"
+                 "не умеет иначе. Его можно остановить, и я тебе не советую\n"
+                 "и не отговариваю — я двести лет назад уже насоветовал.\n"
+                 "\n"
+                 "За Сердцем — Точка Ноль. Там до всего ноль, и потому там нет\n"
+                 "ничего. Идти туда незачем, кроме одного: только оттуда\n"
+                 "решение и работает.\n"
+                 "\n"
+                 "А за Точкой — комната, где лежит лист. Я его сам писал.\n"
+                 "\n"
+                 "Он поворачивается наконец.\n"
+                 "\n"
+                 "— Три исхода. Я знаю их все и не выбрал ни одного, потому что\n"
+                 "мне потом не жить, а тебе — жить. Плохой я советчик.\n"
+                 "\n"
+                 "— Дойдёшь до листа — я подойду. Не помогать. Просто рядом\n"
+                 "постою: такое в одиночку не решают.";
+        DlgOption take;
+        take.text = "Понял. Иду.";
+        take.set_quest = "remembers"; take.set_stage = QUEST_DONE;
+        take.give_item = "walk_staff"; take.give_count = 1;
+        take.give_exp = 1300;
+        n.options.push_back(take);
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "remembers_after";
+        n.text = "— Иду. Медленно: у меня посох стёрт, а новый брать негде.\n"
+                 "\n"
+                 "Ты иди вперёд. Я успею.";
+        n.options.push_back(bye("Успевай."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "master_word";
+        n.text = "Старик молчит очень долго.\n"
+                 "\n"
+                 "— Елисей. Рыжий такой, картавил.\n"
+                 "\n"
+                 "— Я сказал: подержи неделю. Я правда думал, что неделю.\n"
+                 "\n"
+                 "Он лезет за пазуху и достаёт сложенный вчетверо лист,\n"
+                 "мягкий от двухсот лет.\n"
+                 "\n"
+                 "— Вот моё слово, писаное. Я его с собой носил, чтобы помнить,\n"
+                 "что должен вернуться. Носил и не вернулся: сперва думал —\n"
+                 "рано, потом — поздно, потом просто шёл.\n"
+                 "\n"
+                 "— Отнеси. И не говори ему, что я рядом. Пусть уж лучше думает,\n"
+                 "что я не дошёл, чем что дошёл и не свернул.";
+        DlgOption take;
+        take.text = "Взять расписку.";
+        take.give_item = "seam_word"; take.give_count = 1;
+        n.options.push_back(take);
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "master_ring_talk";
+        n.text = "Он смотрит на кольцо и не берёт.\n"
+                 "\n"
+                 "— Значит, Никон дописал протокол. И записал, что я был прав.\n"
+                 "\n"
+                 "— Знаешь, что смешно? Я не был прав. Я был осторожен, а это\n"
+                 "другое. Осторожный, который угадал, задним числом делается\n"
+                 "мудрецом, но угадал-то он.\n"
+                 "\n"
+                 "— Оставь себе. Мне его надевать не на что: я тогда снял\n"
+                 "не украшение, а право решать. Второй раз надену — опять\n"
+                 "начну решать за других.";
+        n.options.push_back(bye("Понимаю."));
+        add(n);
+    }
+
+    // --- Развязка: три исхода, и один из них навсегда ---
+    {
+        DlgNode n; n.id = "finale_root";
+        n.text = "Старик стоит поодаль, опершись на посох, и молчит. Он\n"
+                 "не подойдёт ближе и не скажет ни слова, пока ты не скажешь\n"
+                 "первым.\n"
+                 "\n"
+                 "На камне лежит лист, придавленный кольцом. Три строки.";
+
+        DlgOption read;
+        read.text = "Что ты сам думаешь?";
+        read.next = "finale_ask";
+        read.req_quest = "finale"; read.req_stage_min = 1; read.req_stage_max = 1;
+        n.options.push_back(read);
+
+        DlgOption pull;
+        pull.text = "Дотянуть. Пусть все будут рядом.";
+        pull.next = "";
+        pull.req_quest = "finale"; pull.req_stage_min = 1; pull.req_stage_max = 1;
+        pull.set_quest = "finale"; pull.set_stage = QUEST_DONE;
+        pull.set_counter = "ending_choice"; pull.set_counter_value = 1;
+        pull.give_exp = 2000;
+        pull.ending = "pull";
+        n.options.push_back(pull);
+
+        DlgOption cut;
+        cut.text = "Разрезать. Пусть мир станет большим.";
+        cut.next = "";
+        cut.req_quest = "finale"; cut.req_stage_min = 1; cut.req_stage_max = 1;
+        cut.set_quest = "finale"; cut.set_stage = QUEST_DONE;
+        cut.set_counter = "ending_choice"; cut.set_counter_value = 2;
+        cut.give_exp = 2000;
+        cut.ending = "cut";
+        n.options.push_back(cut);
+
+        DlgOption hold;
+        hold.text = "Удержать. Ничего не менять.";
+        hold.next = "";
+        hold.req_quest = "finale"; hold.req_stage_min = 1; hold.req_stage_max = 1;
+        hold.set_quest = "finale"; hold.set_stage = QUEST_DONE;
+        hold.set_counter = "ending_choice"; hold.set_counter_value = 3;
+        hold.give_exp = 2000;
+        hold.ending = "hold";
+        n.options.push_back(hold);
+
+        DlgOption after_p;
+        after_p.text = "Ну вот и всё.";
+        after_p.next = "finale_after_pull";
+        after_p.req_quest = "finale"; after_p.req_stage_min = QUEST_DONE; after_p.req_stage_max = QUEST_DONE;
+        after_p.req_counter = "ending_choice"; after_p.req_counter_min = 1; after_p.req_counter_max = 1;
+        n.options.push_back(after_p);
+
+        DlgOption after_c;
+        after_c.text = "Ну вот и всё.";
+        after_c.next = "finale_after_cut";
+        after_c.req_quest = "finale"; after_c.req_stage_min = QUEST_DONE; after_c.req_stage_max = QUEST_DONE;
+        after_c.req_counter = "ending_choice"; after_c.req_counter_min = 2; after_c.req_counter_max = 2;
+        n.options.push_back(after_c);
+
+        DlgOption after_h;
+        after_h.text = "Ну вот и всё.";
+        after_h.next = "finale_after_hold";
+        after_h.req_quest = "finale"; after_h.req_stage_min = QUEST_DONE; after_h.req_stage_max = QUEST_DONE;
+        after_h.req_counter = "ending_choice"; after_h.req_counter_min = 3; after_h.req_counter_max = 3;
+        n.options.push_back(after_h);
+
+        n.options.push_back(bye("Ещё не готов."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "finale_ask";
+        n.text = "— Я думаю, что рад, что не мне.\n"
+                 "\n"
+                 "Он говорит это без насмешки, очень просто.\n"
+                 "\n"
+                 "— Дотянешь — все найдутся. Улита увидит своих, Пелагея\n"
+                 "дочитает четыре тысячи двести имён за один вечер. И никто\n"
+                 "никуда больше не пойдёт, никогда.\n"
+                 "\n"
+                 "— Разрежешь — мир станет большим и честным. И до травницы\n"
+                 "твоей будет полгода пути, а до кого-то — не дойти вовсе.\n"
+                 "Половина лоскутов ляжет туда, где им место, и одному место\n"
+                 "в океане.\n"
+                 "\n"
+                 "— Удержишь — не изменится ничего. Это дороже всего: держать\n"
+                 "надо вечно, и вместо тебя не встанет никто, потому что\n"
+                 "сюда никто не доходит. Ты видел Елисея. Вот так двести лет.\n"
+                 "\n"
+                 "— Я стою здесь и не выбрал. Не бери с меня примера: не выбрать\n"
+                 "— тоже выбрать, только трусливо.";
+        n.options.push_back(bye("Дай подумать."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "finale_after_pull";
+        n.text = "— Всё. Теперь до меня отсюда ноль шагов, и до тебя тоже.\n"
+                 "\n"
+                 "Он стоит там же, где стоял, и одновременно рядом.\n"
+                 "\n"
+                 "— Двести лет ходил, чтобы дойти до места, где ходить нельзя.\n"
+                 "Ну хоть посох поставлю.";
+        n.options.push_back(bye("Ставь."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "finale_after_cut";
+        n.text = "— Всё. И мир опять большой.\n"
+                 "\n"
+                 "Он смотрит вдаль и щурится: раньше вдаль смотреть было\n"
+                 "некуда.\n"
+                 "\n"
+                 "— Пойду. Далеко теперь, а посох стёрт. Ничего: я привык,\n"
+                 "что далеко.";
+        n.options.push_back(bye("Доброй дороги."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "finale_after_hold";
+        n.text = "— Всё как было. Ты понимаешь, что это навсегда?\n"
+                 "\n"
+                 "Он впервые за разговор опускает посох и садится.\n"
+                 "\n"
+                 "— Тогда я посижу с тобой. Не помогать — я не умею держать,\n"
+                 "я умею уходить. Просто посижу.\n"
+                 "\n"
+                 "— Огня хватит на двоих.";
+        n.options.push_back(bye("Хватит."));
         add(n);
     }
 
@@ -4987,6 +6002,11 @@ const SkillDef* Content::skill(const std::string& id) const {
     for (const SkillDef& s : skills_)
         if (s.id == id) return &s;
     return nullptr;
+}
+
+const EndingDef* Content::ending(const std::string& id) const {
+    std::map<std::string, EndingDef>::const_iterator it = endings_.find(id);
+    return it == endings_.end() ? nullptr : &it->second;
 }
 
 std::string Content::quest_stage_text(const std::string& quest_id, int stage) const {

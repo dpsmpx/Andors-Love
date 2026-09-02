@@ -206,6 +206,13 @@ public:
     void  apply_option(const DlgOption& o, const std::string& npc_shop,
                        std::string* shop_out, bool* enchant_out = nullptr);
 
+    // --- развязка ---
+    // Выбранный исход остаётся в счётчике "ending_choice" и в квесте
+    // «Развязка», так что переживает сохранение. Здесь — только id эпилога,
+    // который интерфейсу надо показать один раз, сразу после выбора.
+    const std::string& pending_ending() const { return pending_ending_; }
+    std::string take_pending_ending();
+
     // --- торговля ---
     int   buy_price(const ShopDef& s, const ItemDef& d) const;
     int   sell_price(const ShopDef& s, const ItemDef& d) const;
@@ -229,6 +236,8 @@ public:
     const std::string& error() const { return err_; }
 
 private:
+    std::string pending_ending_;   // эпилог, ещё не показанный игроку
+
     void  fill_mob_inventory(Mob& m, const EnemyDef& e);
     void  spawn_initial(const Location& loc);
     void  respawn_tick();

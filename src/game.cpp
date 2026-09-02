@@ -20,6 +20,7 @@ void Game::msg(const std::string& m) {
 void Game::new_game(const std::string& name, const std::string& race,
                     const std::string& spec) {
     plr_ = Player();
+    pending_ending_.clear();
     if (!name.empty()) plr_.name = name;
     const Content& c = Content::get();
     plr_.race = c.race(race) ? race : "human";
@@ -1080,6 +1081,15 @@ void Game::apply_option(const DlgOption& o, const std::string& npc_shop,
     if (o.give_exp > 0) grant_exp(o.give_exp);
     if (o.open_shop && shop_out) *shop_out = o.shop_id.empty() ? npc_shop : o.shop_id;
     if (o.open_enchant && enchant_out) *enchant_out = true;
+    // Развязка выбирается последней: сперва пусть отработают квест, счётчик
+    // и награды, и только потом интерфейс покажет эпилог.
+    if (!o.ending.empty() && c.ending(o.ending)) pending_ending_ = o.ending;
+}
+
+std::string Game::take_pending_ending() {
+    std::string id;
+    id.swap(pending_ending_);
+    return id;
 }
 
 // ------------------------------------------------------------- торговля

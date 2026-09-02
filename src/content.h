@@ -52,6 +52,10 @@ struct DlgOption {
     bool        open_enchant = false;
     bool        portal_gift  = false;   // выдаёт умение ставить порталы
     bool        rest       = false;   // восстановить HP/AP
+    // Развязка: непустая строка — id исхода. Выбор необратим, и после него
+    // игра показывает эпилог. Оставлено отдельным полем, а не набором
+    // счётчиков: исход — не награда и не этап, он завершает историю.
+    std::string ending;
 };
 
 struct DlgNode {
@@ -219,6 +223,16 @@ struct SkillDef {
     int         max_rank = 5;
 };
 
+// ---------- развязки ----------
+// Три исхода в Точке Ноль. Текст эпилога хранится здесь, а не в диалоге:
+// его показывают не репликой, а отдельным экраном.
+
+struct EndingDef {
+    std::string              id;
+    std::string              name;
+    std::vector<std::string> lines;
+};
+
 // ---------- база ----------
 // Единственный экземпляр, заполняется один раз при старте.
 
@@ -238,6 +252,7 @@ public:
     const QuestDef* quest(const std::string& id) const;
     const DlgNode*  node(const std::string& id)  const;
     const SkillDef* skill(const std::string& id) const;
+    const EndingDef* ending(const std::string& id) const;
 
     // Текст этапа квеста; пустая строка, если этап не описан.
     std::string quest_stage_text(const std::string& quest_id, int stage) const;
@@ -264,6 +279,7 @@ private:
     void build_shops();
     void build_npcs();
     void build_dialogues();
+    void build_endings();
 
     std::map<std::string, ItemDef>  items_;
     std::map<std::string, EnemyDef> enemies_;
@@ -273,6 +289,7 @@ private:
     std::map<std::string, EffectDef>  effects_;
     std::map<std::string, NoteDef>    notes_;
     std::map<std::string, EnchantDef>  enchant_map_;
+    std::map<std::string, EndingDef>   endings_;
     std::vector<QuestDef>             quests_;
     std::vector<SkillDef>             skills_;
     std::vector<RaceDef>              races_;

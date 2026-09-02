@@ -26,4 +26,5 @@ item 40 9 drift_grass 2
 chest 8 14 700 - edge_ring:1 still_water:3 portal_stone:1
 spawn 16 9 edge_wind 1 2
 exit 24 15 upstair 7 3
+exit 24 6 firstseam 24 14 quest=inside:1 deny=Дальше кромки земли нет. Шагнуть туда просто так — не смелость, а глупость.
 end

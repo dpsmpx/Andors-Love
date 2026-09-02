@@ -920,6 +920,8 @@ edge.objects = [
     "chest 8 14 700 - edge_ring:1 still_water:3 portal_stone:1",
     "spawn 16 9 edge_wind 1 2",
     "exit 24 15 upstair 7 3",
+    "exit 24 6 firstseam 24 14 quest=inside:1 "
+    "deny=Дальше кромки земли нет. Шагнуть туда просто так — не смелость, а глупость.",
 ]
 
 # --- Пустая Ольховка: копия деревни, дом в дом ---
@@ -964,6 +966,154 @@ homepath.objects = [
     "exit 45 9 sanctum 15 16",
 ]
 
+# ============================================================ РЕГИОН VI: ИЗНАНКА
+# Внутренность сети. Пола тут нет — есть то, по чему можно идти.
+
+
+def inside(mid, name):
+    """Заготовка изнанки: вход снизу по центру, всё остальное строится."""
+    m = Map(mid, name, "#")
+    m.rect(22, 13, 26, 16, ".")
+    return m
+
+
+# --- Первый Шов: два лоскута, сшитые словом ---
+firstseam = inside("firstseam", "Первый Шов")
+firstseam.rect(4, 3, 44, 7, ".")                 # северный лоскут
+firstseam.rect(4, 10, 44, 14, ".")               # южный лоскут
+firstseam.rect(22, 7, 26, 10, ".")               # сам стык, узкий
+firstseam.objects = [
+    "npc 24 9 seamwatch",
+    "sign 24 12 Два края сходятся и не срастаются. Между ними ничего, и по этому ничему ходят.",
+    "note 8 5 oldseam",
+    "item 40 4 cinch_draught 1",
+    "chest 40 13 720 - line_dust:2 cinch_draught:2 rune_stone:1",
+    "spawn 12 5 seam_moth 3 5",
+    "spawn 36 12 seam_moth 2 4",
+    "exit 24 15 edge 24 14",
+    "exit 4 5 gallery 44 9",
+]
+
+# --- Галерея Линий: линии видны, если смотреть мимо ---
+gallery = inside("gallery", "Галерея Линий")
+gallery.rect(3, 3, 45, 14, ".")
+for y in range(4, 14, 3):                        # сами линии — тонкие стены
+    gallery.rect(6, y, 42, y, "#")
+    gallery.rect(20, y, 22, y, ".")
+    gallery.rect(32, y, 34, y, ".")
+gallery.objects = [
+    "npc 21 8 surveyor",
+    "sign 24 14 Смотри мимо — увидишь. Смотри прямо — стена.",
+    "note 5 6 readlines",
+    "item 44 5 line_thread 1",
+    "chest 44 12 740 - line_thread:2 line_dust:2 cinch_draught:1",
+    "spawn 33 5 line_walker 3 5",
+    "spawn 10 11 line_walker 2 4",
+    "exit 44 9 firstseam 5 5",
+    "exit 3 3 measures 24 15",
+    "exit 3 14 meeting 24 15",
+]
+
+# --- Комната Измерений: расстояние лежит на полке ---
+measures = inside("measures", "Комната Измерений")
+measures.rect(8, 4, 40, 12, ".")
+measures.rect(14, 6, 34, 6, "#")                 # полки
+measures.rect(14, 10, 34, 10, "#")
+measures.rect(24, 6, 24, 6, ".")
+measures.rect(24, 10, 24, 10, ".")
+measures.objects = [
+    "sign 24 12 Полки пусты, и всё-таки на них что-то лежит.",
+    "note 10 5 roomrule",
+    "item 24 8 measure 1",
+    "item 38 5 line_dust 2",
+    "chest 38 11 760 - cinch_draught:2 rune_stone:2 elixir_might:1",
+    "spawn 12 8 measure_thing 2 3",
+    "spawn 36 8 measure_thing 1 3",
+    "exit 24 15 gallery 4 4",
+]
+
+# --- Встреча: тот, кто помнит дорогу ---
+meeting = inside("meeting", "Встреча")
+meeting.rect(6, 5, 42, 12, ".")
+meeting.rect(20, 7, 28, 10, "#")                 # опора, о которую он опирался
+meeting.rect(24, 7, 24, 10, ".")
+meeting.objects = [
+    "npc 22 4 master",
+    "sign 24 12 Пол вытерт до блеска ровно на два шага. Кто-то тут ходил взад-вперёд очень долго.",
+    "note 8 6 walkers",
+    "item 40 6 cinch_draught 1",
+    "chest 40 11 780 - walk_staff:1 line_dust:3 cinch_draught:1",
+    "exit 24 15 gallery 4 13",
+    "exit 24 4 node1 24 15 quest=remembers:100 "
+    "deny=Старик стоит на дороге и не двигается. Пока не выслушаешь — не пройдёшь.",
+]
+meeting.rect(22, 3, 26, 4, ".")
+
+# --- Узел Первый: начало всего ---
+node1 = inside("node1", "Узел Первый")
+node1.rect(6, 4, 42, 12, ".")
+node1.rect(16, 6, 32, 10, "#")                   # тело узла
+node1.rect(20, 6, 20, 10, ".")
+node1.rect(28, 6, 28, 10, ".")
+node1.rect(16, 8, 32, 8, ".")
+node1.objects = [
+    "sign 24 12 С него всё началось. Он об этом не знает.",
+    "note 8 5 firstnode",
+    "item 40 5 line_thread 1",
+    "chest 40 11 800 - first_ring:1 rune_stone:2 cinch_draught:2",
+    "spawn 10 10 first_guard 2 3",
+    "spawn 38 8 first_guard 2 3",
+    "exit 24 15 meeting 24 5",
+    "exit 6 8 cinchheart 44 9",
+]
+
+# --- Сердце Стяжения: ход, который тянет ---
+cinchheart = inside("cinchheart", "Сердце Стяжения")
+cinchheart.rect(4, 4, 44, 13, ".")
+cinchheart.rect(18, 6, 30, 11, "#")              # сам ход
+cinchheart.rect(24, 6, 24, 11, ".")
+cinchheart.rect(18, 8, 30, 9, ".")
+cinchheart.objects = [
+    "sign 24 13 Ничего не крутится и не тикает. И всё-таки тянет.",
+    "note 7 5 cinchwork",
+    "item 41 5 heart_cog 1",
+    "chest 7 12 850 - inside_plate:1 cinch_draught:3 rune_stone:2",
+    "spawn 12 10 cinch_engine 2 4",
+    "spawn 36 10 cinch_engine 2 4",
+    "spawn 24 9 cinch_heart 1 2",
+    "exit 44 9 node1 7 8",
+    "exit 4 9 zeropoint 24 15",
+]
+
+# --- Точка Ноль: всё сразу и ничего ---
+zeropoint = inside("zeropoint", "Точка Ноль")
+zeropoint.rect(10, 3, 38, 13, ".")
+zeropoint.rect(23, 7, 25, 9, "#")                # середина, к которой не подойти
+zeropoint.objects = [
+    "sign 24 12 До всего отсюда ноль шагов. Поэтому здесь ничего и нет.",
+    "note 12 4 allatonce",
+    "item 36 4 line_dust 2",
+    "chest 36 12 900 - zero_shield:1 cinch_draught:3 portal_stone:1",
+    "spawn 14 9 zero_echo 2 4",
+    "spawn 34 9 zero_echo 2 4",
+    "spawn 24 4 all_at_once 1 2",
+    "exit 24 15 cinchheart 5 9",
+    "exit 10 8 finale 24 15 key=measure "
+    "deny=Ход в развязку есть, и до него ноль шагов, и пройти его нечем. Нужна мера.",
+]
+
+# --- Развязка: камень, лист и кольцо ---
+finale = inside("finale", "Развязка")
+finale.rect(14, 5, 34, 12, ".")
+finale.rect(23, 8, 25, 9, "#")                   # камень с листом
+finale.objects = [
+    "npc 20 6 master_end",
+    "sign 24 11 Камень, лист, кольцо сверху. Три строки, и все три разборчивы.",
+    "note 24 7 threeways",
+    "chest 32 11 1000 - cinch_draught:3 rune_stone:3 portal_stone:2",
+    "exit 24 15 zeropoint 11 8",
+]
+
 MAPS = [village, forest, cave, ruins, sanctum, vault,
         goatpath, glassfield, mill, market, bridge, saltmines,
         caravanserai, doubled,
@@ -971,7 +1121,9 @@ MAPS = [village, forest, cave, ruins, sanctum, vault,
         ordergate, gatehouse, library, drafting, cells, furnace,
         refusalhall, node2, node3, grave,
         meadow, farhouse, well, grove, battlefield, otherhalf,
-        upstair, edge, emptyalder, homepath]
+        upstair, edge, emptyalder, homepath,
+        firstseam, gallery, measures, meeting, node1, cinchheart,
+        zeropoint, finale]
 
 # --------------------------------------------------------------- проверки
 def reachable(m, start):
@@ -1005,7 +1157,10 @@ def check():
                "meadow": (24, 15), "farhouse": (45, 9), "well": (45, 5),
                "grove": (45, 9), "battlefield": (45, 12), "otherhalf": (44, 13),
                "upstair": (4, 14), "edge": (24, 15), "emptyalder": (24, 15),
-               "homepath": (45, 9)}
+               "homepath": (45, 9),
+               "firstseam": (24, 15), "gallery": (44, 9), "measures": (24, 15),
+               "meeting": (24, 15), "node1": (24, 15), "cinchheart": (44, 9),
+               "zeropoint": (24, 15), "finale": (24, 15)}
 
     for m in MAPS:
         start = entries[m.id]

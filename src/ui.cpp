@@ -798,6 +798,17 @@ void run_shop(Game& g, const std::string& shop_id) {
     }
 }
 
+// Экран развязки: не реплика, а отдельная страница. Показывается один раз,
+// сразу после необратимого выбора.
+void screen_ending(Game& g, const std::string& ending_id) {
+    const EndingDef* e = Content::get().ending(ending_id);
+    if (!e) return;
+    std::string body;
+    for (const std::string& l : e->lines) body += "  " + l + "\n";
+    body += "\n  " + g.player().name + ", уровень " + to_str(g.player().level) + ".";
+    message_box("РАЗВЯЗКА: " + e->name, body);
+}
+
 void run_dialogue(Game& g, const std::string& npc_id) {
     const Content& c = Content::get();
     const NpcDef* npc = c.npc(npc_id);
@@ -825,6 +836,9 @@ void run_dialogue(Game& g, const std::string& npc_id) {
         std::string open_shop;
         bool open_ench = false;
         g.apply_option(*o, npc->shop, &open_shop, &open_ench);
+        // Развязка обрывает разговор: после неё говорить уже не о чем.
+        const std::string ending = g.take_pending_ending();
+        if (!ending.empty()) { screen_ending(g, ending); return; }
         if (!open_shop.empty()) { run_shop(g, open_shop); return; }
         if (open_ench)          { screen_enchant(g); return; }
         node_id = o->next;

@@ -47,6 +47,8 @@ void screen_book(Game& g, const std::string& book_id);
 
 // Диалог с NPC; при выборе торговли откроет магазин.
 void run_dialogue(Game& g, const std::string& npc_id);
+// Эпилог выбранного исхода. Отдельный экран, а не реплика собеседника.
+void screen_ending(Game& g, const std::string& ending_id);
 void run_shop(Game& g, const std::string& shop_id);
 
 // Бой идёт до победы, бегства или смерти игрока.

@@ -46,7 +46,9 @@ const char* const ALL_LOCATIONS[] = {
     "ordergate", "gatehouse", "library", "drafting", "cells", "furnace",
     "refusalhall", "node2", "node3", "grave",
     "meadow", "farhouse", "well", "grove", "battlefield", "otherhalf",
-    "upstair", "edge", "emptyalder", "homepath"};
+    "upstair", "edge", "emptyalder", "homepath",
+    "firstseam", "gallery", "measures", "meeting", "node1", "cinchheart",
+    "zeropoint", "finale"};
 const int N_LOCATIONS = static_cast<int>(sizeof(ALL_LOCATIONS) / sizeof(ALL_LOCATIONS[0]));
 
 // ------------------------------------------------------------------ тесты
@@ -655,7 +657,7 @@ void test_content_integrity() {
     // Каждая ссылка на предмет/врага/узел из контента должна разрешаться.
     const char* shops[] = {"shop_smith", "shop_general", "shop_herbs", "shop_books",
                            "shop_glass", "shop_market", "shop_foundry", "shop_ferry",
-                           "shop_order", "shop_drift"};
+                           "shop_order", "shop_drift", "shop_inside"};
     for (const char* sid : shops) {
         const ShopDef* s = c.shop(sid);
         check(s != nullptr, std::string("магазин ") + sid + " существует");
@@ -668,7 +670,8 @@ void test_content_integrity() {
                           "glazier", "miller", "warden", "digger", "prohor_l", "prohor_r",
                           "survivor", "founder", "counter", "scribe", "ferryman",
                           "gatekeeper", "librarian", "draftsman", "stoker", "recorder",
-                          "driftwife", "halfscribe", "soldier", "grovekeeper", "pathkeeper"};
+                          "driftwife", "halfscribe", "soldier", "grovekeeper", "pathkeeper",
+                          "seamwatch", "surveyor", "master", "master_end"};
     for (const char* nid : npcs) {
         const NpcDef* n = c.npc(nid);
         check(n != nullptr, std::string("NPC ") + nid + " существует");
@@ -721,7 +724,16 @@ void test_content_integrity() {
                            "soldier_root","lasthour_offer","lasthour_wait",
                            "lasthour_reward","lasthour_after",
                            "grovekeeper_root","grove_rest","grove_why","grove_marks",
-                           "pathkeeper_root","path_why","path_drift"};
+                           "pathkeeper_root","path_why","path_drift",
+                           "inside_offer","inside_after",
+                           "seamwatch_root","firstjoint_offer","firstjoint_wait",
+                           "firstjoint_reward","firstjoint_after",
+                           "surveyor_root","lines_offer","lines_wait","lines_reward",
+                           "surveyor_brother",
+                           "master_root","remembers_offer","remembers_way","remembers_after",
+                           "master_word","master_ring_talk",
+                           "finale_root","finale_ask","finale_after_pull",
+                           "finale_after_cut","finale_after_hold"};
     for (const char* nid : nodes) {
         const DlgNode* n = c.node(nid);
         check(n != nullptr, std::string("узел ") + nid + " существует");
@@ -748,6 +760,9 @@ void test_content_integrity() {
             if (!o.set_quest.empty())
                 check(c.quest(o.set_quest) != nullptr,
                       std::string(nid) + ": назначаемый квест '" + o.set_quest + "' существует");
+            if (!o.ending.empty())
+                check(c.ending(o.ending) != nullptr,
+                      std::string(nid) + ": исход '" + o.ending + "' описан");
         }
     }
 
@@ -763,7 +778,9 @@ void test_content_integrity() {
                           "node_guard", "node_heart", "master_shadow",
                           "drift_hare", "cart_shade", "stair_walker", "last_hour",
                           "bannerman", "grove_sleeper", "second_bucket", "other_rat",
-                          "own_copy", "edge_wind"};
+                          "own_copy", "edge_wind",
+                          "seam_moth", "line_walker", "measure_thing", "first_guard",
+                          "cinch_engine", "cinch_heart", "zero_echo", "all_at_once"};
     for (const char* mid : mobs) {
         const EnemyDef* e = c.enemy(mid);
         check(e != nullptr, std::string("враг ") + mid + " существует");
@@ -800,6 +817,22 @@ void test_content_integrity() {
                       std::string(lid) + ": содержимое сундука '" + st.id + "' есть в базе");
         }
     }
+
+    // Три развязки описаны, и у каждой есть имя и текст эпилога.
+    for (const char* eid : {"pull", "cut", "hold"}) {
+        const EndingDef* e = c.ending(eid);
+        check(e != nullptr, std::string("развязка ") + eid + " описана");
+        if (!e) continue;
+        check(!e->name.empty(), std::string("у развязки ") + eid + " есть имя");
+        check(e->lines.size() >= 8, std::string("у развязки ") + eid + " есть эпилог");
+        // Эпилог читается на узком экране: строки не длиннее того, что
+        // помещается в самую тесную раскладку без переноса посреди мысли.
+        bool fits = true;
+        for (const std::string& l : e->lines)
+            if (utf8_len(l) > 76) fits = false;
+        check(fits, std::string("эпилог ") + eid + " умещается по ширине");
+    }
+    check(c.ending("нет-такой") == nullptr, "несуществующая развязка не выдумывается");
 
     // Амулет должен быть добываем — иначе квест Лады непроходим.
     const EnemyDef* alpha = c.enemy("wolf_alpha");
@@ -1318,6 +1351,96 @@ void test_portals() {
     eq(placed, PORTAL_LIMIT, "поставлено ровно столько, сколько разрешено");
 }
 
+// Развязка: три исхода, из них выбирается ровно один, и обратно не отыграть.
+void test_finale() {
+    section("развязка: три исхода");
+    const Content& c = Content::get();
+
+    const DlgNode* root = c.node("finale_root");
+    check(root != nullptr, "узел развязки существует");
+    if (!root) return;
+
+    // Сначала — что вариантов ровно три и каждый ведёт в свой эпилог.
+    std::vector<const DlgOption*> choices;
+    for (const DlgOption& o : root->options)
+        if (!o.ending.empty()) choices.push_back(&o);
+    eq(static_cast<int>(choices.size()), 3, "исходов ровно три");
+    std::vector<std::string> ids;
+    for (const DlgOption* o : choices) {
+        check(c.ending(o->ending) != nullptr, "исход " + o->ending + " описан");
+        eqs(o->set_quest, "finale", "исход закрывает квест «Развязка»");
+        eq(o->set_stage, QUEST_DONE, "и закрывает его насовсем");
+        eqs(o->set_counter, "ending_choice", "выбор записывается счётчиком");
+        check(o->set_counter_value > 0, "и значение счётчика ненулевое");
+        for (const std::string& seen : ids)
+            check(seen != o->ending, "исходы не повторяются");
+        ids.push_back(o->ending);
+    }
+
+    // Каждый исход проверяется отдельной игрой: выбрав один, два других
+    // должны исчезнуть навсегда, а эпилог — прийти ровно один раз.
+    for (std::size_t k = 0; k < choices.size(); ++k) {
+        Game g;
+        g.new_game("Решающий", "human", "swordsman");
+        std::string shop;
+
+        // До листа выбирать нечего.
+        int before = 0;
+        for (const DlgOption& o : root->options)
+            if (!o.ending.empty() && g.option_available(o)) ++before;
+        eq(before, 0, "без прочитанного листа исходов не предлагают");
+
+        g.player().quests["finale"] = 1;
+        int open_now = 0;
+        for (const DlgOption& o : root->options)
+            if (!o.ending.empty() && g.option_available(o)) ++open_now;
+        eq(open_now, 3, "с листом видны все три");
+
+        check(g.pending_ending().empty(), "до выбора эпилога нет");
+        g.apply_option(*choices[k], "", &shop);
+
+        const std::string got = g.take_pending_ending();
+        eqs(got, choices[k]->ending, "показан эпилог именно выбранного исхода");
+        check(g.take_pending_ending().empty(), "второй раз эпилог не показывается");
+
+        eq(g.quest_stage("finale"), QUEST_DONE, "квест «Развязка» закрыт");
+        eq(g.player().counters["ending_choice"], choices[k]->set_counter_value,
+           "выбор записан");
+
+        int left = 0;
+        for (const DlgOption& o : root->options)
+            if (!o.ending.empty() && g.option_available(o)) ++left;
+        eq(left, 0, "переиграть выбор нельзя ни одним из трёх");
+
+        // Собеседник отвечает по сделанному выбору и только по нему.
+        int after_lines = 0;
+        for (const DlgOption& o : root->options)
+            if (o.next.compare(0, 13, "finale_after_") == 0 && g.option_available(o))
+                ++after_lines;
+        eq(after_lines, 1, "и говорит ровно об одном исходе — сделанном");
+    }
+
+    // Выбор переживает сохранение: это не экран, а состояние мира.
+    {
+        Game g;
+        g.new_game("Решающий", "human", "swordsman");
+        std::string shop;
+        g.player().quests["finale"] = 1;
+        g.apply_option(*choices[1], "", &shop);
+        g.take_pending_ending();
+
+        const std::string path = "build/finale.sav";
+        check(g.save_to(path), "игра после развязки сохраняется");
+        Game g2;
+        check(g2.load_from(path), "и загружается");
+        eq(g2.quest_stage("finale"), QUEST_DONE, "исход пережил сохранение");
+        eq(g2.player().counters["ending_choice"], choices[1]->set_counter_value,
+           "и какой именно — тоже");
+        check(g2.pending_ending().empty(), "но эпилог заново не показывается");
+        std::remove(path.c_str());
+    }
+}
+
 // Сквозная проверка: проходима ли игра целиком. Бои идут настоящей боевой
 // механикой, предметы поднимаются с карты, переходы — через реальные выходы.
 // Подкручиваются только здоровье и очки действия героя: тест про проходимость
@@ -1522,7 +1645,9 @@ void test_books_and_notes() {
                               "novice", "keepsake", "ovens", "refusal",
                               "secondnode", "thirdnode", "emptygrave",
                               "drift", "tomorrow", "otherside", "stair", "lastorder",
-                              "marks", "wellrule", "homeward", "houses", "edgeview"};
+                              "marks", "wellrule", "homeward", "houses", "edgeview",
+                              "oldseam", "readlines", "roomrule", "walkers",
+                              "firstnode", "cinchwork", "allatonce", "threeways"};
     for (const char* id : note_ids) {
         const NoteDef* n = c.note(id);
         check(n != nullptr, std::string("записка ") + id + " описана");
@@ -2514,6 +2639,154 @@ void test_playthrough() {
     check(g.count_item("caravan_tally") >= 1, "бирку Гурий не взял");
     check(visible("trader_root", "driftway_after"), "и говорит о ней уже иначе");
 
+    // ================= Регион VI: Изнанка =================
+
+    // --- Тихон наконец говорит, чего недоговаривал ---
+    g.player().loc = "homepath";
+    check(visible("pathkeeper_root", "inside_offer"),
+          "уложив Ветер Края, Тихон рассказывает про брата");
+    g.apply_option(c.node("inside_offer")->options[0], "", &shop);
+    eq(g.quest_stage("inside"), 1, "решение шагнуть принято");
+
+    // --- Кромка Края: шагнуть можно только зная зачем ---
+    g.player().loc = "edge";
+    g.player().quests["inside"] = QUEST_NONE;
+    check(!travel("firstseam"), "просто так с Края не шагают");
+    eqs(g.player().loc, "edge", "и герой остаётся на лоскуте");
+    g.player().quests["inside"] = 1;
+    check(travel("firstseam"), "с решением — шагают");
+    eqs(g.player().loc, "firstseam", "и попадают внутрь сети");
+    eq(g.quest_stage("inside"), QUEST_DONE, "падать здесь некуда: квест закрылся сам");
+
+    // --- Первый Шов: держится на честном слове, и это не оборот речи ---
+    check(gather_note("oldseam"), "опись Первого Шва найдена");
+    check(visible("seamwatch_root", "firstjoint_offer"), "Елисей объясняет, что держит");
+    g.apply_option(c.node("firstjoint_offer")->options[0], "", &shop);
+    eq(g.quest_stage("firstjoint"), 1, "квест «На честном слове» взят");
+    check(!visible("seamwatch_root", "firstjoint_reward"), "без расписки рук не отнять");
+
+    // --- Галерея Линий: рваное или резаное ---
+    check(travel("gallery"), "переход в галерею");
+    check(gather_note("readlines"), "наставление о линиях найдено");
+    check(visible("surveyor_root", "lines_offer"), "Пров просит нити");
+    g.apply_option(c.node("lines_offer")->options[0], "", &shop);
+    eq(g.quest_stage("lines"), 1, "квест «По линиям» взят");
+    check(visible("surveyor_root", "surveyor_brother"),
+          "побывавшему внутри Пров отвечает и про Тихона");
+    gather("line_thread");
+    guard = 0;
+    while (g.count_item("line_thread") < 5 && guard++ < 120) {
+        if (hunt("line_walker", 1) == 0) g.world_turn();
+    }
+    check(g.count_item("line_thread") >= 5, "пять нитей собраны");
+    g.apply_option(c.node("lines_reward")->options[0], "", &shop);
+    eq(g.quest_stage("lines"), QUEST_DONE, "квест «По линиям» закрыт: резаное, все пять");
+    check(g.count_item("line_blade") >= 1, "клинок по линии принят");
+
+    // --- Комната Измерений: расстояние берут в руку ---
+    check(travel("measures"), "переход в комнату измерений");
+    eq(g.quest_stage("measure"), 1, "сам приход открыл тайну «Мера»");
+    check(gather_note("roomrule"), "правило комнаты найдено");
+    check(gather("measure") >= 1, "мера расстояния взята с полки");
+    eq(g.quest_stage("measure"), QUEST_DONE, "тайна «Мера» разгадана");
+
+    // --- Встреча: тот, кто помнит дорогу ---
+    g.player().loc = "gallery";
+    check(travel("meeting"), "переход к месту встречи");
+    check(gather_note("walkers"), "список ушедших внутрь найден");
+    check(visible("master_root", "master_word"), "Мастеру есть что сказать про стык");
+    g.apply_option(c.node("master_word")->options[0], "", &shop);
+    check(g.count_item("seam_word") >= 1, "расписка Первого Мастера получена");
+    check(visible("master_root", "master_ring_talk"),
+          "с кольцом из Зала Отказа разговор идёт иначе");
+    check(visible("master_root", "remembers_offer"), "и он готов рассказать, кто он");
+    g.apply_option(c.node("remembers_offer")->options[0], "", &shop);
+    eq(g.quest_stage("remembers"), 1, "квест «Тот, кто помнит дорогу» взят");
+    g.apply_option(c.node("remembers_way")->options[0], "", &shop);
+    eq(g.quest_stage("remembers"), QUEST_DONE, "дорога рассказана до конца");
+    check(g.count_item("walk_staff") >= 1, "посох ходока принят");
+
+    // --- Слово ложится в стык ---
+    g.player().loc = "firstseam";
+    check(visible("seamwatch_root", "firstjoint_reward"), "с распиской Елисею есть что взять");
+    g.apply_option(c.node("firstjoint_reward")->options[0], "", &shop);
+    eq(g.quest_stage("firstjoint"), QUEST_DONE, "квест «На честном слове» закрыт");
+    eq(g.count_item("seam_word"), 0, "слово осталось в стыке");
+    check(g.count_item("seam_helm") >= 1, "шлем сторожа принят");
+
+    // --- Дальше пускают только выслушав ---
+    g.player().loc = "meeting";
+    {
+        const int keep = g.quest_stage("remembers");
+        g.player().quests["remembers"] = 1;
+        check(!travel("node1"), "не выслушав старика, мимо него не пройти");
+        eqs(g.player().loc, "meeting", "герой остаётся на месте");
+        g.player().quests["remembers"] = keep;
+    }
+    check(travel("node1"), "выслушав — проходишь");
+    eqs(g.player().loc, "node1", "герой у Первого узла");
+    check(gather_note("firstnode"), "запись об Узле Первом найдена");
+
+    // --- Сердце Стяжения ---
+    check(travel("cinchheart"), "переход к Сердцу");
+    check(gather_note("cinchwork"), "устройство хода найдено");
+    eq(g.quest_stage("heart"), 1, "запись открыла тайну «Сердце Стяжения»");
+    check(hunt("cinch_heart", 1) == 1, "Сердце остановлено");
+    eq(g.quest_stage("heart"), QUEST_DONE, "тайна «Сердце Стяжения» разгадана");
+
+    // --- Точка Ноль и ход, который открывается мерой ---
+    check(travel("zeropoint"), "переход в Точку Ноль");
+    check(gather_note("allatonce"), "запись о Точке Ноль найдена");
+    {
+        const int had = g.count_item("measure");
+        check(had >= 1, "мера при герое");
+        g.remove_item("measure", had);
+        check(!travel("finale"), "без меры до развязки не дойти");
+        eqs(g.player().loc, "zeropoint", "и герой остаётся в Точке Ноль");
+        g.add_item("measure", had);
+    }
+
+    // --- Развязка ---
+    check(travel("finale"), "с мерой ход открывается");
+    eqs(g.player().loc, "finale", "герой в развязке");
+    eq(g.quest_stage("finale"), QUEST_NONE, "но выбирать ещё нечего");
+    check(gather_note("threeways"), "лист с тремя исходами прочитан");
+    eq(g.quest_stage("finale"), 1, "три исхода записаны, и правильного нет");
+
+    {
+        const DlgNode* fin = c.node("finale_root");
+        check(fin != nullptr, "узел развязки на месте");
+        int offered = 0;
+        const DlgOption* hold = 0;
+        if (fin)
+            for (const DlgOption& o : fin->options) {
+                if (o.ending.empty() || !g.option_available(o)) continue;
+                ++offered;
+                if (o.ending == "hold") hold = &o;
+            }
+        eq(offered, 3, "предложены все три исхода");
+        check(visible("finale_root", "finale_ask"), "и старика можно спросить, что он думает");
+        check(hold != nullptr, "исход «Удержать» среди них");
+        if (hold) g.apply_option(*hold, "", &shop);
+    }
+    eqs(g.take_pending_ending(), "hold", "показан эпилог «Удержать»");
+    eq(g.quest_stage("finale"), QUEST_DONE, "развязка сыграна");
+    eq(g.player().counters["ending_choice"], 3, "выбор записан навсегда");
+    {
+        const DlgNode* fin = c.node("finale_root");
+        int left = 0;
+        if (fin)
+            for (const DlgOption& o : fin->options)
+                if (!o.ending.empty() && g.option_available(o)) ++left;
+        eq(left, 0, "переиграть нельзя");
+    }
+    check(visible("finale_root", "finale_after_hold"), "старик отвечает по сделанному выбору");
+    check(!visible("finale_root", "finale_after_cut"), "и не по несделанному");
+
+    // --- И одно письмо назад: Пров досчитал ---
+    g.player().loc = "homepath";
+    check(visible("pathkeeper_root", "inside_after"), "Тихону есть что сказать");
+
     // --- итог ---
     const char* all_quests[] = {"wolves", "amulet", "pelts", "moss", "books",
                                 "queen", "outpost", "zero_point", "enchanter",
@@ -2525,7 +2798,9 @@ void test_playthrough() {
                                 "orderway", "watch4", "charts", "keepsake", "ovens",
                                 "refusal", "unsealed", "node2q", "node3q", "firstmaster",
                                 "driftway", "water", "wholename", "lasthour",
-                                "twobuckets", "nodark", "emptyalder", "edgeq"};
+                                "twobuckets", "nodark", "emptyalder", "edgeq",
+                                "inside", "firstjoint", "lines", "remembers",
+                                "measure", "heart", "finale"};
     for (const char* q : all_quests)
         eq(g.player().quests[q], QUEST_DONE, std::string("квест ") + q + " пройден");
 
@@ -2533,7 +2808,7 @@ void test_playthrough() {
     check(g.books().size() >= 2, "библиотека наполнилась находками и своими книгами");
     check(g.book(diary) != nullptr, "своя книга дожила до конца прохождения");
 
-    check(g.player().level >= 28, "к концу пяти регионов герой заметно вырос");
+    check(g.player().level >= 36, "к развязке герой прошёл весь мир");
     std::cout << "  (итог: уровень " << g.player().level
               << ", золота " << g.player().gold
               << ", квестов пройдено " << (sizeof(all_quests) / sizeof(all_quests[0]))
@@ -2570,6 +2845,7 @@ int main() {
     test_book_save_roundtrip();
     test_no_escape_needed();
     test_content_integrity();
+    test_finale();
     test_playthrough();
 
     std::cout << "\n----------------------------------------\n";
