@@ -79,7 +79,7 @@ bool Game::save_to(const std::string& path) const {
     for (const Mob& m : mobs_) {
         out << "mob " << m.uid << ' ' << m.enemy_id << ' ' << m.loc << ' '
             << m.pos.x << ' ' << m.pos.y << ' ' << m.hp << ' ' << m.zone << ' '
-            << m.gold << '\n';
+            << m.gold << ' ' << static_cast<int>(m.state) << '\n';
         for (const ItemStack& st : m.inv)
             out << "mobinv " << m.uid << ' ' << st.id << ' ' << st.count << '\n';
         for (const ActiveEffect& a : m.effects)
@@ -207,7 +207,10 @@ bool Game::load_from(const std::string& path) {
         else if (key == "mob") {
             Mob m;
             if (ls >> m.uid >> m.enemy_id >> m.loc >> m.pos.x >> m.pos.y >> m.hp >> m.zone) {
-                ls >> m.gold;          // необязательное поле: пусто — останется 0
+                ls >> m.gold;          // необязательные поля: пусто — значения по умолчанию
+                int st = 0;
+                if (ls >> st && st >= 0 && st <= static_cast<int>(MobState::Return))
+                    m.state = static_cast<MobState>(st);
                 mobs.push_back(m);
             }
         }

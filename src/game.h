@@ -45,6 +45,11 @@ struct Player {
     std::map<std::string,int> counters;  // kill_wolf и прочие счётчики
 };
 
+// Что моб сейчас делает. Преследование держится на видимости: пока моб видит
+// игрока — идёт за ним, потерял из виду — возвращается в свою зону спавна.
+// Без возврата уползший моб продолжал занимать слот зоны и блокировал респавн.
+enum class MobState { Idle = 0, Chase, Return };
+
 struct Mob {
     int         uid = 0;
     std::string enemy_id;
@@ -57,6 +62,7 @@ struct Mob {
     std::vector<ItemStack>    inv;
     int                       gold = 0;
     std::vector<ActiveEffect> effects;
+    MobState                  state = MobState::Idle;
 };
 
 // Бой идёт в отдельном режиме: у игрока пул AP на раунд, действия его тратят.
@@ -192,6 +198,13 @@ private:
     void  spawn_initial(const Location& loc);
     void  respawn_tick();
     void  move_mobs();
+    // Может ли моб занять клетку: проходима, не занята NPC, переходом,
+    // закрытым сундуком или другим мобом. Клетка игрока сюда не входит —
+    // шаг на неё означает бой и разбирается отдельно.
+    bool  mob_can_stand(const Location& loc, Vec2 p, int self_uid) const;
+    // Шаг к цели: сперва по оси с большей разницей, затем по другой. Этого
+    // хватает, чтобы обойти угол, и не требует полноценного поиска пути.
+    Vec2  step_toward(const Location& loc, const Mob& m, Vec2 target) const;
     void  kill_mob(Mob& m);
     int   roll_damage(const Stats& atk, int stance_pct, bool crit) const;
     // Возвращает нанесённый урон, -1 — промах/блок. Заполняет line описанием.

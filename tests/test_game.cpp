@@ -731,6 +731,205 @@ void test_content_integrity() {
     check(amulet_droppable, "амулет гарантированно падает с вожака — квест проходим");
 }
 
+void test_mob_ai() {
+    section("ИИ мобов: видимость и возврат в зону");
+    World w("data/maps");
+    const Location* v = w.location("village");
+    check(v != nullptr, "деревня загружается");
+    if (!v) return;
+
+    // --- прямая видимость ---
+    // В деревне дома стоят на строках 11..13, столбцы 3..9; пруд — 17..21 на
+    // строках 10..12; деревья — 7..9 на строке 15.
+    check(v->visible(Vec2(6, 9), Vec2(6, 5)),   "по открытому месту видно");
+    check(v->visible(Vec2(6, 9), Vec2(6, 9)),   "клетка видит саму себя");
+    check(!v->visible(Vec2(6, 14), Vec2(6, 10)), "сквозь дом не видно");
+    check(!v->visible(Vec2(6, 15), Vec2(10, 15)), "сквозь деревья не видно");
+    check(v->visible(Vec2(16, 11), Vec2(22, 11)), "через воду видно: она не стена");
+    check(v->visible(Vec2(6, 14), Vec2(6, 10)) == v->visible(Vec2(6, 10), Vec2(6, 14)),
+          "видимость симметрична");
+
+    // --- поведение ---
+    Game g;
+    g.new_game("Наблюдатель", "human", "swordsman");
+    check(!g.mobs().empty(), "мобы расставлены");
+    if (g.mobs().empty()) return;
+
+    const int uid = g.mobs()[0].uid;
+
+    // Остальных мобов уводим в дальний угол, чтобы они не начали бой сами
+    // и не оборвали ход мира раньше времени.
+    auto park_others = [&]() {
+        int slot = 0;
+        for (const Mob& other : g.mobs()) {
+            if (other.uid == uid) continue;
+            Mob* o = g.mob_by_uid(other.uid);
+            if (!o) continue;
+            o->pos = Vec2(40 + (slot % 6), 16);
+            o->state = MobState::Idle;
+            ++slot;
+        }
+    };
+
+    // Дом наблюдаемого моба — центр его зоны спавна.
+    Vec2 home(0, 0);
+    int radius = 0;
+    {
+        const Mob* m = g.mob_by_uid(uid);
+        check(m && m->zone >= 0, "у моба есть зона спавна");
+        if (!m || m->zone < 0) return;
+        home   = v->zones[static_cast<std::size_t>(m->zone)].pos;
+        radius = v->zones[static_cast<std::size_t>(m->zone)].radius;
+    }
+
+    // 1. Игрок за домом — моб его не видит и не преследует.
+    {
+        Mob* m = g.mob_by_uid(uid);
+        m->pos = Vec2(6, 14);
+        m->state = MobState::Idle;
+        g.player().pos = Vec2(6, 10);
+        park_others();
+        g.world_turn();
+        m = g.mob_by_uid(uid);
+        check(m != nullptr, "моб не исчез");
+        if (m) check(m->state != MobState::Chase,
+                     "за препятствием моб игрока не видит и не преследует");
+    }
+
+    // 2. На открытом месте на том же расстоянии — преследует и приближается.
+    {
+        Mob* m = g.mob_by_uid(uid);
+        m->pos = Vec2(24, 16);
+        m->state = MobState::Idle;
+        g.player().pos = Vec2(20, 16);
+        park_others();
+        int before = dist(m->pos, g.player().pos);
+        g.world_turn();
+        m = g.mob_by_uid(uid);
+        if (m && !g.combat().active) {
+            eq(static_cast<int>(m->state), static_cast<int>(MobState::Chase),
+               "на виду моб переходит в преследование");
+            check(dist(m->pos, g.player().pos) < before, "и подходит ближе");
+        } else {
+            check(true, "моб дошёл до игрока и начал бой — тоже верно");
+        }
+        g.combat().active = false;
+    }
+
+    // 3. Игрок скрылся за препятствием — моб бросает погоню и идёт домой.
+    {
+        Mob* m = g.mob_by_uid(uid);
+        m->pos = Vec2(6, 14);            // далеко от своей зоны
+        m->state = MobState::Chase;      // как будто только что гнался
+        g.player().pos = Vec2(6, 10);    // за домом, вне видимости
+        park_others();
+        check(dist(m->pos, home) > radius, "моб заведомо вне своей зоны");
+        int before_home = dist(m->pos, home);
+        g.world_turn();
+        m = g.mob_by_uid(uid);
+        check(m != nullptr, "моб не исчез");
+        if (m) {
+            eq(static_cast<int>(m->state), static_cast<int>(MobState::Return),
+               "потеряв игрока из виду, моб возвращается");
+            check(dist(m->pos, home) < before_home, "и приближается к своей зоне");
+        }
+    }
+
+    // 4. Дойдя до зоны, моб успокаивается.
+    {
+        g.player().pos = Vec2(1, 1);     // игрок далеко от всех зон
+        park_others();
+        int guard = 0;
+        const Mob* m = g.mob_by_uid(uid);
+        while (m && m->state == MobState::Return && guard++ < 200) {
+            g.world_turn();
+            m = g.mob_by_uid(uid);
+        }
+        check(m != nullptr, "моб дошёл живым");
+        if (m) {
+            eq(static_cast<int>(m->state), static_cast<int>(MobState::Idle),
+               "вернувшись в зону, моб переходит в покой");
+            check(dist(m->pos, home) <= radius, "и находится внутри своей зоны");
+        }
+    }
+
+    // 5. В покое моб не расползается по карте. Раньше он уходил куда угодно,
+    //    продолжая занимать слот своей зоны и блокируя респавн.
+    {
+        g.player().pos = Vec2(1, 1);
+        bool all_home = true;
+        for (int turn = 0; turn < 250; ++turn) {
+            g.world_turn();
+            if (g.combat().active) { g.combat().active = false; continue; }
+            for (const Mob& m : g.mobs()) {
+                if (m.loc != "village" || m.zone < 0) continue;
+                if (m.state != MobState::Idle) continue;
+                const SpawnZone& z = v->zones[static_cast<std::size_t>(m.zone)];
+                if (dist(m.pos, z.pos) > z.radius) all_home = false;
+            }
+        }
+        check(all_home, "за 250 ходов ни один спокойный моб не ушёл из своей зоны");
+    }
+
+    // 6. Зоны спавна не пустеют. Ровно это и ломал прежний ИИ: уползший моб
+    //    продолжал считаться жителем своей зоны, слот был занят, а рядом с
+    //    точкой спавна никого не было.
+    {
+        g.player().pos = Vec2(1, 1);
+        for (int turn = 0; turn < 300; ++turn) {
+            g.world_turn();
+            if (g.combat().active) g.combat().active = false;
+        }
+        bool zones_ok = true;
+        for (std::size_t z = 0; z < v->zones.size(); ++z) {
+            const SpawnZone& zone = v->zones[z];
+            int counted = 0, actually_home = 0;
+            for (const Mob& m : g.mobs()) {
+                if (m.loc != "village" || m.zone != static_cast<int>(z)) continue;
+                ++counted;
+                if (dist(m.pos, zone.pos) <= zone.radius) ++actually_home;
+            }
+            // Слот зоны занят только теми, кто и правда рядом (или идёт назад).
+            if (counted > 0 && actually_home == 0) zones_ok = false;
+        }
+        check(zones_ok, "занятые слоты зон подкреплены мобами рядом с точкой спавна");
+    }
+
+    // 7. Луч видимости работает и в тесных локациях, где стен больше, чем пола.
+    {
+        const Location* cave = w.location("cave");
+        check(cave != nullptr, "пещера загружается");
+        if (cave) {
+            int blocked = 0, open = 0;
+            for (int y = 1; y < 17; ++y) {
+                for (int x = 1; x < 47; ++x) {
+                    Vec2 a(x, y), b(x + 6, y);
+                    if (!cave->in_bounds(b)) continue;
+                    if (!cave->walkable(a) || !cave->walkable(b)) continue;
+                    if (cave->visible(a, b)) ++open; else ++blocked;
+                }
+            }
+            check(blocked > 0, "в пещере есть пары клеток, между которыми не видно");
+            check(open > 0, "и есть пары, между которыми видно");
+        }
+    }
+
+    // 8. Состояние переживает сохранение и загрузку.
+    {
+        platform::make_dir("saves");
+        Mob* m = g.mob_by_uid(uid);
+        m->state = MobState::Return;
+        check(g.save_to("saves/test_ai.sav"), "сохранение записано");
+        Game g2;
+        check(g2.load_from("saves/test_ai.sav"), "сохранение прочитано");
+        const Mob* m2 = g2.mob_by_uid(uid);
+        check(m2 != nullptr, "моб восстановлен");
+        if (m2) eq(static_cast<int>(m2->state), static_cast<int>(MobState::Return),
+                   "состояние моба пережило сохранение");
+        std::remove("saves/test_ai.sav");
+    }
+}
+
 void test_effects() {
     section("эффекты и их таймер");
     const Content& c = Content::get();
@@ -1273,6 +1472,7 @@ int main() {
     test_combat();
     test_save_load();
     test_movement_and_pickup();
+    test_mob_ai();
     test_effects();
     test_races_and_specs();
     test_mob_inventory();

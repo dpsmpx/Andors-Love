@@ -50,6 +50,9 @@ struct Location {
         return tiles[static_cast<std::size_t>(p.y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(p.x)];
     }
     bool walkable(Vec2 p) const { return in_bounds(p) && tile_walkable(at(p)); }
+    // Есть ли прямая видимость между клетками: сами концы не считаются
+    // преградой, мешает только то, что лежит между ними.
+    bool visible(Vec2 a, Vec2 b) const;
 
     const MapExit* exit_at(Vec2 p) const;
     const MapSign* sign_at(Vec2 p) const;

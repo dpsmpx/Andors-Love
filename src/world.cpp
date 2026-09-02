@@ -6,6 +6,28 @@
 #include <istream>
 #include <sstream>
 
+// Целочисленный алгоритм Брезенхэма: идём по клеткам от a к b и проверяем
+// прозрачность всех промежуточных. Дробной арифметики нет намеренно —
+// результат должен быть одинаков на любой платформе, иначе моб «увидит»
+// игрока на одном устройстве и не увидит на другом.
+bool Location::visible(Vec2 a, Vec2 b) const {
+    int dx =  (b.x > a.x ? b.x - a.x : a.x - b.x);
+    int dy = -(b.y > a.y ? b.y - a.y : a.y - b.y);
+    int sx = a.x < b.x ? 1 : -1;
+    int sy = a.y < b.y ? 1 : -1;
+    int err = dx + dy;
+    int x = a.x, y = a.y;
+
+    for (;;) {
+        if (x == b.x && y == b.y) return true;
+        int e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x += sx; }
+        if (e2 <= dx) { err += dx; y += sy; }
+        if (x == b.x && y == b.y) return true;
+        if (!tile_transparent(at(Vec2(x, y)))) return false;
+    }
+}
+
 const MapExit* Location::exit_at(Vec2 p) const {
     for (const MapExit& e : exits)
         if (e.pos == p) return &e;

@@ -53,6 +53,9 @@ constexpr char PORTAL = 'O';   // портал, поставленный игр�
 
 char tile_glyph(Tile t);
 bool tile_walkable(Tile t);
+// Пропускает ли тайл взгляд. Через воду видно, сквозь стену и дерево — нет,
+// поэтому прозрачность и проходимость — разные вещи.
+bool tile_transparent(Tile t);
 Tile tile_from_char(char c);
 
 // ---------- характеристики ----------

@@ -478,6 +478,41 @@ void Game::respawn_tick() {
     }
 }
 
+bool Game::mob_can_stand(const Location& loc, Vec2 p, int self_uid) const {
+    if (!loc.walkable(p)) return false;
+    if (loc.npc_at(p) || loc.exit_at(p)) return false;
+    int ci = loc.chest_index_at(p);
+    if (ci >= 0 && !chest_opened(loc.id, ci)) return false;
+    for (const Mob& o : mobs_)
+        if (o.uid != self_uid && o.loc == loc.id && o.pos == p) return false;
+    return true;
+}
+
+Vec2 Game::step_toward(const Location& loc, const Mob& m, Vec2 target) const {
+    const int dx = target.x - m.pos.x;
+    const int dy = target.y - m.pos.y;
+    const int sx = (dx > 0) - (dx < 0);
+    const int sy = (dy > 0) - (dy < 0);
+    if (sx == 0 && sy == 0) return Vec2(0, 0);
+
+    Vec2 first(0, 0), second(0, 0);
+    if (std::abs(dx) >= std::abs(dy)) { first = Vec2(sx, 0); second = Vec2(0, sy); }
+    else                              { first = Vec2(0, sy); second = Vec2(sx, 0); }
+
+    // Шаг на игрока разбирает вызывающий: для него это начало боя.
+    Vec2 cand(m.pos.x + first.x, m.pos.y + first.y);
+    if (first.x != 0 || first.y != 0) {
+        if (cand == plr_.pos && m.loc == plr_.loc) return first;
+        if (mob_can_stand(loc, cand, m.uid)) return first;
+    }
+    cand = Vec2(m.pos.x + second.x, m.pos.y + second.y);
+    if (second.x != 0 || second.y != 0) {
+        if (cand == plr_.pos && m.loc == plr_.loc) return second;
+        if (mob_can_stand(loc, cand, m.uid)) return second;
+    }
+    return Vec2(0, 0);
+}
+
 void Game::move_mobs() {
     const Location* loc = here();
     if (!loc) return;
@@ -488,14 +523,47 @@ void Game::move_mobs() {
         const EnemyDef* e = c.enemy(m.enemy_id);
         if (!e) continue;
 
-        int d = dist(m.pos, plr_.pos);
-        Vec2 step{0, 0};
+        // Дом — центр зоны спавна; без зоны моб считает домом текущее место.
+        Vec2 home = m.pos;
+        int  radius = 0;
+        if (m.zone >= 0 && m.zone < static_cast<int>(loc->zones.size())) {
+            home   = loc->zones[static_cast<std::size_t>(m.zone)].pos;
+            radius = loc->zones[static_cast<std::size_t>(m.zone)].radius;
+        }
 
-        if (e->aggressive && d <= e->detect) {
-            // Преследование: шаг по оси с большей разницей.
-            int dx = plr_.pos.x - m.pos.x, dy = plr_.pos.y - m.pos.y;
-            if (std::abs(dx) >= std::abs(dy)) step.x = (dx > 0) - (dx < 0);
-            else                              step.y = (dy > 0) - (dy < 0);
+        // Видит — значит, есть и расстояние, и прямая линия. Через стену
+        // и сквозь деревья моб игрока не замечает.
+        const bool sees = e->aggressive &&
+                          dist(m.pos, plr_.pos) <= e->detect &&
+                          loc->visible(m.pos, plr_.pos);
+
+        if (sees)                             m.state = MobState::Chase;
+        else if (m.state == MobState::Chase)  m.state = MobState::Return;
+
+        // Спокойный моб, оказавшийся вне своей зоны, тоже идёт домой: иначе
+        // он остался бы снаружи навсегда, занимая слот зоны и блокируя
+        // появление нового.
+        if (m.state == MobState::Idle && radius > 0 && dist(m.pos, home) > radius)
+            m.state = MobState::Return;
+
+        if (m.state == MobState::Return && dist(m.pos, home) <= radius)
+            m.state = MobState::Idle;
+
+        Vec2 step(0, 0);
+        if (m.state == MobState::Chase) {
+            step = step_toward(*loc, m, plr_.pos);
+        } else if (m.state == MobState::Return) {
+            step = step_toward(*loc, m, home);
+            if (step.x == 0 && step.y == 0) {
+                // Упёрся в препятствие: делаем случайный шаг, чтобы сойти с
+                // места, но домой идти не перестаём.
+                switch (rng_.range(0, 3)) {
+                    case 0: step = Vec2( 1,  0); break;
+                    case 1: step = Vec2(-1,  0); break;
+                    case 2: step = Vec2( 0,  1); break;
+                    default: step = Vec2(0, -1); break;
+                }
+            }
         } else if (rng_.chance(45)) {
             switch (rng_.range(0, 3)) {
                 case 0: step.x =  1; break;
@@ -503,10 +571,15 @@ void Game::move_mobs() {
                 case 2: step.y =  1; break;
                 default: step.y = -1; break;
             }
+            // Блуждание не уводит за пределы своей зоны: иначе мобы
+            // расползаются по карте, а слот зоны остаётся занятым.
+            Vec2 probe(m.pos.x + step.x, m.pos.y + step.y);
+            if (radius > 0 && dist(probe, home) > radius) step = Vec2(0, 0);
         }
+
         if (step.x == 0 && step.y == 0) continue;
 
-        Vec2 np{ m.pos.x + step.x, m.pos.y + step.y };
+        Vec2 np(m.pos.x + step.x, m.pos.y + step.y);
 
         if (np == plr_.pos) {                          // дошёл до игрока — бой
             if (e->aggressive) {
@@ -516,9 +589,7 @@ void Game::move_mobs() {
             }
             continue;
         }
-        if (!loc->walkable(np)) continue;
-        if (loc->npc_at(np) || loc->exit_at(np)) continue;
-        if (mob_at(np, m.loc)) continue;
+        if (!mob_can_stand(*loc, np, m.uid)) continue;
         m.pos = np;
 
         // Моб подбирает лежащее на земле — потом это достанется победителю.
