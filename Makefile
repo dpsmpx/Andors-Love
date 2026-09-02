@@ -5,7 +5,12 @@
 #   make debug      сборка с санитайзерами (ASan + UBSan)
 #   make clean
 
-CXX      ?= g++
+# Termux и часть систем ставят только clang++, а встроенное значение CXX в make
+# всегда g++ — из-за этого сборка падала бы на «g++: command not found».
+# Явный «make CXX=...» по-прежнему уважается: подменяем только значение по умолчанию.
+ifeq ($(origin CXX),default)
+  CXX := $(shell command -v g++ >/dev/null 2>&1 && echo g++ ||                  (command -v clang++ >/dev/null 2>&1 && echo clang++ || echo c++))
+endif
 WARN     := -Wall -Wextra -Wpedantic -Wshadow
 CXXFLAGS ?= -std=c++17 $(WARN) -O2
 LDFLAGS  ?=

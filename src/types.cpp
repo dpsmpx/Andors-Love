@@ -128,6 +128,56 @@ std::vector<std::string> split_ws(const std::string& s) {
     return out;
 }
 
+std::vector<std::string> wrap(const std::string& text, std::size_t width) {
+    std::vector<std::string> out;
+    if (width < 4) width = 4;
+
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        std::size_t nl = text.find('\n', start);
+        std::string para = text.substr(start, nl == std::string::npos ? std::string::npos
+                                                                     : nl - start);
+        // Отступ в начале строки сохраняем у всех кусков абзаца.
+        std::string indent;
+        for (char c : para) {
+            if (c == ' ') indent += ' ';
+            else break;
+        }
+        if (indent.size() >= width) indent.clear();
+
+        std::vector<std::string> words = split_ws(para);
+        if (words.empty()) {
+            out.push_back("");
+        } else {
+            std::string line = indent;
+            bool empty_line = true;
+            for (const std::string& w : words) {
+                std::size_t add = utf8_len(w) + (empty_line ? 0 : 1);
+                if (!empty_line && utf8_len(line) + add > width) {
+                    out.push_back(line);
+                    line = indent + w;
+                } else {
+                    if (!empty_line) line += ' ';
+                    line += w;
+                }
+                empty_line = false;
+                // Слово длиннее строки режем принудительно.
+                while (utf8_len(line) > width) {
+                    out.push_back(trunc(line, width));
+                    std::string rest = line.substr(trunc(line, width).size());
+                    line = indent + rest;
+                    if (rest.empty()) break;
+                }
+            }
+            if (!line.empty() || out.empty()) out.push_back(line);
+        }
+
+        if (nl == std::string::npos) break;
+        start = nl + 1;
+    }
+    return out;
+}
+
 std::string to_str(int v) {
     std::ostringstream oss;
     oss << v;

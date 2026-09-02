@@ -3,8 +3,9 @@
 #include "../src/game.h"
 #include "../src/world.h"
 
+#include "../src/platform.h"
+
 #include <cstdio>
-#include <filesystem>
 #include <iostream>
 #include <string>
 
@@ -43,6 +44,31 @@ void test_text_helpers() {
     eqs(plural(3,  "монета","монеты","монет"), "монеты", "3 монеты");
     eqs(plural(11, "монета","монеты","монет"), "монет",  "11 монет (исключение)");
     eqs(plural(21, "монета","монеты","монет"), "монета", "21 монета");
+}
+
+void test_wrap() {
+    section("перенос строк");
+    std::vector<std::string> w = wrap("Мирон опирается на палку и щурится", 12);
+    bool fits = true;
+    for (const std::string& l : w) if (utf8_len(l) > 12) fits = false;
+    check(fits, "ни одна строка не длиннее заданной ширины");
+    check(w.size() >= 3, "длинный текст разбит на несколько строк");
+
+    // Существующие переводы строк сохраняются.
+    std::vector<std::string> two = wrap("первая\nвторая", 40);
+    eq(static_cast<int>(two.size()), 2, "абзацы не склеиваются");
+    eqs(two[0], "первая", "первый абзац цел");
+
+    // Слово длиннее строки не должно уводить в бесконечный цикл или за край.
+    std::vector<std::string> long_word = wrap("длинноесловобезпробелов", 8);
+    bool hard_fits = true;
+    for (const std::string& l : long_word) if (utf8_len(l) > 8) hard_fits = false;
+    check(hard_fits, "слишком длинное слово режется принудительно");
+    check(!long_word.empty(), "и не теряется целиком");
+
+    // Отступ абзаца сохраняется на переносах — списки не разъезжаются.
+    std::vector<std::string> ind = wrap("    пункт списка с длинным текстом внутри", 16);
+    check(ind.size() >= 2 && ind[1].substr(0, 4) == "    ", "отступ переносится на следующую строку");
 }
 
 void test_maps() {
@@ -357,8 +383,7 @@ void test_save_load() {
     int mobs_saved = static_cast<int>(a.mobs().size());
     Stats ta = a.total();
 
-    std::error_code ec;
-    std::filesystem::create_directories("saves", ec);
+    platform::make_dir("saves");
     check(a.save_to(path), "сохранение записалось: " + a.error());
 
     Game b;
@@ -401,7 +426,6 @@ void test_save_load() {
 
     std::remove(path);
     std::remove("saves/test_garbage.sav");
-    (void)ec;
 }
 
 void test_movement_and_pickup() {
@@ -633,6 +657,7 @@ void test_playthrough() {
 int main() {
     std::cout << "Тесты «Любви Эндора»\n";
     test_text_helpers();
+    test_wrap();
     test_maps();
     test_new_game_and_stats();
     test_equipment();

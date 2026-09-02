@@ -2,7 +2,6 @@
 #include "platform.h"
 #include "ui.h"
 
-#include <filesystem>
 #include <iostream>
 #include <string>
 
@@ -12,8 +11,7 @@ const char* SAVE_DIR  = "saves";
 const char* SAVE_FILE = "saves/hero.sav";
 
 void ensure_save_dir() {
-    std::error_code ec;
-    std::filesystem::create_directories(SAVE_DIR, ec);   // ошибку разбираем при записи
+    platform::make_dir(SAVE_DIR);   // неудачу разберём при попытке записи
 }
 
 // Возвращает false, если игрок вышел в главное меню.

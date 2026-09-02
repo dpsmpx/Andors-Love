@@ -2,10 +2,15 @@
 
 #include <cstdio>
 
+#include <cstdlib>
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #if defined(_WIN32)
 #  include <conio.h>
 #  include <windows.h>
 #else
+#  include <sys/ioctl.h>
 #  include <termios.h>
 #  include <unistd.h>
 #endif
@@ -88,6 +93,43 @@ int read_key() {
 }
 
 #endif
+
+void term_size(int* cols, int* rows) {
+    int c = 0, r = 0;
+
+#if defined(_WIN32)
+    CONSOLE_SCREEN_BUFFER_INFO info;
+    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info)) {
+        c = info.srWindow.Right  - info.srWindow.Left + 1;
+        r = info.srWindow.Bottom - info.srWindow.Top  + 1;
+    }
+#else
+    winsize ws;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0) {
+        c = ws.ws_col;
+        r = ws.ws_row;
+    }
+#endif
+
+    if (c <= 0) if (const char* e = std::getenv("COLUMNS")) c = std::atoi(e);
+    if (r <= 0) if (const char* e = std::getenv("LINES"))   r = std::atoi(e);
+    if (c <= 0) c = 80;
+    if (r <= 0) r = 24;
+
+    if (cols) *cols = c;
+    if (rows) *rows = r;
+}
+
+bool make_dir(const std::string& path) {
+#if defined(_WIN32)
+    return CreateDirectoryA(path.c_str(), nullptr) ||
+           GetLastError() == ERROR_ALREADY_EXISTS;
+#else
+    if (::mkdir(path.c_str(), 0755) == 0) return true;
+    struct stat st;
+    return ::stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+#endif
+}
 
 void clear_screen() { std::fputs("\033[2J\033[H", stdout); }
 void hide_cursor()  { std::fputs("\033[?25l", stdout); }

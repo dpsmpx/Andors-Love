@@ -111,6 +111,11 @@ std::string pad(const std::string& s, std::size_t width);
 std::string trunc(const std::string& s, std::size_t width);
 
 std::vector<std::string> split_ws(const std::string& s);
+
+// Переносит текст по словам на ширину width (в видимых символах), сохраняя
+// уже имеющиеся переводы строк. Без этого реплики NPC уезжали бы за край
+// узкого экрана.
+std::vector<std::string> wrap(const std::string& text, std::size_t width);
 std::string to_str(int v);
 
 // Русское склонение при числе: plural(1,"монета","монеты","монет") -> "монета".
