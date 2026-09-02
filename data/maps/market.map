@@ -32,4 +32,5 @@ spawn 34 14 stray 2 4
 exit 2 9 glassfield 44 9
 exit 23 2 caravanserai 24 15
 exit 45 9 doubled 3 9
+exit 23 16 halfcity 24 2 quest=cityroad:1 deny=Северная дорога уходит в туман. Улей говорил, откуда возят городской товар.
 end

@@ -242,6 +242,51 @@ void Content::build_items() {
     glass_dust.effect = "clarity"; glass_dust.effect_turns = 10; glass_dust.effect_power = 2;
     add(glass_dust);
 
+    // --- Регион III: Половины ---
+    add(mk_item("scrap_iron", "Ломаное железо", ItemKind::Misc, 28,
+                "Литейный двор принимает такое на переплавку."));
+    add(mk_item("city_brick", "Городской кирпич", ItemKind::Misc, 14,
+                "Клеймо с обратной стороны — того завода больше нет нигде."));
+    add(mk_item("ledger_page", "Лист из гроссбуха", ItemKind::Misc, 26,
+                "Столбцы цифр, и в каждом третьем ошибка на одну и ту же величину."));
+    add(mk_item("ferry_token", "Перевозный жетон", ItemKind::Misc, 40,
+                "Медь, дырка посередине. Перевозчик берёт только такие."));
+    add(mk_item("archive_key", "Ключ городского архива", ItemKind::Misc, 0,
+                "Смотритель Половины носил его на шее и не отдавал."));
+    add(mk_item("half_name", "Половина имени", ItemKind::Misc, 0,
+                "Клочок списка. Имя обрывается ровно посередине."));
+
+    ItemDef hammer = mk_item("foundry_hammer", "Молот литейной", ItemKind::Weapon, 620,
+                             "Тяжёлый до неприличия. Бьёт так, что броня не помогает.");
+    hammer.bonus.dmg_min = 9; hammer.bonus.dmg_max = 18;
+    hammer.bonus.attack = -6; hammer.bonus.ap_atk = 1; hammer.bonus.crit = 5;
+    add(hammer);
+
+    ItemDef robe = mk_item("clerk_robe", "Мантия счетовода", ItemKind::Armor, 480,
+                           "Карманы на все случаи. Кто-то в них ещё и считал.");
+    robe.bonus.armor = 5; robe.bonus.max_ap = 2; robe.bonus.block = 4;
+    add(robe);
+
+    ItemDef lens = mk_item("counter_lens", "Линза Счетовода", ItemKind::Helmet, 520,
+                           "Сквозь неё видно, где вещь тоньше всего.");
+    lens.bonus.crit = 10; lens.bonus.attack = 7; lens.bonus.armor = 1;
+    add(lens);
+
+    ItemDef sshield = mk_item("slag_shield", "Щит из шлака", ItemKind::Shield, 470,
+                              "Некрасивый и почти неподъёмный. Держит всё.");
+    sshield.bonus.block = 14; sshield.bonus.armor = 4; sshield.bonus.attack = -5;
+    add(sshield);
+
+    ItemDef fring = mk_item("ferry_ring", "Кольцо перевозчика", ItemKind::Ring, 500,
+                            "Пока оно на пальце, стоячая вода держит крепче.");
+    fring.bonus.max_hp = 10; fring.bonus.block = 7; fring.bonus.max_ap = 1;
+    add(fring);
+
+    ItemDef tea = mk_item("strong_tea", "Крепкий чай счетоводов", ItemKind::Consumable, 95,
+                          "Три ложки на кружку. Считать становится легче, жить — нет.");
+    tea.heal_ap = 6; tea.effect = "clarity"; tea.effect_turns = 8; tea.effect_power = 2;
+    add(tea);
+
     ItemDef seal = mk_item("order_seal", "Печать Ордена", ItemKind::Ring, 700,
                            "Узел из серебра. Тёплая, будто её только что держали.");
     seal.bonus.max_hp = 12; seal.bonus.attack = 5; seal.bonus.armor = 2; seal.bonus.crit = 4;
@@ -562,6 +607,119 @@ void Content::build_notes() {
         "дворы уцелели. Значит, они дрейфуют.»"
     });
 
+    // --- Регион III: Половины ---
+
+    add("cityhalf", "Прошение о восстановлении", {
+        "«В городскую управу, от жителей Верхней стороны.",
+        "",
+        "Просим определить, кому подчиняется наша половина.",
+        "Ратуша осталась на той стороне среза. Казначейство",
+        "тоже. Управа, куда мы это пишем, — на нашей, но",
+        "управляет она половиной города, а числится за целым.",
+        "",
+        "Срез прошёл по Мучной улице. Дома с чётной стороны",
+        "стоят, с нечётной — нет. Не разрушены: их просто",
+        "нет, и мостовая обрывается ровно, как ножом.",
+        "",
+        "Ответа не последовало. Ждём двести лет.»"
+    });
+
+    add("endless", "Заметка обходчика", {
+        "«Обход по Кольцевой, третий год.",
+        "",
+        "Улица не кольцевая. Я проверял: она прямая.",
+        "Идёшь до конца — выходишь в начало, но поворота",
+        "нет. Считал шаги: восемьсот сорок, всегда.",
+        "",
+        "Выход есть, но не в конце. Он сбоку, и открыт",
+        "только тому, кто понял, что конца нет.",
+        "Понять — это не догадаться. Это перестать идти.»"
+    });
+
+    add("deadwater", "Наставление перевозчику", {
+        "«Вода в канале не течёт и не сохнет. Стоит",
+        "с самого Стяжения на одном уровне.",
+        "",
+        "Ходить по ней можно — держит. Плавать нельзя:",
+        "не тонешь и не выплываешь, так и стоишь.",
+        "",
+        "Жетон бери с каждого. Не ради денег: жетон —",
+        "это счёт. Сколько роздал, столько должно",
+        "вернуться. Если вернётся меньше — кто-то",
+        "остался на воде, и его надо идти искать.»"
+    });
+
+    add("counting", "Черновик Счетовода", {
+        "«Замер сорок девятый.",
+        "",
+        "Беру две точки, между которыми до Стяжения",
+        "было триста саженей. Меряю. Двести девяносто",
+        "одна.",
+        "",
+        "Замер сорок восьмой, прошлый год: двести",
+        "девяносто три.",
+        "",
+        "Две сажени в год. Не локоть в поколение, как",
+        "писали орденские. Две сажени. В год.",
+        "",
+        "Я пересчитывал четырежды. Я хочу ошибиться.»"
+    });
+
+    add("lists", "Опись городского архива", {
+        "«Списки жителей за год Стяжения.",
+        "",
+        "Всего душ по переписи: четыре тысячи двести.",
+        "Числится на нашей половине: две тысячи сто.",
+        "Числится на той: две тысячи сто.",
+        "",
+        "Сходится. Но фамилии в списках не разделены",
+        "по улицам — они разрезаны по буквам. Половина",
+        "имени здесь, половина там.",
+        "",
+        "Мы не знаем, кто выжил. Мы знаем только,",
+        "что каждого — половина.»"
+    });
+
+    add("foundry", "Запись в цеховой книге", {
+        "«Смену отработали полным составом.",
+        "Печь не гасили с шестого числа.",
+        "",
+        "Мастер сказал: пока льём — стоим. Перестанем",
+        "лить — поймём, что кончилось, и тогда всё.",
+        "Никто не спорил.",
+        "",
+        "Лили двести лет. Заказов нет, возить некому,",
+        "металл берём из своих же отливок.",
+        "Мастер прав: пока льём — стоим.»"
+    });
+
+    add("halves", "Донесение о второй половине", {
+        "«С Башни Счетовода в ясный день видно вторую",
+        "половину. Не на горизонте — выше него.",
+        "",
+        "Она не стоит на земле. Она дрейфует, и её",
+        "сносит. За двенадцать лет прошла треть неба.",
+        "",
+        "Там дым из труб. Там живут и, надо думать,",
+        "тоже смотрят сюда и тоже пишут донесения.",
+        "",
+        "Если Стяжение доведут до конца — половины",
+        "сойдутся. Если сеть разрежут — разойдутся",
+        "навсегда. Третьего для нас нет.»"
+    });
+
+    add("lastclerk", "Последняя запись писаря", {
+        "«Сего числа переписал начисто списки",
+        "и запер архив.",
+        "",
+        "Ключ отдал смотрителю, как положено. Смотритель",
+        "с тех пор не сменялся и ключа не отдаёт.",
+        "Я спрашивал. Он смотрит и молчит.",
+        "",
+        "Он не злой. Он просто на посту, а поста",
+        "уже двести лет как нет.»"
+    });
+
     add("hermit", "Страница из дневника", {
         "Двадцать лет назад я тоже думал, что",
         "сила решает. Ходил в ярости, бил первым.",
@@ -861,6 +1019,96 @@ void Content::build_enemies() {
     walker.on_hit_effect = "bleed"; walker.on_hit_chance = 40; walker.on_hit_power = 2;
     add(walker);
 
+    // --- Регион III: Половины ---
+
+    EnemyDef crat;
+    crat.id = "city_rat"; crat.name = "Городская крыса"; crat.female = true;
+    crat.stats.max_hp = 52; crat.stats.max_ap = 9; crat.stats.attack = 76;
+    crat.stats.dmg_min = 5; crat.stats.dmg_max = 11; crat.stats.block = 10;
+    crat.stats.armor = 2;   crat.stats.ap_atk = 3;
+    crat.exp = 46; crat.gold_min = 2; crat.gold_max = 14;
+    crat.drops = { Drop("rat_tail", 60), Drop("scrap_iron", 35) };
+    crat.detect = 6; crat.kill_counter = "kill_cityrat";
+    add(crat);
+
+    EnemyDef cutman;
+    cutman.id = "cut_man"; cutman.name = "Срезанный";
+    cutman.stats.max_hp = 74; cutman.stats.max_ap = 10; cutman.stats.attack = 80;
+    cutman.stats.dmg_min = 6; cutman.stats.dmg_max = 12; cutman.stats.block = 14;
+    cutman.stats.armor = 3;   cutman.stats.ap_atk = 4;
+    cutman.exp = 72; cutman.gold_min = 8; cutman.gold_max = 30;
+    cutman.drops = { Drop("old_coin", 45), Drop("city_brick", 40) };
+    cutman.detect = 7; cutman.kill_counter = "kill_cutman";
+    cutman.on_hit_effect = "weaken"; cutman.on_hit_chance = 40; cutman.on_hit_power = 2;
+    add(cutman);
+
+    EnemyDef clerk;
+    clerk.id = "mad_clerk"; clerk.name = "Обезумевший счетовод";
+    clerk.stats.max_hp = 64; clerk.stats.max_ap = 11; clerk.stats.attack = 78;
+    clerk.stats.dmg_min = 5; clerk.stats.dmg_max = 10; clerk.stats.block = 16;
+    clerk.stats.armor = 2;   clerk.stats.ap_atk = 3;
+    clerk.exp = 64; clerk.gold_min = 12; clerk.gold_max = 36;
+    clerk.drops = { Drop("ledger_page", 60), Drop("old_coin", 40) };
+    clerk.detect = 7; clerk.kill_counter = "kill_clerk";
+    clerk.on_hit_effect = "slow"; clerk.on_hit_chance = 35; clerk.on_hit_power = 1;
+    add(clerk);
+
+    EnemyDef slag;
+    slag.id = "slag_thing"; slag.name = "Шлаковик";
+    slag.stats.max_hp = 90; slag.stats.max_ap = 9; slag.stats.attack = 78;
+    slag.stats.dmg_min = 7; slag.stats.dmg_max = 14; slag.stats.block = 8;
+    slag.stats.armor = 6;   slag.stats.ap_atk = 4;
+    slag.exp = 88; slag.gold_min = 6; slag.gold_max = 24;
+    slag.drops = { Drop("scrap_iron", 70), Drop("ember", 30) };
+    slag.detect = 6; slag.kill_counter = "kill_slag";
+    slag.on_hit_effect = "burn"; slag.on_hit_chance = 40; slag.on_hit_power = 2;
+    add(slag);
+
+    EnemyDef walker3;
+    walker3.id = "canal_walker"; walker3.name = "Ходящий по воде";
+    walker3.stats.max_hp = 78; walker3.stats.max_ap = 10; walker3.stats.attack = 82;
+    walker3.stats.dmg_min = 6; walker3.stats.dmg_max = 13; walker3.stats.block = 20;
+    walker3.stats.armor = 3;   walker3.stats.ap_atk = 4;
+    walker3.exp = 80; walker3.gold_min = 10; walker3.gold_max = 34;
+    walker3.drops = { Drop("ferry_token", 55), Drop("frost_shard", 30) };
+    walker3.detect = 8; walker3.kill_counter = "kill_canalwalker";
+    walker3.on_hit_effect = "slow"; walker3.on_hit_chance = 45; walker3.on_hit_power = 2;
+    add(walker3);
+
+    EnemyDef moth;
+    moth.id = "archive_moth"; moth.name = "Архивная моль"; moth.female = true;
+    moth.stats.max_hp = 46; moth.stats.max_ap = 12; moth.stats.attack = 74;
+    moth.stats.dmg_min = 4; moth.stats.dmg_max = 9; moth.stats.block = 22;
+    moth.stats.armor = 1;   moth.stats.ap_atk = 3;
+    moth.exp = 42; moth.gold_min = 0; moth.gold_max = 8;
+    moth.drops = { Drop("ledger_page", 50) };
+    moth.detect = 7; moth.kill_counter = "kill_moth";
+    add(moth);
+
+    EnemyDef hwarden;
+    hwarden.id = "half_warden"; hwarden.name = "Смотритель Половины";
+    hwarden.stats.max_hp = 205; hwarden.stats.max_ap = 12; hwarden.stats.attack = 88;
+    hwarden.stats.dmg_min = 10; hwarden.stats.dmg_max = 19; hwarden.stats.block = 22;
+    hwarden.stats.armor = 7;    hwarden.stats.ap_atk = 4;
+    hwarden.exp = 400; hwarden.gold_min = 140; hwarden.gold_max = 250;
+    hwarden.drops = { Drop("archive_key", 100), Drop("half_name", 100),
+                      Drop("counter_lens", 45) };
+    hwarden.detect = 8; hwarden.kill_counter = "kill_halfwarden";
+    hwarden.on_hit_effect = "weaken"; hwarden.on_hit_chance = 45; hwarden.on_hit_power = 2;
+    add(hwarden);
+
+    EnemyDef smaster;
+    smaster.id = "slag_master"; smaster.name = "Мастер Литейной";
+    smaster.stats.max_hp = 185; smaster.stats.max_ap = 11; smaster.stats.attack = 86;
+    smaster.stats.dmg_min = 10; smaster.stats.dmg_max = 18; smaster.stats.block = 16;
+    smaster.stats.armor = 9;    smaster.stats.ap_atk = 4;
+    smaster.exp = 350; smaster.gold_min = 110; smaster.gold_max = 210;
+    smaster.drops = { Drop("foundry_hammer", 100), Drop("scrap_iron", 100),
+                      Drop("slag_shield", 50) };
+    smaster.detect = 7; smaster.kill_counter = "kill_slagmaster";
+    smaster.on_hit_effect = "burn"; smaster.on_hit_chance = 50; smaster.on_hit_power = 3;
+    add(smaster);
+
     EnemyDef archivist;
     archivist.id = "archivist"; archivist.name = "Архивариус Ордена";
     archivist.stats.max_hp = 150; archivist.stats.max_ap = 12; archivist.stats.attack = 88;
@@ -1034,6 +1282,67 @@ void Content::build_quests() {
     };
     quests_.push_back(q);
 
+    // --- Регион III: Половины ---
+
+    q = QuestDef();
+    q.id = "cityroad"; q.name = "Дорога в Город";
+    q.stages = {
+        QuestStageDef(1, "Улей рассказал, откуда на Рынок приходит городской товар. "
+                         "Дорога на север от рынка ведёт к Половине Города."),
+        QuestStageDef(QUEST_DONE, "Половина Города найдена. Она и правда половина.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "foundry"; q.name = "Пока льём — стоим";
+    q.stages = {
+        QuestStageDef(1, "Литейщику Кузьме нужно 8 кусков ломаного железа: печь нельзя гасить."),
+        QuestStageDef(QUEST_DONE, "Печь не погасла. Кузьма отдал молот.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "counting"; q.name = "Две сажени в год";
+    q.stages = {
+        QuestStageDef(1, "Счетоводу Акиму нужно 6 листов гроссбуха для проверки замеров."),
+        QuestStageDef(QUEST_DONE, "Аким пересчитал. Мир сходится вчетверо быстрее, чем писал Орден.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "lists"; q.name = "Половина имени";
+    q.stages = {
+        QuestStageDef(1, "Писарь Феофан просит попасть в архив. Ключ у Смотрителя Половины, "
+                         "и тот его не отдаёт."),
+        QuestStageDef(2, "Опись архива прочитана. Каждого жителя — половина."),
+        QuestStageDef(QUEST_DONE, "Феофан дочитал опись. Он ждал этого двести лет.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "endless"; q.name = "Улица без конца"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "Улица прямая, но приводит в собственное начало. Восемьсот сорок шагов."),
+        QuestStageDef(QUEST_DONE, "Выход не в конце, а сбоку. Понять — это перестать идти.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "deadwater"; q.name = "Мёртвая вода"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "Жетон — это счёт. Сколько роздал, столько должно вернуться."),
+        QuestStageDef(QUEST_DONE, "Пять жетонов собраны. Значит, пятеро всё-таки вернулись.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "halves"; q.name = "Вторая половина"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "Клочок списка. Имя обрывается ровно посередине — вторая половина где-то есть."),
+        QuestStageDef(QUEST_DONE, "Вторая половина Города не на горизонте, а выше него. Она дрейфует.")
+    };
+    quests_.push_back(q);
+
     q = QuestDef();
     q.id = "seam"; q.name = "Шов за алтарём"; q.secret = true;
     q.stages = {
@@ -1111,6 +1420,18 @@ void Content::build_shops() {
     shops_[s.id] = s;
 
     s = ShopDef();
+    s.id = "shop_foundry"; s.name = "Литейный двор";
+    s.goods = {"foundry_hammer", "slag_shield", "clerk_robe", "scrap_iron", "ember"};
+    s.buy_pct = 100; s.sell_pct = 60;      // железо здесь берут охотно
+    shops_[s.id] = s;
+
+    s = ShopDef();
+    s.id = "shop_ferry"; s.name = "Лодка Хмурого";
+    s.goods = {"ferry_ring", "strong_tea", "ferry_token", "herb_potion", "antidote"};
+    s.buy_pct = 110; s.sell_pct = 40;
+    shops_[s.id] = s;
+
+    s = ShopDef();
     s.id = "shop_herbs"; s.name = "Травы Лады";
     s.goods = {"herb_potion", "ap_tonic", "bread", "antidote", "salve",
                "elixir_might", "elixir_guard", "elixir_haste"};
@@ -1141,6 +1462,13 @@ void Content::build_npcs() {
     add("digger",   "Копач Тишка",         "digger_root",  "");
     add("prohor_l", "Прохор",              "prohor_l_root", "");
     add("prohor_r", "Прохор",              "prohor_r_root", "");
+
+    // --- Регион III: Половины ---
+    add("survivor", "Горожанка Верея",  "survivor_root", "");
+    add("founder",  "Литейщик Кузьма",  "founder_root",  "shop_foundry");
+    add("counter",  "Счетовод Аким",    "counter_root",  "");
+    add("scribe",   "Писарь Феофан",    "scribe_root",   "");
+    add("ferryman", "Перевозчик Хмурый","ferry_root",    "shop_ferry");
 }
 
 // ---------------------------------------------------------------- события
@@ -1195,6 +1523,33 @@ void Content::build_triggers() {
         "Срез каната ровный, будто ножом. Открыта тайна: «Обрезанный канат».");
     add(TriggerKind::NoteTaken, "bridge", 1, "bridge", QUEST_DONE, 1,
         "Донесение о мосте объясняет и срез, и дым на той стороне.");
+
+    // --- Регион III ---
+    // Половина Города находится приходом, а не рассказом.
+    add(TriggerKind::LocationEntered, "halfcity", 1, "cityroad", QUEST_DONE, 1,
+        "Мостовая обрывается ровно, как ножом. Улей не преувеличивал.");
+
+    // Улица объясняет себя сама — тем, что не кончается.
+    add(TriggerKind::LocationEntered, "endless", 1, "endless", 1, 0,
+        "Улица прямая, но ты уже проходил этот угол. Открыта тайна: «Улица без конца».");
+    add(TriggerKind::NoteTaken, "endless", 1, "endless", QUEST_DONE, 1,
+        "Заметка обходчика: выход не в конце, а сбоку. Тайна «Улица без конца» разгадана.");
+
+    // Счёт перевозчика: жетоны должны вернуться.
+    add(TriggerKind::NoteTaken, "deadwater", 1, "deadwater", 1, 0,
+        "«Сколько роздал, столько должно вернуться». Открыта тайна: «Мёртвая вода».");
+    add(TriggerKind::ItemGained, "ferry_token", 5, "deadwater", QUEST_DONE, 1,
+        "Пять жетонов. Счёт сошёлся — значит, пятеро вернулись. Тайна «Мёртвая вода» разгадана.");
+
+    // Опись архива читается на месте — Феофану остаётся только выслушать.
+    add(TriggerKind::NoteTaken, "lists", 1, "lists", 2, 1,
+        "Опись прочитана. Считали души, а надо было считать имена.");
+
+    // Половина имени — вещь, с которой начинается вопрос о второй половине.
+    add(TriggerKind::ItemGained, "half_name", 1, "halves", 1, 0,
+        "Имя обрывается ровно посередине. Открыта тайна: «Вторая половина».");
+    add(TriggerKind::NoteTaken, "halves", 1, "halves", QUEST_DONE, 1,
+        "Донесение с Башни: вторая половина выше горизонта и дрейфует.");
 }
 
 // ----------------------------------------------------------------- диалоги
@@ -1909,6 +2264,13 @@ void Content::build_dialogues() {
         trade.open_shop = true;
         n.options.push_back(trade);
 
+        DlgOption cr_offer;
+        cr_offer.text = "Откуда у тебя городской товар?";
+        cr_offer.next = "cityroad_offer";
+        cr_offer.req_quest  = "cityroad"; cr_offer.req_stage_min  = QUEST_NONE; cr_offer.req_stage_max = QUEST_NONE;
+        cr_offer.req_quest2 = "market";   cr_offer.req_stage2_min = QUEST_DONE; cr_offer.req_stage2_max = QUEST_DONE;
+        n.options.push_back(cr_offer);
+
         DlgOption rules;
         rules.text = "Почему рынок стоит именно здесь?";
         rules.next = "market_rules";
@@ -1960,6 +2322,327 @@ void Content::build_dialogues() {
         take.give_item = "trader_hood"; take.give_count = 1;
         take.give_gold = 300; take.give_exp = 300;
         n.options.push_back(take);
+        add(n);
+    }
+
+    {
+        DlgNode n; n.id = "cityroad_offer";
+        n.text = "— Из Города. Северной дорогой, два дня.\n"
+                 "Только это не город, а половина города. Срез прошёл по улице,\n"
+                 "и дома с одной стороны есть, а с другой нет. Не развалины —\n"
+                 "просто нет, и мостовая обрывается ровно.\n"
+                 "Они там до сих пор ждут ответа из ратуши, которая осталась\n"
+                 "на той половине. Сходи, если крепкий. Оттуда всё видно яснее.";
+        DlgOption take;
+        take.text = "Схожу посмотреть.";
+        take.next = "";
+        take.set_quest = "cityroad"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Мне и Шва хватает."));
+        add(n);
+    }
+
+    // --- Горожанка Верея: что тут вообще произошло ---
+    {
+        DlgNode n; n.id = "survivor_root";
+        n.text = "Женщина метёт крыльцо дома, у которого нет соседнего дома.\n"
+                 "Метёт до самого среза и там останавливается.\n"
+                 "— Не подходи к краю. Смотреть можно, стоять нельзя.";
+        DlgOption ask;
+        ask.text = "Что случилось с той стороной?";
+        ask.next = "survivor_cut";
+        n.options.push_back(ask);
+        DlgOption ask2;
+        ask2.text = "Кто у вас тут остался?";
+        ask2.next = "survivor_who";
+        n.options.push_back(ask2);
+        n.options.push_back(bye("Понял."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "survivor_cut";
+        n.text = "— Ничего не случилось. В том и дело.\n"
+                 "Не рухнуло, не сгорело. Просто перестало быть — ровно по\n"
+                 "Мучной улице. Чётная сторона стоит, нечётной нет.\n"
+                 "\n"
+                 "У меня там свекровь жила. Через дорогу.";
+        n.options.push_back(bye("Сочувствую."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "survivor_who";
+        n.text = "— Кузьма в литейной, он печь не гасит. Аким на башне, считает.\n"
+                 "Феофан при архиве, только архив заперт, а ключ у смотрителя.\n"
+                 "Смотритель на посту. Двести лет.\n"
+                 "\n"
+                 "И Кольцевая. На Кольцевую не ходи, если не понял её.";
+        n.options.push_back(bye("Учту."));
+        add(n);
+    }
+
+    // --- Литейщик Кузьма ---
+    {
+        DlgNode n; n.id = "founder_root";
+        n.text = "Жар от печи слышно за квартал. Кузьма стоит у летки, весь в саже.\n"
+                 "— Печь не гашу. Спрашивать не надо, скажу сам, если поможешь.";
+
+        DlgOption offer;
+        offer.text = "Чем помочь?";
+        offer.next = "foundry_offer";
+        offer.req_quest = "foundry"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption done;
+        done.text = "Восемь кусков железа.";
+        done.next = "foundry_reward";
+        done.req_quest = "foundry"; done.req_stage_min = 1; done.req_stage_max = 1;
+        done.req_item = "scrap_iron"; done.req_item_count = 8;
+        n.options.push_back(done);
+
+        DlgOption wait;
+        wait.text = "Ещё собираю.";
+        wait.next = "foundry_wait";
+        wait.req_quest = "foundry"; wait.req_stage_min = 1; wait.req_stage_max = 1;
+        n.options.push_back(wait);
+
+        DlgOption trade;
+        trade.text = "Показывай, что отлил.";
+        trade.open_shop = true;
+        n.options.push_back(trade);
+
+        n.options.push_back(bye("Работай."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "foundry_offer";
+        n.text = "— Металл кончается. Двести лет льём из своих же отливок,\n"
+                 "а всякий раз чуть меньше выходит: угар.\n"
+                 "Принеси восемь кусков ломаного, хоть откуда. Печь не должна\n"
+                 "остыть.\n"
+                 "\n"
+                 "Мастер говорил: пока льём — стоим. Перестанем — поймём, что\n"
+                 "кончилось, и тогда всё. Он в нижнем цеху остался. Не ходи туда.";
+        DlgOption take;
+        take.text = "Принесу железо.";
+        take.next = "foundry_wait";
+        take.set_quest = "foundry"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Гаси и живи как все."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "foundry_wait";
+        n.text = "— Восемь кусков. Шлаковики его таскают, крысы растаскивают,\n"
+                 "по всему Городу валяется.";
+        n.options.push_back(bye("Иду."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "foundry_reward";
+        n.text = "Кузьма кидает железо в летку не глядя и наконец садится.\n"
+                 "— Ещё год простоим.\n"
+                 "Держи молот. Он мастеров, из нижнего цеха. Мне его носить\n"
+                 "нельзя, а тебе — можно: ты не отсюда.";
+        DlgOption take;
+        take.text = "Принять молот. [420 опыта]";
+        take.set_quest = "foundry"; take.set_stage = QUEST_DONE;
+        take.take_item = "scrap_iron"; take.take_count = 8;
+        take.give_item = "slag_shield"; take.give_count = 1;
+        take.give_gold = 340; take.give_exp = 420;
+        n.options.push_back(take);
+        add(n);
+    }
+
+    // --- Счетовод Аким ---
+    {
+        DlgNode n; n.id = "counter_root";
+        n.text = "На верхней площадке ветер и человек с мерной цепью.\n"
+                 "— Тише. Сбиваюсь.";
+
+        DlgOption offer;
+        offer.text = "Что ты меряешь?";
+        offer.next = "counting_offer";
+        offer.req_quest = "counting"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption done;
+        done.text = "Шесть листов гроссбуха.";
+        done.next = "counting_reward";
+        done.req_quest = "counting"; done.req_stage_min = 1; done.req_stage_max = 1;
+        done.req_item = "ledger_page"; done.req_item_count = 6;
+        n.options.push_back(done);
+
+        DlgOption wait;
+        wait.text = "Ещё ищу листы.";
+        wait.next = "counting_wait";
+        wait.req_quest = "counting"; wait.req_stage_min = 1; wait.req_stage_max = 1;
+        n.options.push_back(wait);
+
+        DlgOption view;
+        view.text = "Что видно с башни?";
+        view.next = "counter_view";
+        n.options.push_back(view);
+
+        n.options.push_back(bye("Не буду мешать."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "counter_view";
+        n.text = "— В ясный день — вторая половина. Не на горизонте: выше него.\n"
+                 "Она не стоит на земле, её сносит. За двенадцать лет прошла\n"
+                 "треть неба.\n"
+                 "\n"
+                 "Там дым из труб. Значит, живут. Значит, тоже смотрят сюда.";
+        n.options.push_back(bye("Жутко."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "counting_offer";
+        n.text = "— Расстояние. Беру две точки, между которыми до Стяжения было\n"
+                 "триста саженей, и меряю.\n"
+                 "\n"
+                 "Орденские писали: локоть в поколение. У меня выходит две сажени\n"
+                 "в год. Вчетверо быстрее. Я хочу ошибиться, но проверять не на чем:\n"
+                 "мои гроссбухи растащили счетоводы, которые тут ходят и считают\n"
+                 "вслух. Принеси шесть листов — сверю почерк и цифры.";
+        DlgOption take;
+        take.text = "Найду листы.";
+        take.next = "counting_wait";
+        take.set_quest = "counting"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Считай сам."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "counting_wait";
+        n.text = "— Шесть. И не читай их подолгу: в каждом третьем столбце ошибка\n"
+                 "на одну и ту же величину, и от этого делается нехорошо.";
+        n.options.push_back(bye("Понял."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "counting_reward";
+        n.text = "Аким сверяет листы, водя пальцем, и вдруг откладывает цепь.\n"
+                 "— Сходится. Две сажени.\n"
+                 "Значит, я не ошибся, и значит, я это увижу.\n"
+                 "\n"
+                 "Возьми линзу. Мне она больше не нужна: я уже посмотрел.";
+        DlgOption take;
+        take.text = "Принять линзу. [450 опыта]";
+        take.set_quest = "counting"; take.set_stage = QUEST_DONE;
+        take.take_item = "ledger_page"; take.take_count = 6;
+        take.give_item = "counter_lens"; take.give_count = 1;
+        take.give_gold = 300; take.give_exp = 450;
+        n.options.push_back(take);
+        add(n);
+    }
+
+    // --- Писарь Феофан ---
+    {
+        DlgNode n; n.id = "scribe_root";
+        n.text = "Писарь сидит на ступенях запертого архива с пустой чернильницей.\n"
+                 "— Двести лет как переписал начисто и запер. Ключ отдал смотрителю.";
+
+        DlgOption offer;
+        offer.text = "А смотритель?";
+        offer.next = "lists_offer";
+        offer.req_quest = "lists"; offer.req_stage_min = QUEST_NONE; offer.req_stage_max = QUEST_NONE;
+        n.options.push_back(offer);
+
+        DlgOption done;
+        done.text = "Я прочёл опись. Каждого — половина.";
+        done.next = "lists_reward";
+        done.req_quest = "lists"; done.req_stage_min = 2; done.req_stage_max = 2;
+        n.options.push_back(done);
+
+        DlgOption wait;
+        wait.text = "Ещё не добрался до описи.";
+        wait.next = "lists_wait";
+        wait.req_quest = "lists"; wait.req_stage_min = 1; wait.req_stage_max = 1;
+        n.options.push_back(wait);
+
+        n.options.push_back(bye("Ещё зайду."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "lists_offer";
+        n.text = "— На посту. Стоит и не сменяется. Я спрашивал ключ — он смотрит\n"
+                 "и молчит. Он не злой, ему просто велено, а того, кто велел,\n"
+                 "давно нет.\n"
+                 "\n"
+                 "Мне нужна опись. Не списки — опись, первый лист. Там сказано,\n"
+                 "как считали. Я всю жизнь думаю, что мы посчитали неправильно.";
+        DlgOption take;
+        take.text = "Достану ключ и прочту.";
+        take.next = "lists_wait";
+        take.set_quest = "lists"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Это между вами."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "lists_wait";
+        n.text = "— Ключ у смотрителя. Другого нет, я проверял сорок лет.\n"
+                 "И вот что: он не отдаст. Совсем.";
+        n.options.push_back(bye("Понял."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "lists_reward";
+        n.text = "Феофан слушает, и лицо у него делается спокойное.\n"
+                 "— Половина. Ну конечно.\n"
+                 "Мы считали души, а надо было считать имена. Четыре тысячи двести\n"
+                 "душ, и каждая записана дважды по половине — здесь и там.\n"
+                 "\n"
+                 "Значит, никто не погиб. Значит, всех просто разрезало.\n"
+                 "Двести лет я думал, что мы ошиблись в арифметике. Мы ошиблись\n"
+                 "в том, что считали.";
+        DlgOption take;
+        take.text = "Отдать половину имени. [480 опыта]";
+        take.set_quest = "lists"; take.set_stage = QUEST_DONE;
+        take.give_item = "clerk_robe"; take.give_count = 1;
+        take.give_gold = 360; take.give_exp = 480;
+        n.options.push_back(take);
+        add(n);
+    }
+
+    // --- Перевозчик Хмурый ---
+    {
+        DlgNode n; n.id = "ferry_root";
+        n.text = "Лодка стоит на воде, но вода стоит тоже. Перевозчик сидит в ней\n"
+                 "и не гребёт.\n"
+                 "— Ходить можешь. Плавать не пробуй.";
+        DlgOption why;
+        why.text = "Почему не плавать?";
+        why.next = "ferry_why";
+        n.options.push_back(why);
+        DlgOption token;
+        token.text = "Зачем тебе жетоны, если ты не возишь?";
+        token.next = "ferry_token_talk";
+        n.options.push_back(token);
+        DlgOption trade;
+        trade.text = "Что продаёшь?";
+        trade.open_shop = true;
+        n.options.push_back(trade);
+        n.options.push_back(bye("Пойду по воде."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "ferry_why";
+        n.text = "— Потому что не утонешь.\n"
+                 "Думаешь, хорошо? Не утонешь и не выплывешь. Так и будешь\n"
+                 "стоять по грудь, пока не надоест. А надоедает не сразу.";
+        n.options.push_back(bye("Ясно."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "ferry_token_talk";
+        n.text = "— Жетон не плата. Жетон — счёт.\n"
+                 "Сколько роздал, столько должно вернуться. Вернулось меньше —\n"
+                 "значит, кто-то остался на воде, и я иду искать.\n"
+                 "\n"
+                 "Пять не вернулось. Пятый год пятеро.";
+        n.options.push_back(bye("Найдутся."));
         add(n);
     }
 

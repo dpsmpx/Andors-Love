@@ -10,7 +10,7 @@ import sys
 from collections import deque
 
 W, H = 48, 18
-WALKABLE = set(".,=")
+WALKABLE = set(".,=:")   # ':' — мёртвая вода: стоит и держит вес
 
 
 class Map:
@@ -337,6 +337,8 @@ market.objects = [
     "exit 2 9 glassfield 44 9",
     "exit 23 2 caravanserai 24 15",
     "exit 45 9 doubled 3 9",
+    "exit 23 16 halfcity 24 2 quest=cityroad:1 "
+    "deny=Северная дорога уходит в туман. Улей говорил, откуда возят городской товар.",
 ]
 
 # --- Подвесной мост в никуда ---
@@ -429,9 +431,152 @@ doubled.objects = [
     "exit 2 9 market 44 9",
 ]
 
+# ===================== РЕГИОН III · ПОЛОВИНЫ =====================
+
+# --- Половина Города: всё восточнее среза просто не существует ---
+halfcity = Map("halfcity", "Половина Города", "#")
+halfcity.rect(2, 2, 28, 16, ".")                 # уцелевшая западная половина
+halfcity.rect(6, 4, 12, 7, "#")                  # кварталы
+halfcity.rect(16, 4, 22, 7, "#")
+halfcity.rect(6, 10, 12, 14, "#")
+halfcity.rect(16, 10, 22, 14, "#")
+halfcity.rect(8, 5, 10, 6, ".")                  # дворы внутри кварталов
+halfcity.rect(18, 5, 20, 6, ".")
+halfcity.rect(9, 7, 9, 7, ".")
+halfcity.rect(19, 7, 19, 7, ".")
+halfcity.rect(8, 11, 10, 13, ".")
+halfcity.rect(9, 10, 9, 10, ".")
+halfcity.objects = [
+    "npc 14 9 survivor",
+    "sign 27 9 Мостовая обрывается ровно, как ножом. Дальше не развалины — дальше ничего.",
+    "note 9 6 cityhalf",
+    "note 19 6 lastclerk",
+    "item 26 5 city_brick 1",
+    "item 26 13 scrap_iron 1",
+    "chest 9 12 260 - strong_tea:1 scrap_iron:2 ledger_page:1",
+    "spawn 14 3 city_rat 3 4",
+    "spawn 14 15 city_rat 3 4",
+    "spawn 26 7 cut_man 2 3",
+    "spawn 27 15 half_warden 1 2",
+    "exit 24 2 market 23 15",
+    "exit 4 2 endless 3 9",
+    "exit 4 16 foundry 24 3",
+    "exit 24 16 canal 24 2",
+]
+
+# --- Улица без конца: восточный конец выводит в собственное начало ---
+endless = Map("endless", "Улица без конца", "#")
+endless.rect(2, 8, 45, 10, ".")                  # прямая улица
+endless.rect(10, 5, 14, 8, ".")                  # ниши по сторонам
+endless.rect(24, 10, 28, 13, ".")
+endless.rect(36, 5, 40, 8, ".")
+endless.objects = [
+    "sign 6 9 Кольцевая улица. Она прямая. Восемьсот сорок шагов.",
+    "note 26 12 endless",
+    "item 12 6 ledger_page 1",
+    "chest 38 6 220 - strong_tea:1 old_coin:3",
+    "spawn 20 9 mad_clerk 3 5",
+    "spawn 33 9 mad_clerk 2 4",
+    "exit 2 9 halfcity 5 2",
+    # Восточный конец не кончается: он и есть западное начало.
+    "exit 45 9 endless 3 9",
+]
+
+# --- Литейный двор: печь не гасили двести лет ---
+foundry = Map("foundry", "Литейный двор", "#")
+foundry.rect(20, 2, 28, 5, ".")                  # ворота сверху
+foundry.rect(6, 5, 42, 12, ".")                  # цех
+foundry.rect(14, 7, 20, 10, "#")                 # печь
+foundry.rect(17, 6, 17, 6, ".")                  # летка
+foundry.rect(28, 7, 34, 10, "#")                 # формовочная
+foundry.rect(31, 6, 31, 6, ".")
+foundry.rect(8, 13, 20, 15, ".")                 # нижний цех
+foundry.rect(36, 13, 42, 15, ".")
+foundry.objects = [
+    "npc 24 6 founder",
+    "npc 8 7 scribe",
+    "sign 24 4 Жар слышно за квартал. Летку не закрывают.",
+    "sign 7 5 Дверь архива. На ступенях сидит писарь и смотрит на неё.",
+    "note 40 14 foundry",
+    "item 10 14 scrap_iron 2",
+    "item 38 6 scrap_iron 1",
+    "item 8 11 scrap_iron 1",
+    "chest 41 11 300 - scrap_iron:3 ember:1 strong_tea:1",
+    "spawn 10 8 slag_thing 3 5",
+    "spawn 38 9 slag_thing 3 5",
+    "spawn 14 14 slag_thing 2 3",
+    "spawn 40 14 slag_master 1 2",
+    "exit 24 3 halfcity 5 16",
+    "exit 6 6 archive 24 15 key=archive_key "
+    "deny=Дверь архива заперта. Феофан говорил, что ключ у смотрителя — и что тот его не отдаст.",
+]
+
+# --- Канал Мёртвой воды: вода стоит, по ней ходят ---
+canal = Map("canal", "Канал Мёртвой воды", "#")
+canal.rect(20, 2, 28, 6, ",")                    # спуск с города
+canal.rect(2, 6, 45, 11, ":")                    # сам канал: стоячая вода
+canal.rect(2, 11, 45, 13, ",")                   # южная набережная
+canal.rect(6, 4, 10, 6, ",")                     # причал
+canal.rect(38, 4, 44, 6, ",")
+canal.objects = [
+    "npc 8 5 ferryman",
+    "sign 24 5 Вода не течёт и не сохнет. Ходить можно, плавать нельзя.",
+    "note 42 5 deadwater",
+    "item 16 8 ferry_token 1",
+    "item 30 9 ferry_token 1",
+    "item 12 12 ferry_token 1",
+    "chest 43 12 280 - ferry_token:2 antidote:2 strong_tea:1",
+    "spawn 20 8 canal_walker 3 5",
+    "spawn 36 9 canal_walker 3 5",
+    "spawn 28 12 city_rat 2 4",
+    "exit 24 2 halfcity 24 15",
+    "exit 44 12 counter 24 15",
+]
+
+# --- Башня Счетовода ---
+counter_tower = Map("counter", "Башня Счетовода", "#")
+counter_tower.rect(20, 12, 28, 16, ".")          # основание
+counter_tower.rect(22, 4, 26, 12, ".")           # ствол башни
+counter_tower.rect(16, 2, 32, 5, ".")            # верхняя площадка
+counter_tower.rect(10, 13, 20, 15, ".")
+counter_tower.rect(28, 13, 38, 15, ".")
+counter_tower.objects = [
+    "npc 24 3 counter",
+    "sign 24 11 Лестница узкая, ветер сильный. Наверху кто-то считает вслух.",
+    "note 30 3 halves",
+    "note 18 3 counting",
+    "item 12 14 ledger_page 1",
+    "item 36 14 ledger_page 1",
+    "chest 11 14 240 - ledger_page:2 strong_tea:2",
+    "spawn 24 8 mad_clerk 2 3",
+    "spawn 34 14 mad_clerk 2 4",
+    "exit 24 15 canal 43 12",
+]
+
+# --- Городской архив ---
+archive = Map("archive", "Городской архив", "#")
+archive.rect(20, 12, 28, 16, ".")                # сени
+archive.rect(6, 4, 42, 12, ".")                  # зал
+for x in (10, 16, 22, 28, 34):                   # стеллажи
+    archive.rect(x, 5, x + 2, 10, "#")
+archive.rect(6, 11, 42, 11, ".")
+archive.objects = [
+    "sign 24 13 Полки до потолка. Половина полок пуста, и пыли на них нет.",
+    "note 38 6 lists",
+    "item 14 8 half_name 1",
+    "item 26 8 ledger_page 2",
+    "chest 40 9 380 - ledger_page:3 old_coin:4 strong_tea:1",
+    "chest 8 11 320 - clerk_robe:1 ledger_page:2",
+    "spawn 14 6 archive_moth 3 5",
+    "spawn 32 8 archive_moth 3 5",
+    "spawn 24 11 archive_moth 2 4",
+    "exit 24 15 foundry 7 6",
+]
+
 MAPS = [village, forest, cave, ruins, sanctum, vault,
         goatpath, glassfield, mill, market, bridge, saltmines,
-        caravanserai, doubled]
+        caravanserai, doubled,
+        halfcity, endless, foundry, canal, counter_tower, archive]
 
 # --------------------------------------------------------------- проверки
 def reachable(m, start):
@@ -455,7 +600,9 @@ def check():
                "ruins": (24, 3), "sanctum": (3, 9), "vault": (3, 9),
                "goatpath": (24, 15), "glassfield": (3, 9), "mill": (24, 15),
                "market": (3, 9), "bridge": (24, 3), "saltmines": (24, 3),
-               "caravanserai": (24, 15), "doubled": (3, 9)}
+               "caravanserai": (24, 15), "doubled": (3, 9),
+               "halfcity": (24, 2), "endless": (3, 9), "foundry": (24, 3),
+               "canal": (24, 2), "counter": (24, 15), "archive": (24, 15)}
 
     for m in MAPS:
         start = entries[m.id]
