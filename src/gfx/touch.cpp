@@ -5,12 +5,10 @@
 namespace gfx {
 
 Pointer::Pointer()
-    : swipe_px_(24), hold_ms_(320), hold_active_(false),
-      hold_x_(0), hold_y_(0), hold_id_(-1) {}
+    : swipe_px_(24), lead_(-1), press_x_(0), press_y_(0), press_ms_(0) {}
 
-void Pointer::configure(int swipe_px, unsigned hold_ms) {
+void Pointer::configure(int swipe_px) {
     if (swipe_px > 0) swipe_px_ = swipe_px;
-    if (hold_ms > 0)  hold_ms_ = hold_ms;
 }
 
 Pointer::Touch* Pointer::find(int id) {
@@ -20,6 +18,11 @@ Pointer::Touch* Pointer::find(int id) {
 }
 
 void Pointer::push(const Gesture& g) { queue_.push_back(g); }
+
+unsigned Pointer::held_ms(unsigned now_ms) const {
+    if (lead_ < 0) return 0;
+    return now_ms > press_ms_ ? now_ms - press_ms_ : 0;
+}
 
 void Pointer::down(int id, int x, int y, unsigned now_ms) {
     if (find(id)) return;
@@ -31,7 +34,12 @@ void Pointer::down(int id, int x, int y, unsigned now_ms) {
         t.start_y = t.cur_y = y;
         t.down_ms = now_ms;
         t.swiped = false;
-        t.held = false;
+
+        if (lead_ < 0) {
+            lead_ = id;
+            press_x_ = x; press_y_ = y;
+            press_ms_ = now_ms;
+        }
         return;
     }
 }
@@ -41,13 +49,12 @@ void Pointer::move(int id, int x, int y, unsigned now_ms) {
     if (!t) return;
     t->cur_x = x; t->cur_y = y;
 
-    if (t->held) {                 // бег: цель едет за пальцем
-        hold_x_ = x; hold_y_ = y;
-        return;
-    }
+    // Ведущий палец тянет за собой цель: где он сейчас, туда герой и идёт.
+    if (id == lead_) { press_x_ = x; press_y_ = y; }
 
     // Свайп выдаётся столько раз, сколько порогов прошёл палец: одно долгое
-    // движение — несколько шагов, как и ждёшь от «веду пальцем».
+    // движение — несколько щелчков прокрутки, как и ждёшь от «веду пальцем».
+    // Героя это больше не двигает — за него отвечает состояние пальца.
     for (;;) {
         const int dx = x - t->start_x;
         const int dy = y - t->start_y;
@@ -69,37 +76,13 @@ void Pointer::move(int id, int x, int y, unsigned now_ms) {
     (void)now_ms;
 }
 
-void Pointer::tick(unsigned now_ms) {
-    for (int i = 0; i < MAX_TOUCHES; ++i) {
-        Touch& t = touches_[i];
-        if (!t.active || t.held || t.swiped) continue;
-        if (now_ms - t.down_ms < hold_ms_) continue;
-        // Задержался на месте — это бег, а не тап.
-        t.held = true;
-        hold_active_ = true;
-        hold_id_ = t.id;
-        hold_x_ = t.cur_x; hold_y_ = t.cur_y;
-
-        Gesture g;
-        g.kind = G_HOLD_BEGIN;
-        g.x = t.cur_x; g.y = t.cur_y;
-        push(g);
-    }
-}
-
 void Pointer::up(int id, int x, int y, unsigned now_ms) {
     Touch* t = find(id);
     if (!t) return;
 
-    if (t->held) {
-        Gesture g;
-        g.kind = G_HOLD_END;
-        g.x = x; g.y = y;
-        push(g);
-        if (hold_id_ == id) { hold_active_ = false; hold_id_ = -1; }
-    } else if (!t->swiped) {
-        // Ни сдвига, ни задержки — тап. Отпускание может прийти позже порога
-        // удержания только если tick() не звали: считаем тапом и это.
+    // Тап — только если палец не уезжал: иначе это была прокрутка или ведение
+    // цели, и подтверждать им ничего не надо.
+    if (!t->swiped) {
         Gesture g;
         g.kind = G_TAP;
         g.x = x; g.y = y;
@@ -108,6 +91,19 @@ void Pointer::up(int id, int x, int y, unsigned now_ms) {
     (void)now_ms;
     t->active = false;
     t->id = -1;
+
+    if (id == lead_) {
+        // Ведущим становится любой другой палец, который ещё на экране.
+        lead_ = -1;
+        for (int i = 0; i < MAX_TOUCHES; ++i) {
+            if (!touches_[i].active) continue;
+            lead_ = touches_[i].id;
+            press_x_ = touches_[i].cur_x;
+            press_y_ = touches_[i].cur_y;
+            press_ms_ = touches_[i].down_ms;
+            break;
+        }
+    }
 }
 
 bool Pointer::poll(Gesture* out) {
@@ -120,8 +116,7 @@ bool Pointer::poll(Gesture* out) {
 void Pointer::clear() {
     queue_.clear();
     for (int i = 0; i < MAX_TOUCHES; ++i) touches_[i] = Touch();
-    hold_active_ = false;
-    hold_id_ = -1;
+    lead_ = -1;
 }
 
 } // namespace gfx

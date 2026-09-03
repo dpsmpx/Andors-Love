@@ -65,8 +65,8 @@ public:
     // Прогон по сценарию без человека: команды подаются строками, кадры
     // сохраняются в BMP. Нужен, чтобы графику можно было проверять там, где
     // нет ни экрана, ни пальцев — на сборочной машине и в тестах.
-    // Команды: tap X Y | hold X Y | release | swipe DX DY | key K |
-    //          type ТЕКСТ | wait MS | shot ИМЯ | quit
+    // Команды: tap X Y | hold X Y | drag X Y | release | swipe DX DY |
+    //          key K | type ТЕКСТ | wait MS | where | shot ИМЯ | quit
     int run_script(const std::vector<std::string>& script, const std::string& out_dir,
                    int argc, char** argv);
 
@@ -89,6 +89,11 @@ private:
     void on_tap(int x, int y);
     void on_key(int key);
     void on_swipe(int dx, int dy);
+    // Ходьба по удерживаемому пальцу: цель — клетка под пальцем, темп —
+    // шаг или бег, смотря сколько палец уже держится.
+    void follow_finger();
+    bool reachable_cell(const Location& loc, Vec2 cell);
+    static const unsigned RUN_AFTER_MS = 700;
     // Набранный текст: и с настоящей клавиатуры, и из сценария — одним путём.
     void on_text(const char* utf8);
     void scroll_modal(Modal& m, int rows);

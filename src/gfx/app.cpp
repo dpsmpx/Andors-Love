@@ -6,6 +6,7 @@
 
 #include <SDL2/SDL.h>
 
+#include <cstdio>
 #include <cstdlib>
 #include <sstream>
 
@@ -78,7 +79,7 @@ bool App::start(int argc, char** argv, int win_w, int win_h) {
         SDL_Log("%s", c_.error().c_str());
         return false;
     }
-    ptr_.configure(c_.touch_unit() / 3, 320);
+    ptr_.configure(c_.touch_unit() / 3);
     refresh_save_summary();
     return true;
 }
@@ -98,28 +99,16 @@ int App::run(int argc, char** argv) {
 
 void App::step(unsigned now_ms) {
     now_ms_ = now_ms;
-    ptr_.tick(now_ms_);
 
     Gesture gs;
     while (ptr_.poll(&gs)) {
         if (gs.kind == G_TAP) on_tap(gs.x, gs.y);
         else if (gs.kind == G_SWIPE) on_swipe(gs.dx, gs.dy);
-        else if (gs.kind == G_HOLD_BEGIN) {
-            // Задержка на поле — бег к точке под пальцем.
-            if (mode_ == MODE_PLAY && !modal_open() && !g_.combat().active) {
-                Vec2 cell;
-                if (cell_at(gs.x, gs.y, &cell)) walk_.go(cell, true);
-            }
-        } else if (gs.kind == G_HOLD_END) {
-            if (walk_.running()) walk_.stop();
-        }
     }
 
-    // Бег ведёт героя за пальцем, пока палец на экране.
-    if (mode_ == MODE_PLAY && walk_.active() && walk_.running() && ptr_.holding()) {
-        Vec2 cell;
-        if (cell_at(ptr_.hold_x(), ptr_.hold_y(), &cell)) walk_.retarget(cell);
-    }
+    // Палец на карте — герой идёт к нему. Это состояние, а не событие:
+    // держишь — идёт, ведёшь пальцем — цель едет следом.
+    follow_finger();
 
     if (mode_ == MODE_PLAY && !modal_open() && !g_.combat().active) {
         if (walk_.update(g_, now_ms_)) {
@@ -282,13 +271,40 @@ void App::on_text(const char* utf8) {
         new_name_ += utf8;
 }
 
+// Есть ли смысл идти в эту клетку. Стена — нет; всё остальное, вплоть до
+// таблички и врага, — да: до них ходьба доводит и делает то же, что шаг
+// вручную. Предикат один на удержание и на тап, иначе палец и касание
+// понимали бы карту по-разному.
+bool App::reachable_cell(const Location& loc, Vec2 cell) {
+    return loc.walkable(cell) || loc.exit_at(cell) || loc.npc_at(cell) ||
+           loc.sign_at(cell) || g_.mob_at(cell, loc.id);
+}
+
+void App::follow_finger() {
+    if (mode_ != MODE_PLAY || modal_open() || g_.combat().active) return;
+    if (!ptr_.pressed()) return;
+
+    Vec2 cell;
+    if (!cell_at(ptr_.press_x(), ptr_.press_y(), &cell)) return;
+
+    // В стену идти незачем: палец на непроходимой клетке — это или промах,
+    // или намерение открыть меню, и оба разбираются на отпускании.
+    const Location* loc = g_.here();
+    if (!loc || !reachable_cell(*loc, cell)) return;
+
+    // Держишь дольше — герой переходит на бег. Отдельного жеста для бега
+    // нет: удержание и есть движение, а долгое удержание — быстрое.
+    const bool run = ptr_.held_ms(now_ms_) >= RUN_AFTER_MS;
+    walk_.retarget(cell, run);
+}
+
 void App::on_swipe(int dx, int dy) {
     // В открытом окне свайп листает — список или текст, смотря что показано.
     if (Modal* m = top()) { scroll_modal(*m, dy); return; }
-    if (mode_ != MODE_PLAY) return;
-    if (g_.combat().active) return;
-    walk_.stop();
-    step_player(dx, dy);
+    // На карте свайп ничего не делает сам: он лишь ведёт палец, а за героем
+    // следит follow_finger. Раньше свайп выдавал по шагу на каждый пройденный
+    // порог, и одно движение пальца уносило героя на десяток клеток разом.
+    (void)dx; (void)dy;
 }
 
 void App::world_tap(int x, int y) {
@@ -307,18 +323,20 @@ void App::world_tap(int x, int y) {
     Vec2 cell;
     if (!cell_at(x, y, &cell)) return;
 
-    // Тап по пустому месту, когда герой стоит, открывает меню. Если он идёт —
-    // тап его останавливает: это привычнее, чем открывать меню на ходу.
-    if (walk_.active()) { walk_.stop(); return; }
-
     const Location* loc = g_.here();
     if (!loc) return;
-    if (cell.x == g_.player().pos.x && cell.y == g_.player().pos.y) { push(Modal::GameMenu); return; }
-    if (!loc->walkable(cell) && !loc->exit_at(cell) && !loc->npc_at(cell) &&
-        !loc->sign_at(cell) && !g_.mob_at(cell, loc->id)) {
+
+    // Тап по себе или в стену — меню, но только если герой стоит. На ходу
+    // то же касание просто останавливает его: меню, выскочившее посреди
+    // дороги от промаха по стене, — последнее, что нужно бегущему.
+    const bool on_self = (cell.x == g_.player().pos.x && cell.y == g_.player().pos.y);
+    if (on_self || !reachable_cell(*loc, cell)) {
+        if (walk_.active()) { walk_.stop(); return; }
         push(Modal::GameMenu);
         return;
     }
+    // По остальному тап задаёт цель и отпускает: короткое касание отправляет
+    // героя туда и после того, как палец убрали, — «тапнул и пошёл».
     walk_.go(cell, false);
 }
 
@@ -633,6 +651,7 @@ int App::run_script(const std::vector<std::string>& script, const std::string& o
 
     unsigned clock = 0;
     int fake_id = 100;
+    const unsigned FRAME_MS = 16;
 
     for (std::size_t i = 0; i < script.size() && !quit_; ++i) {
         std::istringstream ls(script[i]);
@@ -646,13 +665,16 @@ int App::run_script(const std::vector<std::string>& script, const std::string& o
             clock += 40;
             ptr_.up(fake_id, x, y, clock);
         } else if (cmd == "hold") {
+            // Палец опускается и остаётся: дальше его двигают drag-ом,
+            // а отпускают release-ом. Ходьбу ведёт именно это состояние.
             int x = 0, y = 0; ls >> x >> y;
             ++fake_id;
             ptr_.down(fake_id, x, y, clock);
-            clock += 400;
-            ptr_.tick(clock);
+        } else if (cmd == "drag") {
+            int x = 0, y = 0; ls >> x >> y;
+            ptr_.move(fake_id, x, y, clock);
         } else if (cmd == "release") {
-            ptr_.up(fake_id, ptr_.hold_x(), ptr_.hold_y(), clock);
+            ptr_.up(fake_id, ptr_.press_x(), ptr_.press_y(), clock);
         } else if (cmd == "swipe") {
             int dx = 0, dy = 0; ls >> dx >> dy;
             ++fake_id;
@@ -668,13 +690,26 @@ int App::run_script(const std::vector<std::string>& script, const std::string& o
             else if (k == "enter") on_key('\r');
             else if (!k.empty()) on_key(static_cast<unsigned char>(k[0]));
         } else if (cmd == "wait") {
+            // Ожидание идёт кадрами, а не одним прыжком часов: удержание
+            // пальца проверяется ровно тем же способом, каким работает
+            // живой цикл, иначе за секунду ожидания вышел бы один шаг.
             int ms = 0; ls >> ms;
-            clock += static_cast<unsigned>(ms);
+            for (int left = ms; left > 0; left -= static_cast<int>(FRAME_MS)) {
+                clock += FRAME_MS;
+                step(clock);
+            }
         } else if (cmd == "type") {
             std::string rest;
             std::getline(ls, rest);
             if (!rest.empty() && rest[0] == ' ') rest.erase(0, 1);
             on_text(rest.c_str());
+        } else if (cmd == "where") {
+            // Печать положения героя: по ней сценарий проверяется снаружи,
+            // как снимки экрана проверяют рисование.
+            std::printf("where %d %d %s %s\n", g_.player().pos.x, g_.player().pos.y,
+                        walk_.active() ? (walk_.running() ? "run" : "walk") : "stand",
+                        g_.here() ? g_.here()->id.c_str() : "-");
+            std::fflush(stdout);
         } else if (cmd == "quit") {
             quit_ = true;
         }
@@ -693,7 +728,7 @@ int App::run_script(const std::vector<std::string>& script, const std::string& o
             if (surf) SDL_FreeSurface(surf);
         }
         c_.present();
-        clock += 16;
+        clock += FRAME_MS;
     }
 
     c_.close();

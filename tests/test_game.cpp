@@ -1473,62 +1473,62 @@ void test_font() {
 }
 
 void test_gestures() {
-    section("жесты: тап, удержание, свайп");
+    section("касания: тап, состояние пальца, свайп");
 
     gfx::Pointer p;
-    p.configure(20, 300);
+    p.configure(20);
     gfx::Gesture g;
 
     // Тап: коснулся и отпустил, не сдвинувшись.
     p.down(1, 100, 100, 0);
+    check(p.pressed(), "палец на экране");
+    eq(p.press_x(), 100, "и его позиция известна");
     p.up(1, 102, 101, 60);
+    check(!p.pressed(), "после отпускания пальца нет");
     check(p.poll(&g), "тап распознан");
     eq(static_cast<int>(g.kind), static_cast<int>(gfx::G_TAP), "именно тап");
     eq(g.x, 102, "координата отпускания");
     check(!p.poll(&g), "и больше ничего");
 
-    // Удержание: палец на месте дольше порога — это бег, а не тап.
+    // Удержание — это состояние, а не событие: по нему и ходит герой.
     p.clear();
     p.down(1, 50, 60, 1000);
-    p.tick(1100);
-    check(!p.poll(&g), "до порога удержание не срабатывает");
-    p.tick(1400);
-    check(p.poll(&g), "после порога срабатывает");
-    eq(static_cast<int>(g.kind), static_cast<int>(gfx::G_HOLD_BEGIN), "это удержание");
-    check(p.holding(), "палец считается удерживаемым");
-    p.move(1, 70, 90, 1500);
-    eq(p.hold_x(), 70, "цель бега едет за пальцем");
-    eq(p.hold_y(), 90, "и по второй оси тоже");
-    p.up(1, 70, 90, 1600);
-    check(p.poll(&g), "отпускание после удержания даёт событие");
-    eq(static_cast<int>(g.kind), static_cast<int>(gfx::G_HOLD_END), "конец удержания");
-    check(!p.holding(), "и удержание кончилось");
-    check(!p.poll(&g), "тапом отпускание после удержания не считается");
+    check(p.pressed(), "палец удерживается");
+    eq(static_cast<int>(p.held_ms(1000)), 0, "сразу после касания держится ноль");
+    eq(static_cast<int>(p.held_ms(1450)), 450, "и растёт по часам, а не по кадрам");
 
-    // Свайп: сдвиг дальше порога даёт шаг, а долгий сдвиг — несколько шагов.
+    // Ведение пальцем двигает цель и не выдаёт ни одного тапа.
+    p.move(1, 70, 90, 1500);
+    eq(p.press_x(), 70, "цель едет за пальцем");
+    eq(p.press_y(), 90, "и по второй оси тоже");
+    eq(static_cast<int>(p.held_ms(1500)), 500, "время удержания при ведении не сбрасывается");
+    p.up(1, 70, 90, 1600);
+    check(!p.pressed(), "палец отпущен");
+    while (p.poll(&g))
+        check(g.kind != gfx::G_TAP, "после ведения тапа не бывает");
+
+    // Свайп остаётся, но только для прокрутки списков: шагов он не даёт.
     p.clear();
     p.down(2, 200, 200, 0);
-    p.move(2, 265, 202, 30);          // три порога вправо
+    p.move(2, 265, 202, 30);
     int swipes = 0, last_dx = 0;
     while (p.poll(&g)) {
         eq(static_cast<int>(g.kind), static_cast<int>(gfx::G_SWIPE), "это свайп");
         ++swipes;
         last_dx = g.dx;
     }
-    eq(swipes, 3, "длинный свайп даёт столько шагов, сколько порогов пройдено");
+    eq(swipes, 3, "свайп щёлкает столько раз, сколько порогов пройдено");
     eq(last_dx, 1, "направление вправо");
-
     p.up(2, 265, 202, 60);
     check(!p.poll(&g), "после свайпа отпускание тапом не считается");
 
-    // Очень длинный протяг: шагов должно быть ровно столько, сколько
-    // порогов уместилось, и цикл выдачи обязан закончиться.
+    // Очень длинный протяг: цикл выдачи обязан закончиться.
     p.clear();
     p.down(9, 0, 0, 0);
     p.move(9, 2000, 0, 20);
     int long_swipes = 0;
     while (p.poll(&g)) ++long_swipes;
-    eq(long_swipes, 100, "длинный протяг даёт ровно 2000/20 шагов");
+    eq(long_swipes, 100, "длинный протяг даёт ровно 2000/20 щелчков");
     p.up(9, 2000, 0, 40);
     check(!p.poll(&g), "и тапом не заканчивается");
 
@@ -1540,12 +1540,16 @@ void test_gestures() {
     eq(g.dy, 1, "направление вниз");
     eq(g.dx, 0, "и без горизонтальной составляющей");
 
-    // Второй палец не ломает первый.
+    // Второй палец не перехватывает управление у первого.
     p.clear();
     p.down(4, 10, 10, 0);
     p.down(5, 400, 400, 10);
-    p.up(5, 400, 400, 40);
+    eq(p.press_x(), 10, "ведущим остаётся тот палец, что лёг первым");
     p.up(4, 10, 10, 80);
+    check(p.pressed(), "пока второй на экране, палец всё ещё есть");
+    eq(p.press_x(), 400, "и ведущим становится он");
+    p.up(5, 400, 400, 120);
+    check(!p.pressed(), "когда убрали оба — пальца нет");
     int taps = 0;
     while (p.poll(&g)) if (g.kind == gfx::G_TAP) ++taps;
     eq(taps, 2, "два пальца дают два тапа, и ни один не потерян");
@@ -1589,6 +1593,74 @@ void test_walk() {
         check(w.update(g, gfx::Walker::step_ms(false)), "а по времени — да");
         check(gfx::Walker::step_ms(true) < gfx::Walker::step_ms(false),
               "бег быстрее шага");
+    }
+
+    // Темп задаётся часами, а не числом вызовов: на быстром телефоне,
+    // где кадров втрое больше, герой должен идти ровно так же.
+    {
+        Game slow, fast;
+        slow.new_game("Медленный", "human", "swordsman");
+        fast.new_game("Быстрый", "human", "swordsman");
+        const Vec2 from = slow.player().pos;
+        const Vec2 target(from.x + 6, from.y);
+
+        gfx::Walker ws, wf;
+        ws.go(target, false);
+        wf.go(target, false);
+        // Секунда игры: у одного 20 кадров, у другого 200.
+        for (int i = 0; i <= 20; ++i)  ws.update(slow, static_cast<unsigned>(i) * 50);
+        for (int i = 0; i <= 200; ++i) wf.update(fast, static_cast<unsigned>(i) * 5);
+        eq(fast.player().pos.x, slow.player().pos.x,
+           "за одно и то же время пройдено одно и то же");
+
+        const int steps = slow.player().pos.x - from.x;
+        const int want = 1 + 1000 / static_cast<int>(gfx::Walker::step_ms(false));
+        eq(steps, want, "и ровно столько шагов, сколько укладывается в секунду");
+    }
+
+    // Смена цели не даёт лишнего шага: иначе частым касанием героя можно
+    // было бы разогнать быстрее любого бега.
+    {
+        Game g2;
+        g2.new_game("Ходок", "human", "swordsman");
+        const Vec2 from = g2.player().pos;
+        gfx::Walker w;
+        w.go(Vec2(from.x + 3, from.y), false);
+        check(w.update(g2, 0), "первый шаг — сразу");
+        for (int i = 0; i < 20; ++i) {
+            // Двадцать раз подряд подсовываем новую цель на той же клетке.
+            w.go(Vec2(g2.player().pos.x + 1, g2.player().pos.y), false);
+            check(!w.update(g2, 10), "новая цель шага не покупает");
+        }
+        eq(g2.player().pos.x, from.x + 1, "и герой сдвинулся ровно на шаг");
+
+        // То же для ведения цели пальцем.
+        gfx::Walker w2;
+        Game g3;
+        g3.new_game("Ходок", "human", "swordsman");
+        const Vec2 f3 = g3.player().pos;
+        w2.go(Vec2(f3.x + 5, f3.y), false);
+        check(w2.update(g3, 0), "шаг по касанию");
+        for (int i = 0; i < 20; ++i) {
+            w2.retarget(Vec2(f3.x + 5, f3.y + (i % 2)), false);
+            check(!w2.update(g3, 20), "ведение цели тоже не ускоряет");
+        }
+    }
+
+    // Дошёл — и следующая цель срабатывает сразу, без лишнего ожидания:
+    // стоять на месте паузы не стоит.
+    {
+        Game g2;
+        g2.new_game("Ходок", "human", "swordsman");
+        const Vec2 from = g2.player().pos;
+        gfx::Walker w;
+        w.go(Vec2(from.x + 1, from.y), false);
+        check(w.update(g2, 1000), "шаг до соседней клетки");
+        check(!w.update(g2, 1000), "цель достигнута — шага больше нет");
+        check(!w.active(), "и ходьба кончилась");
+        w.go(Vec2(from.x + 2, from.y), false);
+        check(!w.update(g2, 1000), "но пауза после шага никуда не делась");
+        check(w.update(g2, 1000 + gfx::Walker::step_ms(false)), "а по времени — идёт дальше");
     }
 
     // Упёрся в стену — остановился, а не топчется вечно.
