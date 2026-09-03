@@ -33,12 +33,11 @@ void Walker::stop() {
 }
 
 bool Walker::try_axis(Game& g, int dx, int dy, Bump* out) {
-    const Vec2 was = g.player().pos;
     const Bump b = g.try_move(dx, dy);
     if (out) *out = b;
-    // Локация могла смениться переходом — тогда шаг состоялся.
-    return b != Bump::Blocked && !(g.player().pos.x == was.x && g.player().pos.y == was.y &&
-                                   b == Bump::Moved);
+    // Всё, кроме упора, считается состоявшимся шагом — в том числе разговор
+    // и сундук, где герой остаётся на месте: шаг сделан, ходьбе конец.
+    return b != Bump::Blocked;
 }
 
 bool Walker::update(Game& g, unsigned now_ms) {

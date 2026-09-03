@@ -144,12 +144,8 @@ void Canvas::frame(const Rect& r, Color c, int thick) {
 
 void Canvas::glyph_at(int x, int y, unsigned cp, Color c, int sc) {
     if (cp == ' ' || cp == 0) return;
-    int g = -1;
-    for (int i = 0; i < FONT_GLYPHS; ++i)
-        if (FONT_CODEPOINTS[i] == cp) { g = i; break; }
-    if (g < 0)
-        for (int i = 0; i < FONT_GLYPHS; ++i)
-            if (FONT_CODEPOINTS[i] == '?') { g = i; break; }
+    int g = glyph_index(cp);
+    if (g < 0) g = glyph_index('?');
     if (g < 0) return;
 
     SDL_Rect src = {(g % ATLAS_COLS) * FONT_W, (g / ATLAS_COLS) * FONT_H, FONT_W, FONT_H};

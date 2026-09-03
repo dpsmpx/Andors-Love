@@ -27,8 +27,8 @@ void Pointer::down(int id, int x, int y, unsigned now_ms) {
         if (touches_[i].active) continue;
         Touch& t = touches_[i];
         t.id = id; t.active = true;
-        t.start_x = t.origin_x = t.cur_x = x;
-        t.start_y = t.origin_y = t.cur_y = y;
+        t.start_x = t.cur_x = x;
+        t.start_y = t.cur_y = y;
         t.down_ms = now_ms;
         t.swiped = false;
         t.held = false;

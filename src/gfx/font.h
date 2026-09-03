@@ -22,6 +22,11 @@ extern const unsigned char  FONT_BITS[];
 // молча оставлять дыру.
 const unsigned char* glyph(unsigned cp);
 
+// Номер глифа в таблице или -1. Отрисовке нужен именно он: за кадр
+// рисуются тысячи символов, и перебор всей таблицы на каждый — заметная
+// работа на ровном месте.
+int glyph_index(unsigned cp);
+
 // Есть ли такой символ в шрифте на самом деле.
 bool has_glyph(unsigned cp);
 

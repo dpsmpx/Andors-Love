@@ -56,14 +56,12 @@ private:
         int  id;
         bool active;
         int  start_x, start_y;   // точка, от которой меряется свайп
-        int  origin_x, origin_y; // где палец опустился
         int  cur_x, cur_y;
         unsigned down_ms;
         bool swiped;             // касание уже ушло в свайпы
         bool held;               // по нему уже сработало удержание
         Touch() : id(-1), active(false), start_x(0), start_y(0),
-                  origin_x(0), origin_y(0), cur_x(0), cur_y(0),
-                  down_ms(0), swiped(false), held(false) {}
+                  cur_x(0), cur_y(0), down_ms(0), swiped(false), held(false) {}
     };
 
     Touch* find(int id);

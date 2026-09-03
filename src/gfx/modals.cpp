@@ -24,6 +24,7 @@ const char* kind_caption(Modal::Kind k) {
         case Modal::Enchant:     return "Зачарование";
         case Modal::EnchantPick: return "Выбор руны";
         case Modal::Help:        return "Управление";
+        case Modal::TextInput:   return "";
         default:                 return "";
     }
 }
@@ -57,7 +58,8 @@ std::string item_desc(const ItemDef* d) {
 
 // ------------------------------------------------------- содержимое окон
 
-void App::collect_rows(Modal& m, std::vector<Row>* rows, std::vector<std::string>* ids) const {
+void App::collect_rows(const Modal& m, std::vector<Row>* rows,
+                       std::vector<std::string>* ids) const {
     rows->clear();
     ids->clear();
     const Content& c = Content::get();
@@ -288,7 +290,21 @@ Rect App::modal_body(const Modal& m, Rect* frame_out, std::vector<Rect>* buttons
         case Modal::Inventory:   labels->push_back("Закрыть"); break;
         case Modal::Shop:        labels->push_back(m.selling ? "Покупать" : "Продавать");
                                  labels->push_back("Закрыть"); break;
-        case Modal::Book:        labels->push_back("Закрыть"); break;
+        case Modal::Book: {
+            // Найденные записки не правятся — у них только «Закрыть».
+            const Book* b = g_.book(m.arg);
+            if (b && !b->readonly) {
+                labels->push_back("Дописать");
+                labels->push_back("Название");
+                labels->push_back("Стереть");
+            }
+            labels->push_back("Закрыть");
+            break;
+        }
+        case Modal::TextInput:
+            labels->push_back("Готово");
+            labels->push_back("Отмена");
+            break;
         case Modal::Dialogue:    break;                        // варианты сами и есть кнопки
         default:                 labels->push_back("Закрыть"); break;
     }
@@ -298,10 +314,13 @@ Rect App::modal_body(const Modal& m, Rect* frame_out, std::vector<Rect>* buttons
     const int cw = c_.cell_w(), ch = c_.cell_h();
     int want_w = 44 * cw;
     int want_h = 22 * ch;
-    if (!is_text_modal(m.kind) && m.kind != Modal::Dialogue) {
+    if (m.kind == Modal::TextInput) {
+        want_w = 40 * cw;
+        want_h = c_.touch_unit() + ch * 3;
+    } else if (!is_text_modal(m.kind) && m.kind != Modal::Dialogue) {
         std::vector<Row> rows;
         std::vector<std::string> ids;
-        collect_rows(const_cast<Modal&>(m), &rows, &ids);
+        collect_rows(m, &rows, &ids);
         const int row_h = m.list.row_height(c_);
         int need = static_cast<int>(rows.size()) * row_h;
         const int cap = c_.height() - ch * 8;
@@ -366,6 +385,28 @@ void App::draw_modal(Modal& m) {
         return;
     }
 
+    if (m.kind == Modal::TextInput) {
+        const int ch3 = c_.cell_h();
+        c_.text(area.x, area.y, m.title, th.faint, c_.scale());
+        Rect field(area.x, area.y + ch3 + ch3 / 2, area.w, c_.touch_unit());
+        c_.fill(field, Color(30, 34, 42, 250));
+        c_.frame(field, th.accent, 2);
+        // Виден хвост строки: набирающий смотрит туда, где курсор.
+        std::size_t fit = static_cast<std::size_t>(field.w / c_.cell_w());
+        fit = fit > 2 ? fit - 2 : 1;
+        std::string shown = m.buffer;
+        while (utf8_len(shown) > fit) {
+            std::size_t k = 1;
+            while (k < shown.size() && (static_cast<unsigned char>(shown[k]) & 0xC0) == 0x80) ++k;
+            shown.erase(0, k);
+        }
+        c_.text(field.x + c_.cell_w() / 2, field.y + (field.h - ch3) / 2, shown + "_",
+                th.text, c_.scale());
+        for (std::size_t i = 0; i < btns.size(); ++i)
+            button(c_, btns[i], labels[i], true, false);
+        return;
+    }
+
     if (is_text_modal(m.kind)) {
         std::string body = m.body;
         if (m.kind == Modal::Character) {
@@ -400,7 +441,13 @@ void App::draw_modal(Modal& m) {
         } else if (m.kind == Modal::Book) {
             const Book* b = g_.book(m.arg);
             body.clear();
-            if (b) for (const std::string& l : b->lines) body += l + "\n";
+            if (b)
+                for (std::size_t i = 0; i < b->lines.size(); ++i) {
+                    std::string num = to_str(static_cast<int>(i) + 1);
+                    while (num.size() < 2) num = " " + num;
+                    body += num + " " +
+                            (b->lines[i].empty() ? std::string("·") : b->lines[i]) + "\n";
+                }
             if (body.empty()) body = "(пусто)";
         }
         text_block(c_, area, body, th.text, m.scroll);
@@ -425,13 +472,32 @@ void App::modal_tap(Modal& m, int x, int y) {
     const Rect area = modal_body(m, &frame, &btns, &labels);
 
     // Тап мимо окна закрывает его: так на телефоне закрывается всё.
-    if (!frame.contains(x, y)) { pop(); return; }
+    if (!frame.contains(x, y)) { close_top(); return; }
 
     for (std::size_t i = 0; i < btns.size(); ++i) {
         if (!btns[i].contains(x, y)) continue;
-        if (labels[i] == "Закрыть") { pop(); return; }
+        if (labels[i] == "Закрыть") { close_top(); return; }
         if (labels[i] == "Продавать") { m.selling = true;  m.list = ListView(); return; }
         if (labels[i] == "Покупать")  { m.selling = false; m.list = ListView(); return; }
+        if (labels[i] == "Готово")    { commit_text_input(m); return; }
+        if (labels[i] == "Отмена")    { pop(); return; }
+        if (labels[i] == "Дописать") {
+            push_text_input("Новая строка", m.arg, BOOK_APPEND, "",
+                            static_cast<std::size_t>(BOOK_MAX_CHARS));
+            return;
+        }
+        if (labels[i] == "Название") {
+            const Book* b = g_.book(m.arg);
+            push_text_input("Название книги", m.arg, -1, b ? b->title : std::string(),
+                            static_cast<std::size_t>(BOOK_TITLE_MAX));
+            return;
+        }
+        if (labels[i] == "Стереть") {
+            const Book* b = g_.book(m.arg);
+            if (b && !b->lines.empty())
+                g_.book_remove_line(m.arg, static_cast<int>(b->lines.size()) - 1);
+            return;
+        }
         return;
     }
 
@@ -446,7 +512,8 @@ void App::modal_tap(Modal& m, int x, int y) {
         return;
     }
 
-    if (is_text_modal(m.kind)) { pop(); return; }
+    if (m.kind == Modal::TextInput) return;      // само поле — не действие
+    if (is_text_modal(m.kind)) { close_top(); return; }
 
     std::vector<Row> rows;
     std::vector<std::string> ids;
@@ -538,12 +605,20 @@ void App::activate_row(Modal& m, int index) {
 
         case Modal::ItemMenu: {
             const std::string item = m.arg;
-            if (id == "use")   { g_.use_item(item); pop(); }
+            // В бою предмет стоит очков действия. Обычный use_item эту цену
+            // не берёт, и через сумку можно было бы лечиться даром.
+            if (id == "use") {
+                if (g_.combat().active) g_.combat_use_item(item);
+                else                    g_.use_item(item);
+                pop();
+            }
             else if (id == "equip") { g_.equip(item); pop(); }
             else if (id == "drop")  { g_.drop_item(item); pop(); }
             else if (id == "startbook") {
-                if (g_.start_book("Дневник")) g_.msg("Книга начата. Назвать её можно в библиотеке.");
                 pop();
+                if (g_.start_book("Дневник") && !g_.books().empty())
+                    push_text_input("Как назвать книгу?", g_.books().back().id, -1, "Дневник",
+                                    static_cast<std::size_t>(BOOK_TITLE_MAX));
             } else if (id == "look") {
                 const std::string body = item_desc(c.item(item));
                 pop();
