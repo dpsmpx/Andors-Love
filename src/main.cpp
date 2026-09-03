@@ -1,5 +1,6 @@
 #include "game.h"
 #include "platform.h"
+#include "paths.h"
 #include "ui.h"
 
 #include <cstdio>
@@ -15,68 +16,6 @@ namespace {
 // нельзя.
 std::string g_save_dir  = "saves";
 std::string g_save_file = "saves/hero.sav";
-
-// Каталог годится, только если в него удаётся создать и записать файл.
-bool dir_writable(const std::string& dir) {
-    if (dir.empty()) return false;
-    if (!platform::make_dir(dir)) return false;
-    const std::string probe = dir + "/.write-test";
-    {
-        std::ofstream out(probe);
-        if (!out) return false;
-        out << 'x';
-        if (!out) return false;
-    }
-    std::remove(probe.c_str());
-    return true;
-}
-
-std::string find_save_dir(const char* argv0) {
-    if (const char* env = std::getenv("ANDORS_LOVE_SAVE"))
-        if (dir_writable(env)) return env;
-
-    if (dir_writable("saves")) return "saves";
-
-    if (const char* home = std::getenv("HOME")) {
-        const std::string d = std::string(home) + "/.andors-love";
-        if (dir_writable(d)) return d;
-    }
-    // Рядом с самим бинарником. Внутри APK это приватный каталог приложения —
-    // он доступен для записи, тогда как рабочий каталог может быть любым,
-    // а HOME и TMPDIR вообще не заданы.
-    const std::string exe = platform::exe_dir(argv0);
-    if (!exe.empty()) {
-        const std::string d = exe + "/saves";
-        if (dir_writable(d)) return d;
-    }
-    if (const char* tmp = std::getenv("TMPDIR")) {
-        const std::string d = std::string(tmp) + "/andors-love";
-        if (dir_writable(d)) return d;
-    }
-    return "saves";   // не нашли — оставим привычный путь ради понятной ошибки
-}
-
-bool has_maps(const std::string& dir) {
-    if (dir.empty()) return false;
-    std::ifstream probe(dir + "/village.map");
-    return static_cast<bool>(probe);
-}
-
-// Каталог карт ищем по очереди: переменная окружения, рабочий каталог, рядом
-// с исполняемым файлом. На Android каталог проекта часто лежит на /sdcard,
-// откуда запускать бинарники нельзя, поэтому «рядом с бинарником» и явная
-// переменная — не роскошь, а рабочий сценарий.
-std::string find_data_root(const char* argv0) {
-    if (const char* env = std::getenv("ANDORS_LOVE_DATA"))
-        if (has_maps(env)) return env;
-
-    if (has_maps("data/maps")) return "data/maps";
-
-    const std::string exe = platform::exe_dir(argv0);
-    if (!exe.empty() && has_maps(exe + "/data/maps")) return exe + "/data/maps";
-
-    return "data/maps";     // вернём привычный путь, чтобы текст ошибки был понятным
-}
 
 // Возвращает false, если игрок вышел в главное меню.
 void play(Game& g) {
@@ -181,10 +120,10 @@ int main(int argc, char** argv) {
     platform::RawMode raw;
     platform::hide_cursor();
 
-    g_save_dir  = find_save_dir(argc > 0 ? argv[0] : nullptr);
+    g_save_dir  = paths::save_dir(argc > 0 ? argv[0] : nullptr);
     g_save_file = g_save_dir + "/hero.sav";
 
-    Game g(find_data_root(argc > 0 ? argv[0] : nullptr));
+    Game g(paths::data_root(argc > 0 ? argv[0] : nullptr));
     while (!platform::input_closed()) {
         std::vector<std::string> items{
             "Новая игра", "Продолжить (загрузить сохранение)", "Справка", "Выход"

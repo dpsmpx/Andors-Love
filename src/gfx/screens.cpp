@@ -38,6 +38,34 @@ void App::push(Modal::Kind k) {
     stack_.push_back(m);
 }
 
+void App::push_text_input(const std::string& title, const std::string& book_id,
+                          int index, const std::string& initial, std::size_t max_len) {
+    Modal m(Modal::TextInput);
+    m.title   = title;
+    m.arg     = book_id;
+    m.index   = index;
+    m.buffer  = initial;
+    m.max_len = max_len;
+    stack_.push_back(m);
+    SDL_StartTextInput();          // на Android поднимает экранную клавиатуру
+}
+
+void App::commit_text_input(Modal& m) {
+    const std::string book_id = m.arg;
+    const int index = m.index;
+    const std::string text = m.buffer;
+    SDL_StopTextInput();
+    pop();
+
+    if (index < 0 && index != BOOK_APPEND) { g_.book_set_title(book_id, text); return; }
+    if (index == BOOK_APPEND) {
+        const Book* b = g_.book(book_id);
+        g_.book_insert_line(book_id, b ? static_cast<int>(b->lines.size()) : 0, text);
+        return;
+    }
+    g_.book_set_line(book_id, index, text);
+}
+
 void App::push_message(const std::string& title, const std::string& body) {
     Modal m(Modal::Message);
     m.title = title;
@@ -46,17 +74,53 @@ void App::push_message(const std::string& title, const std::string& body) {
 }
 
 void App::pop() { if (!stack_.empty()) stack_.pop_back(); }
+
+void App::close_top() {
+    if (stack_.empty()) return;
+    const bool was_death = (stack_.back().kind == Modal::Message &&
+                            stack_.back().arg == "death");
+    pop();
+    if (was_death) {
+        mode_ = MODE_MENU;
+        menu_list_ = ListView();
+        refresh_save_summary();
+    }
+}
 void App::close_all() { stack_.clear(); }
 Modal* App::top() { return stack_.empty() ? 0 : &stack_.back(); }
 
+void App::refresh_save_summary() {
+    summary_ = SaveSummary();
+    Game probe(data_root_);
+    if (!probe.load_from(save_path_)) { has_save_ = false; return; }
+
+    has_save_ = true;
+    const Player& p = probe.player();
+    summary_.ok = true;
+    summary_.name = p.name;
+    summary_.level = p.level;
+    summary_.gold = p.gold;
+    summary_.turn = probe.turn();
+    for (std::map<std::string, int>::const_iterator it = p.quests.begin();
+         it != p.quests.end(); ++it) {
+        if (it->second == QUEST_DONE) ++summary_.done;
+        else if (it->second > 0)      ++summary_.open_q;
+    }
+    const RaceDef* rd = Content::get().race(p.race);
+    const SpecDef* sd = Content::get().spec(p.spec);
+    summary_.kind = std::string(rd ? rd->name : p.race) + " · " + (sd ? sd->name : p.spec);
+    const Location* lc = probe.here();
+    summary_.place = lc ? lc->name : std::string("?");
+}
+
 void App::save_game() {
-    platform::make_dir(save_path_.substr(0, save_path_.find_last_of('/')));
-    if (g_.save_to(save_path_)) { has_save_ = true; g_.msg("Игра сохранена."); }
+    platform::make_dir(save_dir_);
+    if (g_.save_to(save_path_)) { g_.msg("Игра сохранена."); refresh_save_summary(); }
     else push_message("Ошибка сохранения", g_.error());
 }
 
 void App::load_game() {
-    if (g_.load_from(save_path_)) { close_all(); walk_.stop(); }
+    if (g_.load_from(save_path_)) { close_all(); walk_.stop(); died_ = false; }
     else push_message("Ошибка загрузки", g_.error());
 }
 
@@ -163,39 +227,25 @@ void App::draw_main_menu() {
 
     // Главное меню — единственный экран без наложений: только прогресс
     // выбранного героя и пункты выбора.
-    if (has_save_) {
-        Game probe;
-        if (probe.load_from(save_path_)) {
-            const Player& p = probe.player();
-            int done = 0, open_q = 0;
-            for (const auto& kv : p.quests) {
-                if (kv.second == QUEST_DONE) ++done;
-                else if (kv.second > 0) ++open_q;
-            }
-            const RaceDef* rd = Content::get().race(p.race);
-            const SpecDef* sd = Content::get().spec(p.spec);
-            const Location* lc = probe.here();
-
-            const int pw = c_.width() * 5 / 6;
-            Rect card((c_.width() - pw) / 2, y, pw, ch * 7);
-            c_.fill(card, Color(26, 30, 38, 235));
-            c_.frame(card, th.border, 1);
-            int cy = card.y + ch / 2;
-            const int tx = card.x + ch / 2;
-            c_.text(tx, cy, p.name + ", уровень " + to_str(p.level), th.text, sc);
-            cy += ch;
-            c_.text(tx, cy, std::string(rd ? rd->name : p.race) + " · " +
-                    (sd ? sd->name : p.spec), th.faint, sc);
-            cy += ch;
-            c_.text(tx, cy, "Место: " + (lc ? lc->name : std::string("?")), th.faint, sc);
-            cy += ch;
-            c_.text(tx, cy, "Заданий пройдено: " + to_str(done), th.faint, sc);
-            cy += ch;
-            c_.text(tx, cy, "В работе: " + to_str(open_q) +
-                    "   золото: " + to_str(p.gold), th.faint, sc);
-            cy += ch;
-            c_.text(tx, cy, "Ход: " + to_str(probe.turn()), th.faint, sc);
-        }
+    if (summary_.ok) {
+        const int pw = c_.width() * 5 / 6;
+        Rect card((c_.width() - pw) / 2, y, pw, ch * 7);
+        c_.fill(card, Color(26, 30, 38, 235));
+        c_.frame(card, th.border, 1);
+        int cy = card.y + ch / 2;
+        const int tx = card.x + ch / 2;
+        c_.text(tx, cy, summary_.name + ", уровень " + to_str(summary_.level), th.text, sc);
+        cy += ch;
+        c_.text(tx, cy, summary_.kind, th.faint, sc);
+        cy += ch;
+        c_.text(tx, cy, "Место: " + summary_.place, th.faint, sc);
+        cy += ch;
+        c_.text(tx, cy, "Заданий пройдено: " + to_str(summary_.done), th.faint, sc);
+        cy += ch;
+        c_.text(tx, cy, "В работе: " + to_str(summary_.open_q) +
+                "   золото: " + to_str(summary_.gold), th.faint, sc);
+        cy += ch;
+        c_.text(tx, cy, "Ход: " + to_str(summary_.turn), th.faint, sc);
     }
 
     std::vector<std::string> items;
@@ -225,13 +275,14 @@ void App::main_menu_tap(int x, int y) {
         create_list_ = ListView();
         SDL_StartTextInput();
     } else if (what == "Продолжить") {
-        if (g_.load_from(save_path_)) { mode_ = MODE_PLAY; close_all(); walk_.stop(); }
+        if (g_.load_from(save_path_)) {
+            mode_ = MODE_PLAY;
+            close_all();
+            walk_.stop();
+            died_ = false;
+        }
     } else if (what == "Управление") {
-        Modal m(Modal::Help);
         push(Modal::Help);
-        m = stack_.back();
-        stack_.pop_back();
-        push_message("Управление", m.body);
     } else if (what == "Выход") {
         quit_ = true;
     }
@@ -329,6 +380,7 @@ void App::create_hero_tap(int x, int y) {
     mode_ = MODE_PLAY;
     close_all();
     walk_.stop();
+    died_ = false;
 }
 
 // -------------------------------------------------------------------- бой

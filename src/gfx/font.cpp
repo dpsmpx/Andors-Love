@@ -4,19 +4,40 @@ namespace gfx {
 
 namespace {
 
-int index_of(unsigned cp) {
+// Прямая таблица «кодовая точка -> номер глифа». Все символы шрифта лежат
+// ниже U+0500, так что таблица маленькая и строится один раз.
+const unsigned MAP_SIZE = 0x500;
+
+const short* index_table() {
+    static short table[MAP_SIZE];
+    static bool built = false;
+    if (!built) {
+        built = true;
+        for (unsigned i = 0; i < MAP_SIZE; ++i) table[i] = -1;
+        for (int i = 0; i < FONT_GLYPHS; ++i) {
+            const unsigned cp = FONT_CODEPOINTS[i];
+            if (cp < MAP_SIZE) table[cp] = static_cast<short>(i);
+        }
+    }
+    return table;
+}
+
+} // namespace
+
+int glyph_index(unsigned cp) {
+    if (cp < MAP_SIZE) return index_table()[cp];
+    // Единичные знаки выше таблицы (тире, многоточие) ищутся перебором:
+    // их считанные штуки, и в горячем пути они почти не встречаются.
     for (int i = 0; i < FONT_GLYPHS; ++i)
         if (FONT_CODEPOINTS[i] == cp) return i;
     return -1;
 }
 
-} // namespace
-
-bool has_glyph(unsigned cp) { return index_of(cp) >= 0; }
+bool has_glyph(unsigned cp) { return glyph_index(cp) >= 0; }
 
 const unsigned char* glyph(unsigned cp) {
-    int i = index_of(cp);
-    if (i < 0) i = index_of('?');
+    int i = glyph_index(cp);
+    if (i < 0) i = glyph_index('?');
     if (i < 0) i = 0;
     return FONT_BITS + static_cast<std::size_t>(i) * static_cast<std::size_t>(FONT_H);
 }

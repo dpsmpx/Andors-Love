@@ -86,15 +86,19 @@ void button(Canvas& c, const Rect& r, const std::string& label,
     c.fill(r, enabled ? (highlighted ? th.btn_hot : th.btn) : th.btn_off);
     c.frame(r, enabled ? th.border : th.btn_off, 1);
 
-    // Подпись ужимается под кнопку, а не вылезает из неё.
+    // Подпись ужимается под кнопку, а не вылезает из неё: сперва мельче
+    // шрифтом, а если и это не помогло — обрезкой.
+    const int room = r.w > 8 ? r.w - 8 : r.w;
     int sc = c.scale();
-    std::string txt = label;
-    while (sc > 1 && c.text_width(txt, sc) > r.w - 8) --sc;
-    const std::size_t fit = static_cast<std::size_t>((r.w - 8) / (c.cell_w() / c.scale() * sc));
-    if (utf8_len(txt) > fit) txt = trunc(txt, fit);
+    while (sc > 1 && c.text_width(label, sc) > room) --sc;
 
-    Rect inner(r.x, r.y, r.w, r.h);
-    c.text_centered(inner, txt, enabled ? th.text : th.faint, sc);
+    const int glyph_w = c.cell_w() / c.scale() * sc;
+    std::string txt = label;
+    if (glyph_w > 0) {
+        const std::size_t fit = static_cast<std::size_t>(room / glyph_w);
+        if (fit > 0 && utf8_len(txt) > fit) txt = trunc(txt, fit);
+    }
+    c.text_centered(r, txt, enabled ? th.text : th.faint, sc);
 }
 
 void row_of(const Rect& area, int n, int gap, std::vector<Rect>* out) {
@@ -182,7 +186,10 @@ void ListView::draw(Canvas& c, const Rect& r, const std::vector<Row>& rows) cons
         if (sel) c.frame(line, th.accent, 1);
 
         const Row& row = rows[static_cast<std::size_t>(i)];
-        const std::size_t fit = static_cast<std::size_t>((line.w - c.cell_w()) / c.cell_w());
+        // Ширина строки может оказаться меньше знакоместа на очень узком
+        // экране; беззнаковое вычитание тут молча дало бы огромный предел.
+        const int room = line.w - c.cell_w() * 2;
+        const std::size_t fit = room > 0 ? static_cast<std::size_t>(room / c.cell_w()) : 1;
         const std::string txt = utf8_len(row.text) > fit ? trunc(row.text, fit) : row.text;
         c.text(line.x + c.cell_w() / 2, line.y + (line.h - c.cell_h()) / 2,
                txt, row.enabled ? row.color : th.faint, c.scale());

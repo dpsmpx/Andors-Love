@@ -1,5 +1,6 @@
 #include "app.h"
 #include "../content.h"
+#include "../paths.h"
 #include "../platform.h"
 #include "font.h"
 
@@ -60,36 +61,43 @@ Color object_color(unsigned cp) {
 App::App()
     : mode_(MODE_MENU), quit_(false), has_save_(false),
       create_step_(0), new_race_("human"), new_spec_("swordsman"),
-      now_ms_(0) {}
+      now_ms_(0), died_(false) {}
 
 // ------------------------------------------------------------------- запуск
 
-int App::run(int argc, char** argv) {
-    const std::string dir = platform::exe_dir(argc > 0 ? argv[0] : 0);
-    save_path_ = dir.empty() ? std::string("hero.sav") : dir + "/hero.sav";
+bool App::start(int argc, char** argv, int win_w, int win_h) {
+    // Пути ищутся тем же кодом, что и в терминальной сборке: иначе игрок
+    // сохранится в одной оболочке и не найдёт сохранения в другой.
+    const char* argv0 = argc > 0 ? argv[0] : 0;
+    save_dir_  = paths::save_dir(argv0);
+    save_path_ = save_dir_ + "/hero.sav";
+    data_root_ = paths::data_root(argv0);
+    g_ = Game(data_root_);
 
-    if (!c_.open("Любовь Эндора", 900, 600)) {
+    if (!c_.open("Любовь Эндора", win_w, win_h)) {
         SDL_Log("%s", c_.error().c_str());
-        return 1;
+        return false;
     }
     ptr_.configure(c_.touch_unit() / 3, 320);
+    refresh_save_summary();
+    return true;
+}
 
-    // Сохранение может лежать рядом с игрой: главное меню должно знать,
-    // предлагать ли «продолжить».
-    {
-        Game probe;
-        has_save_ = probe.load_from(save_path_);
+int App::run(int argc, char** argv) {
+    if (!start(argc, argv, 900, 600)) return 1;
+    while (!quit_) {
+        now_ms_ = SDL_GetTicks();
+        pump_events();
+        step(now_ms_);
+        draw();
+        c_.present();
     }
-
-    while (!quit_) frame();
-
     c_.close();
     return 0;
 }
 
-void App::frame() {
-    now_ms_ = SDL_GetTicks();
-    pump_events();
+void App::step(unsigned now_ms) {
+    now_ms_ = now_ms;
     ptr_.tick(now_ms_);
 
     Gesture gs;
@@ -123,26 +131,39 @@ void App::frame() {
         if (g_.combat().active) walk_.stop();
     }
 
+    // Смерть разбирается здесь, а не в бою: бой кончается, а герой мёртв,
+    // и без этого игра просто продолжалась бы с нулём здоровья.
+    if (mode_ == MODE_PLAY && !g_.combat().active && g_.player_dead() && !died_) {
+        died_ = true;
+        walk_.stop();
+        close_all();
+        push_message("Смерть",
+                     "Твой путь обрывается здесь.\n\n"
+                     "Последнее сохранение осталось нетронутым — "
+                     "загрузи его из главного меню.");
+        stack_.back().arg = "death";
+    }
+
+    if (!g_.log().empty()) status_ = g_.log().back();
+}
+
+void App::draw() {
     c_.begin(theme().bg);
-    if (mode_ == MODE_MENU) {
-        draw_main_menu();
-    } else if (mode_ == MODE_CREATE) {
-        draw_create_hero();
-    } else {
+    if (mode_ == MODE_MENU)        draw_main_menu();
+    else if (mode_ == MODE_CREATE) draw_create_hero();
+    else {
         draw_world();
         draw_hud();
         if (g_.combat().active) draw_combat();
-        // Затемнение кладётся перед каждым окном, а не только перед верхним:
-        // два полупрозрачных окна подряд иначе просвечивают друг сквозь друга
-        // и читать становится нечего.
-        for (std::size_t i = 0; i < stack_.size(); ++i) {
-            dim_screen(c_, 140);
-            draw_modal(stack_[i]);
-        }
     }
-    c_.present();
-
-    if (!g_.log().empty()) status_ = g_.log().back();
+    // Окна рисуются в любом режиме: справка из главного меню — такое же
+    // окно, и если рисовать их только в игре, она просто не появится.
+    // Затемнение кладётся перед каждым окном, а не только перед верхним:
+    // два полупрозрачных окна подряд иначе просвечивают друг сквозь друга.
+    for (std::size_t i = 0; i < stack_.size(); ++i) {
+        dim_screen(c_, 140);
+        draw_modal(stack_[i]);
+    }
 }
 
 // -------------------------------------------------------------------- ввод
@@ -194,7 +215,7 @@ void App::pump_events() {
                     ptr_.up(-1, e.button.x, e.button.y, now_ms_);
                 break;
             case SDL_MOUSEWHEEL:
-                if (Modal* m = top()) m->list.scroll_by(-e.wheel.y, 1 << 20, 1);
+                if (Modal* m = top()) scroll_modal(*m, -e.wheel.y);
                 break;
 
             case SDL_KEYDOWN: {
@@ -219,9 +240,7 @@ void App::pump_events() {
             }
 
             case SDL_TEXTINPUT:
-                if (mode_ == MODE_CREATE && create_step_ == 0) {
-                    if (utf8_len(new_name_) < 16) new_name_ += e.text.text;
-                }
+                on_text(e.text.text);
                 break;
 
             default: break;
@@ -230,21 +249,43 @@ void App::pump_events() {
 }
 
 void App::on_tap(int x, int y) {
+    // Открытое окно перехватывает касание в любом режиме — иначе окно поверх
+    // главного меню было бы видно, но недоступно.
+    if (Modal* m = top()) { modal_tap(*m, x, y); return; }
     if (mode_ == MODE_MENU) { main_menu_tap(x, y); return; }
     if (mode_ == MODE_CREATE) { create_hero_tap(x, y); return; }
-    if (Modal* m = top()) { modal_tap(*m, x, y); return; }
     if (g_.combat().active) { combat_tap(x, y); return; }
     world_tap(x, y);
 }
 
-void App::on_swipe(int dx, int dy) {
-    if (mode_ != MODE_PLAY) {
-        // В списках свайп прокручивает.
-        if (Modal* m = top()) m->list.scroll_by(dy, 1 << 20, 1);
-        else if (mode_ == MODE_MENU) menu_list_.scroll_by(dy, 1 << 20, 1);
+void App::scroll_modal(Modal& m, int rows) {
+    // Текстовые окна листаются своим счётчиком строк, списки — своим.
+    // Крутить оба сразу — путаница: видно одно, а едет другое.
+    if (m.kind == Modal::Message || m.kind == Modal::Help ||
+        m.kind == Modal::Character || m.kind == Modal::Book || m.kind == Modal::Ending) {
+        m.scroll += rows;
+        if (m.scroll < 0) m.scroll = 0;
         return;
     }
-    if (Modal* m = top()) { m->list.scroll_by(dy, 1 << 20, 1); m->scroll += dy; if (m->scroll < 0) m->scroll = 0; return; }
+    m.list.scroll += rows;
+    if (m.list.scroll < 0) m.list.scroll = 0;
+}
+
+void App::on_text(const char* utf8) {
+    if (!utf8 || !*utf8) return;
+    if (Modal* m = top()) {
+        if (m->kind == Modal::TextInput && utf8_len(m->buffer) < m->max_len)
+            m->buffer += utf8;
+        return;
+    }
+    if (mode_ == MODE_CREATE && create_step_ == 0 && utf8_len(new_name_) < 16)
+        new_name_ += utf8;
+}
+
+void App::on_swipe(int dx, int dy) {
+    // В открытом окне свайп листает — список или текст, смотря что показано.
+    if (Modal* m = top()) { scroll_modal(*m, dy); return; }
+    if (mode_ != MODE_PLAY) return;
     if (g_.combat().active) return;
     walk_.stop();
     step_player(dx, dy);
@@ -282,16 +323,42 @@ void App::world_tap(int x, int y) {
 }
 
 void App::on_key(int key) {
+    // Окно перехватывает клавиши так же, как касания.
+    if (Modal* m = top()) {
+        if (m->kind == Modal::TextInput) {
+            if (key == 8) {
+                // Backspace убирает символ, а не байт: строка может быть русской.
+                std::size_t i = m->buffer.size();
+                while (i > 0 && (static_cast<unsigned char>(m->buffer[i - 1]) & 0xC0) == 0x80) --i;
+                if (i > 0) m->buffer.erase(i - 1);
+                return;
+            }
+            if (key == '\r') { commit_text_input(*m); return; }
+            if (key == platform::KEY_ESC) { SDL_StopTextInput(); pop(); return; }
+            return;
+        }
+        const int n = 1 << 20;
+        if (key == platform::KEY_UP) {
+            m->list.set_cursor(m->list.cursor <= 0 ? 0 : m->list.cursor - 1, n, 1);
+            scroll_modal(*m, -1);
+            return;
+        }
+        if (key == platform::KEY_DOWN) {
+            m->list.set_cursor(m->list.cursor < 0 ? 0 : m->list.cursor + 1, n, 1);
+            scroll_modal(*m, 1);
+            return;
+        }
+        if (key == platform::KEY_ESC || key == 'm' || key == 'M') { close_top(); return; }
+        if (key == '\r' || key == ' ') { activate_row(*m, m->list.cursor < 0 ? 0 : m->list.cursor); return; }
+        return;
+    }
+
     if (mode_ == MODE_MENU) {
-        std::vector<Row> rows;
         const int n = has_save_ ? 4 : 3;
         if (key == platform::KEY_UP)   menu_list_.set_cursor(menu_list_.cursor - 1, n, n);
         if (key == platform::KEY_DOWN) menu_list_.set_cursor(menu_list_.cursor + 1, n, n);
-        if (key == '\r' || key == ' ') {
-            const Rect dummy(0, 0, 0, 0);
-            (void)dummy;
-            main_menu_tap(-1, -menu_list_.cursor - 1);   // -1: выбор с клавиатуры
-        }
+        if (key == '\r' || key == ' ')
+            main_menu_tap(-1, -(menu_list_.cursor < 0 ? 0 : menu_list_.cursor) - 1);
         if (key == platform::KEY_ESC) quit_ = true;
         return;
     }
@@ -322,21 +389,6 @@ void App::on_key(int key) {
     }
 
     // --- в игре ---
-    if (Modal* m = top()) {
-        const int n = 1 << 20;
-        if (key == platform::KEY_UP) {
-            m->list.set_cursor(m->list.cursor <= 0 ? 0 : m->list.cursor - 1, n, 1);
-            m->scroll -= 1; if (m->scroll < 0) m->scroll = 0; return;
-        }
-        if (key == platform::KEY_DOWN) {
-            m->list.set_cursor(m->list.cursor < 0 ? 0 : m->list.cursor + 1, n, 1);
-            m->scroll += 1; return;
-        }
-        if (key == platform::KEY_ESC || key == 'm' || key == 'M') { pop(); return; }
-        if (key == '\r' || key == ' ') { activate_row(*m, m->list.cursor < 0 ? 0 : m->list.cursor); return; }
-        return;
-    }
-
     if (g_.combat().active) {
         switch (key) {
             case '\r': case ' ': g_.combat_attack(false); break;
@@ -571,15 +623,13 @@ void App::draw_world() {
 
 int App::run_script(const std::vector<std::string>& script, const std::string& out_dir,
                     int argc, char** argv) {
-    const std::string dir = platform::exe_dir(argc > 0 ? argv[0] : 0);
-    save_path_ = (out_dir.empty() ? dir : out_dir) + "/hero.sav";
-
-    if (!c_.open("Любовь Эндора", 480, 900)) {     // портрет, как на телефоне
-        SDL_Log("%s", c_.error().c_str());
-        return 1;
+    if (!start(argc, argv, 480, 900)) return 1;   // портрет, как на телефоне
+    if (!out_dir.empty()) {
+        // Сценарий не должен трогать настоящее сохранение игрока.
+        save_dir_  = out_dir;
+        save_path_ = out_dir + "/hero.sav";
+        refresh_save_summary();
     }
-    ptr_.configure(c_.touch_unit() / 3, 320);
-    { Game probe; has_save_ = probe.load_from(save_path_); }
 
     unsigned clock = 0;
     int fake_id = 100;
@@ -620,55 +670,28 @@ int App::run_script(const std::vector<std::string>& script, const std::string& o
         } else if (cmd == "wait") {
             int ms = 0; ls >> ms;
             clock += static_cast<unsigned>(ms);
+        } else if (cmd == "type") {
+            std::string rest;
+            std::getline(ls, rest);
+            if (!rest.empty() && rest[0] == ' ') rest.erase(0, 1);
+            on_text(rest.c_str());
         } else if (cmd == "quit") {
             quit_ = true;
         }
 
-        // Кадр после каждой команды: жесты разбираются ровно тем же кодом,
-        // что и от живого пальца.
-        now_ms_ = clock;
-        ptr_.tick(now_ms_);
-        Gesture gs;
-        while (ptr_.poll(&gs)) {
-            if (gs.kind == G_TAP) on_tap(gs.x, gs.y);
-            else if (gs.kind == G_SWIPE) on_swipe(gs.dx, gs.dy);
-            else if (gs.kind == G_HOLD_BEGIN) {
-                if (mode_ == MODE_PLAY && !modal_open() && !g_.combat().active) {
-                    Vec2 cell;
-                    if (cell_at(gs.x, gs.y, &cell)) walk_.go(cell, true);
-                }
-            } else if (gs.kind == G_HOLD_END) {
-                if (walk_.running()) walk_.stop();
-            }
-        }
-        if (mode_ == MODE_PLAY && !modal_open() && !g_.combat().active)
-            if (walk_.update(g_, now_ms_)) {
-                g_.world_turn();
-                if (walk_.last_stop() == WS_EVENT) interact_after_walk();
-            }
-
-        c_.begin(theme().bg);
-        if (mode_ == MODE_MENU) draw_main_menu();
-        else if (mode_ == MODE_CREATE) draw_create_hero();
-        else {
-            draw_world();
-            draw_hud();
-            if (g_.combat().active) draw_combat();
-            for (std::size_t k = 0; k < stack_.size(); ++k) {
-                dim_screen(c_, 140);
-                draw_modal(stack_[k]);
-            }
-        }
-        if (!g_.log().empty()) status_ = g_.log().back();
+        // Дальше — ровно тот же шаг и то же рисование, что в живом цикле:
+        // сценарий проверяет игру, а не свою копию игры.
+        step(clock);
+        draw();
 
         if (cmd == "shot") {
             std::string name; ls >> name;
-            SDL_Surface* s = SDL_CreateRGBSurfaceWithFormat(0, c_.width(), c_.height(), 32,
-                                                            SDL_PIXELFORMAT_ARGB8888);
-            if (s && SDL_RenderReadPixels(c_.renderer(), 0, SDL_PIXELFORMAT_ARGB8888,
-                                          s->pixels, s->pitch) == 0)
-                SDL_SaveBMP(s, (out_dir + "/" + name + ".bmp").c_str());
-            if (s) SDL_FreeSurface(s);
+            SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormat(0, c_.width(), c_.height(), 32,
+                                                              SDL_PIXELFORMAT_ARGB8888);
+            if (surf && SDL_RenderReadPixels(c_.renderer(), 0, SDL_PIXELFORMAT_ARGB8888,
+                                             surf->pixels, surf->pitch) == 0)
+                SDL_SaveBMP(surf, (out_dir + "/" + name + ".bmp").c_str());
+            if (surf) SDL_FreeSurface(surf);
         }
         c_.present();
         clock += 16;

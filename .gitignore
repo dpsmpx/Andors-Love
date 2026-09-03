@@ -4,6 +4,7 @@ andors-love
 andors-love-gui
 *.o
 *.bmp
+!docs/img/*.png
 
 # сохранения игрока
 saves/
