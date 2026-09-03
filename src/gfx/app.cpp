@@ -686,9 +686,8 @@ int App::run_script(const std::vector<std::string>& script, const std::string& o
 
         if (cmd == "shot") {
             std::string name; ls >> name;
-            SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormat(0, c_.width(), c_.height(), 32,
-                                                              SDL_PIXELFORMAT_ARGB8888);
-            if (surf && SDL_RenderReadPixels(c_.renderer(), 0, SDL_PIXELFORMAT_ARGB8888,
+            SDL_Surface* surf = new_surface32(c_.width(), c_.height());
+            if (surf && SDL_RenderReadPixels(c_.renderer(), 0, surf->format->format,
                                              surf->pixels, surf->pitch) == 0)
                 SDL_SaveBMP(surf, (out_dir + "/" + name + ".bmp").c_str());
             if (surf) SDL_FreeSurface(surf);

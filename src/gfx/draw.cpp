@@ -24,6 +24,16 @@ int pick_scale(int w, int h) {
 
 } // namespace
 
+SDL_Surface* new_surface32(int w, int h) {
+    Uint32 rmask, gmask, bmask, amask;
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+    rmask = 0xFF000000; gmask = 0x00FF0000; bmask = 0x0000FF00; amask = 0x000000FF;
+#else
+    rmask = 0x000000FF; gmask = 0x0000FF00; bmask = 0x00FF0000; amask = 0xFF000000;
+#endif
+    return SDL_CreateRGBSurface(0, w, h, 32, rmask, gmask, bmask, amask);
+}
+
 Canvas::Canvas() : win_(0), ren_(0), atlas_(0), w_(0), h_(0), scale_(1) {}
 
 Canvas::~Canvas() { close(); }
@@ -77,7 +87,7 @@ bool Canvas::build_atlas() {
     const int aw = ATLAS_COLS * FONT_W;
     const int ah = atlas_rows() * FONT_H;
 
-    SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormat(0, aw, ah, 32, SDL_PIXELFORMAT_RGBA32);
+    SDL_Surface* surf = new_surface32(aw, ah);
     if (!surf) {
         err_ = std::string("SDL_CreateRGBSurface: ") + SDL_GetError();
         return false;
