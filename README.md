@@ -357,3 +357,5 @@ make clean
 
 **На смартфоне** (Termux или C4Droid) — см. [`docs/android.md`](docs/android.md).
 Интерфейс подстраивается под ширину терминала: от 28 колонок и выше.
+
+###### ~Активно использовался Claude Code Ultracode~
