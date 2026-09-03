@@ -1,7 +1,9 @@
 # сборка
 build/
 andors-love
+andors-love-gui
 *.o
+*.bmp
 
 # сохранения игрока
 saves/

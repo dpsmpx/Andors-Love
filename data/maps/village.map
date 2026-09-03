@@ -28,11 +28,14 @@ npc 24 5 enchanter
 bed 10 3
 sign 12 6 Ольховка. Восточные ворота ведут в Ольховый лес.
 sign 44 9 За воротами начинается лес. Волки выходят к самой тропе.
+sign 4 6 Западная дорога кончается погостом. Дальше только топь.
 item 11 16 bread 2
 item 30 16 torch 1
 note 30 2 child
+note 2 16 double
 chest 44 3 40 - bread:2 herb_potion:1
 spawn 20 15 rat 2 4
 spawn 44 15 rat 1 3
 exit 46 8 forest 2 8
+exit 1 8 graveyard 44 9
 end

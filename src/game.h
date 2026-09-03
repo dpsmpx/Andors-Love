@@ -174,6 +174,10 @@ public:
 
     // --- инвентарь ---
     int   count_item(const std::string& id) const;
+    // Сколько предмета при игроке всего: в сумке плюс надетое. Врата должны
+    // считать именно так — ключ на пальце остаётся ключом, и надетое кольцо
+    // не должно запирать дверь, которую само же и открывает.
+    int   carries_item(const std::string& id) const;
     void  add_item(const std::string& id, int n);
     bool  remove_item(const std::string& id, int n);
     bool  equip(const std::string& id);
@@ -185,11 +189,29 @@ public:
     void  grant_exp(int amount);
     bool  learn_skill(const std::string& id);
 
+    // --- события, открывающие квесты ---
+    // Вызывается из мест, где что-то происходит: находка, убийство, добыча,
+    // вход в локацию. Проверяет таблицу триггеров и открывает подходящие
+    // квесты.
+    void  fire_event(TriggerKind kind, const std::string& key);
+    // Перепроверяет триггеры по состоянию (предмет на руках, число убитых).
+    // «Ключ у меня» — это состояние, а не миг: игрок мог добыть его раньше,
+    // чем узнал, зачем он нужен, и цепочка не должна на этом застревать.
+    void  recheck_state_triggers();
+    int   quest_stage(const std::string& id) const;
+
     // --- диалоги ---
     bool  option_available(const DlgOption& o) const;
     // Применяет последствия варианта. shop_out — id магазина, если открылась торговля.
     void  apply_option(const DlgOption& o, const std::string& npc_shop,
                        std::string* shop_out, bool* enchant_out = nullptr);
+
+    // --- развязка ---
+    // Выбранный исход остаётся в счётчике "ending_choice" и в квесте
+    // «Развязка», так что переживает сохранение. Здесь — только id эпилога,
+    // который интерфейсу надо показать один раз, сразу после выбора.
+    const std::string& pending_ending() const { return pending_ending_; }
+    std::string take_pending_ending();
 
     // --- торговля ---
     int   buy_price(const ShopDef& s, const ItemDef& d) const;
@@ -214,6 +236,8 @@ public:
     const std::string& error() const { return err_; }
 
 private:
+    std::string pending_ending_;   // эпилог, ещё не показанный игроку
+
     void  fill_mob_inventory(Mob& m, const EnemyDef& e);
     void  spawn_initial(const Location& loc);
     void  respawn_tick();

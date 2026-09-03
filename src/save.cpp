@@ -269,6 +269,9 @@ bool Game::load_from(const std::string& path) {
     }
 
     plr_          = p;
+    // Выбранный исход живёт в квесте и счётчике; экран эпилога — событие
+    // одного мига, и загрузка его не повторяет.
+    pending_ending_.clear();
     mobs_         = mobs;
     taken_        = taken;
     chests_       = chests;

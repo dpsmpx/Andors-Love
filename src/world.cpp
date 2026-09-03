@@ -164,6 +164,34 @@ bool World::parse(std::istream& in, const std::string& id, const std::string& sr
             MapExit e;
             if (!(ls >> e.pos.x >> e.pos.y >> e.target >> e.dest.x >> e.dest.y))
                 return fail("exit <x> <y> <локация> <цель_x> <цель_y>");
+            // Необязательные условия прохода: key=, quest=id:этап,
+            // counter=id:число, deny=<текст до конца строки>.
+            std::string tok;
+            while (ls >> tok) {
+                if (tok.compare(0, 4, "key=") == 0) {
+                    e.gate.key = tok.substr(4);
+                } else if (tok.compare(0, 6, "quest=") == 0) {
+                    const std::string v = tok.substr(6);
+                    std::size_t colon = v.find(':');
+                    if (colon == std::string::npos) return fail("quest=<код>:<этап>");
+                    e.gate.req_quest = v.substr(0, colon);
+                    e.gate.req_stage = to_int(v.substr(colon + 1), 1);
+                } else if (tok.compare(0, 8, "counter=") == 0) {
+                    const std::string v = tok.substr(8);
+                    std::size_t colon = v.find(':');
+                    if (colon == std::string::npos) return fail("counter=<код>:<число>");
+                    e.gate.req_counter = v.substr(0, colon);
+                    e.gate.req_counter_min = to_int(v.substr(colon + 1), 1);
+                } else if (tok.compare(0, 5, "deny=") == 0) {
+                    e.gate.denied = tok.substr(5);
+                    std::string rest;
+                    std::getline(ls, rest);
+                    if (!rest.empty()) e.gate.denied += rest;
+                    break;
+                } else {
+                    return fail("неизвестное условие перехода '" + tok + "'");
+                }
+            }
             loc.exits.push_back(e);
 
         } else if (key == "spawn") {

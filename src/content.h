@@ -37,6 +37,10 @@ struct DlgOption {
     // последствия выбора
     std::string set_quest;
     int         set_stage  = 0;
+    // Запомнить выбор игрока: нужно там, где правильного ответа нет и важно
+    // лишь, что он выбрал.
+    std::string set_counter;
+    int         set_counter_value = 0;
     std::string give_item;
     int         give_count = 0;
     std::string take_item;
@@ -48,6 +52,10 @@ struct DlgOption {
     bool        open_enchant = false;
     bool        portal_gift  = false;   // выдаёт умение ставить порталы
     bool        rest       = false;   // восстановить HP/AP
+    // Развязка: непустая строка — id исхода. Выбор необратим, и после него
+    // игра показывает эпилог. Оставлено отдельным полем, а не набором
+    // счётчиков: исход — не награда и не этап, он завершает историю.
+    std::string ending;
 };
 
 struct DlgNode {
@@ -175,6 +183,34 @@ struct QuestDef {
     std::string                id;
     std::string                name;
     std::vector<QuestStageDef> stages;
+    // Тайна не выдаётся ни одним NPC: она открывается сама, от события.
+    // В журнале помечается отдельно.
+    bool                       secret = false;
+};
+
+// ---------- события, открывающие квесты ----------
+// Квест не обязан начинаться с разговора. Находка, добыча, вход в место или
+// закрытие другого квеста тоже могут его открыть — так игрок натыкается на
+// тайны сам, а не получает их списком у старосты.
+
+enum class TriggerKind {
+    NoteTaken,        // подобрана записка (key — её код)
+    MobKilled,        // счётчик убийств достиг count (key — код счётчика)
+    ItemGained,       // предметов на руках не меньше count (key — код предмета)
+    LocationEntered,  // впервые вошёл в локацию (key — её код)
+    QuestStage        // другой квест дошёл до этапа count (key — его код)
+};
+
+struct QuestTrigger {
+    TriggerKind kind  = TriggerKind::NoteTaken;
+    std::string key;
+    int         count = 1;
+    std::string quest;          // какой квест открыть
+    int         stage = 1;      // на каком этапе
+    // Срабатывает, только если квест уже дошёл до min_stage. Без этого
+    // цепочку можно пройти с конца: добыть ключ раньше, чем узнать, зачем он.
+    int         min_stage = 0;
+    std::string message;        // что сказать игроку
 };
 
 // ---------- навыки ----------
@@ -185,6 +221,16 @@ struct SkillDef {
     std::string desc;
     Stats       bonus;
     int         max_rank = 5;
+};
+
+// ---------- развязки ----------
+// Три исхода в Точке Ноль. Текст эпилога хранится здесь, а не в диалоге:
+// его показывают не репликой, а отдельным экраном.
+
+struct EndingDef {
+    std::string              id;
+    std::string              name;
+    std::vector<std::string> lines;
 };
 
 // ---------- база ----------
@@ -206,6 +252,7 @@ public:
     const QuestDef* quest(const std::string& id) const;
     const DlgNode*  node(const std::string& id)  const;
     const SkillDef* skill(const std::string& id) const;
+    const EndingDef* ending(const std::string& id) const;
 
     // Текст этапа квеста; пустая строка, если этап не описан.
     std::string quest_stage_text(const std::string& quest_id, int stage) const;
@@ -214,7 +261,8 @@ public:
     const std::vector<QuestDef>&   quests()   const { return quests_; }
     const std::vector<RaceDef>&    races()    const { return races_; }
     const std::vector<SpecDef>&    specs()    const { return specs_; }
-    const std::vector<EnchantDef>& enchants() const { return enchants_; }
+    const std::vector<EnchantDef>&   enchants() const { return enchants_; }
+    const std::vector<QuestTrigger>& triggers() const { return triggers_; }
 
 private:
     Content();
@@ -227,9 +275,11 @@ private:
     void build_enemies();
     void build_skills();
     void build_quests();
+    void build_triggers();
     void build_shops();
     void build_npcs();
     void build_dialogues();
+    void build_endings();
 
     std::map<std::string, ItemDef>  items_;
     std::map<std::string, EnemyDef> enemies_;
@@ -239,9 +289,11 @@ private:
     std::map<std::string, EffectDef>  effects_;
     std::map<std::string, NoteDef>    notes_;
     std::map<std::string, EnchantDef>  enchant_map_;
+    std::map<std::string, EndingDef>   endings_;
     std::vector<QuestDef>             quests_;
     std::vector<SkillDef>             skills_;
     std::vector<RaceDef>              races_;
     std::vector<SpecDef>              specs_;
     std::vector<EnchantDef>           enchants_;
+    std::vector<QuestTrigger>         triggers_;
 };

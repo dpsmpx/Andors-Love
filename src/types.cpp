@@ -10,12 +10,15 @@ char tile_glyph(Tile t) {
         case Tile::Tree:  return 'T';
         case Tile::Grass: return ',';
         case Tile::Road:  return '=';
+        case Tile::DeadWater: return ':';
         default:          return '?';
     }
 }
 
 bool tile_walkable(Tile t) {
-    return t == Tile::Floor || t == Tile::Grass || t == Tile::Road;
+    // Мёртвая вода стоит и держит вес — по ней ходят, как по мостовой.
+    return t == Tile::Floor || t == Tile::Grass || t == Tile::Road ||
+           t == Tile::DeadWater;
 }
 
 bool tile_transparent(Tile t) {
@@ -30,6 +33,7 @@ Tile tile_from_char(char c) {
         case 'T': return Tile::Tree;
         case ',': return Tile::Grass;
         case '=': return Tile::Road;
+        case ':': return Tile::DeadWater;
         default:  return Tile::Wall;   // неизвестный символ безопаснее считать стеной
     }
 }

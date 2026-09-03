@@ -31,6 +31,7 @@ enum class Tile : unsigned char {
     Tree,        // 'T'  непроходимо
     Grass,       // ','  проходимо
     Road,        // '='  проходимо
+    DeadWater,   // ':'  стоячая вода: по ней ходят, но она не сохнет
     Count
 };
 

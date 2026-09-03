@@ -1,6 +1,7 @@
 # Любовь Эндора — сборка
 #
-#   make            обычная сборка в ./andors-love
+#   make            обычная сборка в ./andors-love (терминал)
+#   make gui        графическая сборка на SDL2 в ./andors-love-gui
 #   make run        собрать и запустить
 #   make test       регрессионные тесты
 #   make debug      сборка с санитайзерами (ASan + UBSan)
@@ -31,14 +32,25 @@ LDFLAGS  ?=
 
 ALL_CXXFLAGS := $(CXXSTD) $(CXXFLAGS) $(DEPFLAGS)
 
-SRC := $(wildcard src/*.cpp)
-OBJ := $(SRC:src/%.cpp=build/%.o)
-DEP := $(OBJ:.o=.d)
+# Логика игры и терминальная оболочка. Графическая оболочка лежит в src/gfx
+# и собирается отдельной целью: логика у них общая, различаются оболочки.
+SRC     := $(wildcard src/*.cpp)
+OBJ     := $(SRC:src/%.cpp=build/%.o)
+CORE    := $(filter-out build/main.o build/ui.o,$(OBJ))
+GFX_SRC := $(wildcard src/gfx/*.cpp)
+GFX_OBJ := $(GFX_SRC:src/gfx/%.cpp=build/gfx/%.o)
+DEP     := $(OBJ:.o=.d) $(GFX_OBJ:.o=.d)
 # Переопределяется: make BIN=result — некоторые сборщики (в том числе C4Droid)
 # ожидают исполняемый файл под своим именем.
 BIN ?= andors-love
+GUI_BIN ?= andors-love-gui
 
-.PHONY: all run debug test embed clean
+# SDL2 ищется через sdl2-config; на Android его нет, там флаги задаёт C4Droid,
+# поэтому значения переопределяемы.
+SDL_CFLAGS ?= $(shell sdl2-config --cflags 2>/dev/null)
+SDL_LIBS   ?= $(shell sdl2-config --libs 2>/dev/null || echo -lSDL2)
+
+.PHONY: all gui run debug test embed font clean
 
 all: $(BIN)
 
@@ -51,15 +63,28 @@ $(BIN): $(OBJ)
 build/%.o: src/%.cpp | build
 	$(CXX) $(ALL_CXXFLAGS) -c $< -o $@
 
+# --- графическая сборка ---
+gui: $(GUI_BIN)
+
+$(GUI_BIN): $(GFX_OBJ) $(CORE)
+	$(CXX) $(CXXSTD) $(CXXFLAGS) $(GFX_OBJ) $(CORE) -o $@ $(SDL_LIBS) $(LDFLAGS)
+
+build/gfx/%.o: src/gfx/%.cpp | build
+	$(CXX) $(ALL_CXXFLAGS) $(SDL_CFLAGS) -c $< -o $@
+
 build:
-	@mkdir -p build
+	@mkdir -p build build/gfx
 
 run: $(BIN)
 	./$(BIN)
 
 # Тесты линкуются со всеми объектами, кроме main.o (там своя точка входа).
+# Тесты линкуются со всей логикой и с той частью графического слоя, которую
+# можно проверить без окна: шрифт, жесты, ходьба. Рисование проверяется
+# отдельно — прогоном `./andors-love-gui --script` со снимками экрана.
+GFX_TESTABLE := build/gfx/font.o build/gfx/font_data.o build/gfx/touch.o build/gfx/walk.o
 TEST_SRC := tests/test_game.cpp
-TEST_OBJ := $(filter-out build/main.o,$(OBJ))
+TEST_OBJ := $(filter-out build/main.o,$(OBJ)) $(GFX_TESTABLE)
 TEST_BIN := build/run-tests
 
 test: $(TEST_BIN)
@@ -78,7 +103,12 @@ debug: clean $(BIN)
 embed:
 	@python3 tools/embed_maps.py
 
+# Растровый шрифт вшит в src/gfx/font_data.cpp и лежит в репозитории —
+# эта цель нужна только после правки набора символов и требует python3-pil.
+font:
+	@python3 tools/gen_font.py
+
 clean:
-	@rm -rf build $(BIN)
+	@rm -rf build $(BIN) $(GUI_BIN)
 
 -include $(DEP)
