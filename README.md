@@ -32,6 +32,8 @@ make              # терминальная сборка, без зависим
 
 make gui          # графическая сборка, нужен SDL2 (хватает 2.0.0)
 ./andors-love-gui
+
+make gui-so       # то же для Android: библиотека для SDL-активности
 ```
 
 Карты вшиты в бинарник, так что обе сборки работают и в одиночку, без
@@ -46,6 +48,7 @@ make run      # собрать и сразу запустить
 make test     # 3572 регрессионных проверки
 make debug    # сборка с ASan + UBSan
 make font     # перегенерировать вшитый шрифт (нужен python3-pil)
+make gui-so   # графика для Android: libandors-love-gui.so
 make embed    # перевшить карты после правки data/maps
 make clean
 ```

@@ -2,6 +2,7 @@
 build/
 andors-love
 andors-love-gui
+libandors-love-gui.so
 *.o
 *.bmp
 !docs/img/*.png

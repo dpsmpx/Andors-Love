@@ -2,6 +2,7 @@
 #
 #   make            обычная сборка в ./andors-love (терминал)
 #   make gui        графическая сборка на SDL2 в ./andors-love-gui
+#   make gui-so     то же для Android: разделяемая библиотека для SDL-активности
 #   make run        собрать и запустить
 #   make test       регрессионные тесты
 #   make debug      сборка с санитайзерами (ASan + UBSan)
@@ -44,6 +45,9 @@ DEP     := $(OBJ:.o=.d) $(GFX_OBJ:.o=.d)
 # ожидают исполняемый файл под своим именем.
 BIN ?= andors-love
 GUI_BIN ?= andors-love-gui
+# Android-сборка графики: там приложение — не исполняемый файл, а разделяемая
+# библиотека. Её загружает SDL-активность и вызывает в ней SDL_main.
+GUI_SO ?= libandors-love-gui.so
 
 # SDL2 ищется через sdl2-config; если его нет, остаётся простой -lSDL2.
 # Значения переопределяемы: на Android окружение задаёт C4Droid.
@@ -57,7 +61,7 @@ SDL_LIBS   ?= $(shell sdl2-config --libs 2>/dev/null || echo -lSDL2)
 # бинарник; выключается через SDL_EXPORT=.
 SDL_EXPORT ?= -rdynamic
 
-.PHONY: all gui run debug test embed font clean
+.PHONY: all gui gui-so run debug test embed font clean
 
 all: $(BIN)
 
@@ -68,16 +72,32 @@ $(BIN): $(OBJ)
 	$(CXX) $(CXXSTD) $(CXXFLAGS) $(OBJ) -o $@ $(LDFLAGS)
 
 build/%.o: src/%.cpp | build
-	$(CXX) $(ALL_CXXFLAGS) -c $< -o $@
+	$(CXX) $(ALL_CXXFLAGS) -fPIC -c $< -o $@
 
 # --- графическая сборка ---
+# gui    — обычный исполняемый файл: настольная машина, Termux с X-сервером.
+# gui-so — разделяемая библиотека: так устроено SDL2-приложение на Android.
+#          Активность SDL загружает файл и зовёт в нём SDL_main, поэтому
+#          исполняемый файл ей не подходит — отсюда «your app doesn't
+#          properly link to SDL2» при внешне успешной сборке.
 gui: $(GUI_BIN)
+gui-so: $(GUI_SO)
 
 $(GUI_BIN): $(GFX_OBJ) $(CORE)
 	$(CXX) $(CXXSTD) $(CXXFLAGS) $(SDL_EXPORT) $(GFX_OBJ) $(CORE) -o $@ $(SDL_LIBS) $(LDFLAGS)
 
+# -pie и -shared противоречат друг другу: у C4Droid -pie лежит в CXXFLAGS
+# ради исполняемых файлов, и для библиотеки его надо убрать, иначе компоновщик
+# Android откажется собирать.
+SO_CXXFLAGS := $(filter-out -pie -fpie -fPIE,$(CXXFLAGS))
+
+$(GUI_SO): $(GFX_OBJ) $(CORE)
+	$(CXX) $(CXXSTD) $(SO_CXXFLAGS) -shared $(GFX_OBJ) $(CORE) -o $@ $(SDL_LIBS) $(LDFLAGS)
+
+# -fPIC нужен объектам, которые пойдут в разделяемую библиотеку; на код
+# исполняемого файла он не влияет, поэтому ставится всем без разбора.
 build/gfx/%.o: src/gfx/%.cpp | build
-	$(CXX) $(ALL_CXXFLAGS) $(SDL_CFLAGS) -c $< -o $@
+	$(CXX) $(ALL_CXXFLAGS) -fPIC $(SDL_CFLAGS) -c $< -o $@
 
 build:
 	@mkdir -p build build/gfx
@@ -116,6 +136,6 @@ font:
 	@python3 tools/gen_font.py
 
 clean:
-	@rm -rf build $(BIN) $(GUI_BIN)
+	@rm -rf build $(BIN) $(GUI_BIN) $(GUI_SO)
 
 -include $(DEP)
