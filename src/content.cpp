@@ -196,6 +196,30 @@ void Content::build_items() {
                             "Переплёт и полсотни страниц. Применить, чтобы начать её.");
     add(blank);
 
+    // --- Ольховый лоскут: топь и погост ---
+    add(mk_item("bog_root", "Болотный корень", ItemKind::Misc, 12,
+                "Пахнет тиной и почему-то морем. Лада берёт такие на противоядие."));
+    add(mk_item("grave_list", "Опись погоста", ItemKind::Misc, 0,
+                "Столбик имён рукой могильщика. Три последних он не дописал."));
+    add(mk_item("road_stone", "Верстовой камень", ItemKind::Misc, 0,
+                "Скол сверху, счёт вёрст снизу. Считает от города, которого тут нет."));
+
+    ItemDef dknife = mk_item("drover_knife", "Нож возчика", ItemKind::Weapon, 120,
+                             "Пролежал в воде неизвестно сколько и не заржавел.");
+    dknife.bonus.dmg_min = 3; dknife.bonus.dmg_max = 7;
+    dknife.bonus.attack = 7; dknife.bonus.ap_atk = -1;
+    add(dknife);
+
+    ItemDef bcloak = mk_item("bog_cloak", "Плащ болотной кожи", ItemKind::Armor, 190,
+                             "Вода с него скатывается, и яд, говорят, тоже.");
+    bcloak.bonus.armor = 4; bcloak.bonus.block = 5; bcloak.bonus.max_hp = 4;
+    add(bcloak);
+
+    ItemDef mourn = mk_item("mourn_ring", "Кольцо с погоста", ItemKind::Ring, 230,
+                            "Снято с руки, которую никто не опознал. Носить неловко.");
+    mourn.bonus.max_hp = 6; mourn.bonus.attack = 4; mourn.bonus.crit = 3;
+    add(mourn);
+
     // --- Регион II: Шов ---
     add(mk_item("glass_shard", "Осколок поля", ItemKind::Misc, 22,
                 "Стекло не заводское: земля спеклась сама. Режет сквозь рукавицу."));
@@ -655,6 +679,78 @@ void Content::build_notes() {
         "Староста наш ездил разбирать и вернулся",
         "мрачный. Сказал только: межу не проведёшь",
         "там, где земля сама себя догнала.»"
+    });
+
+    // --- Ольховый лоскут: топь и погост ---
+
+    add("bog", "Отчего вода солёная", {
+        "«Мерил воду в топи третий раз. Солёная.",
+        "",
+        "До моря отсюда, если верить старикам,",
+        "недели три пути. Солёной воде тут взяться",
+        "неоткуда, а она солёная, и раки в ней",
+        "морские, мелкие.",
+        "",
+        "И ещё. Там, где помельче, под водой лежит",
+        "мостовая. Гладкая, тёсаная, идёт с севера",
+        "на юг и уходит под трясину в обе стороны.",
+        "",
+        "У нас в Ольховке мостовых не делали никогда.",
+        "Дорога тут одна, и та грунтовая.",
+        "",
+        "Кто-то положил её раньше нас — или",
+        "не здесь.»"
+    });
+
+    add("drovers", "Размокший путевой лист", {
+        "Размокший лист, читается через слово.",
+        "",
+        "«…шесть подвод, соль и сукно, идём на юг",
+        "по мощёной, ночевать думаем в …",
+        "",
+        "…дорога кончилась. Не свернула, не",
+        "размылась — кончилась. Впереди лес,",
+        "которого на карте нет, и он старый.",
+        "",
+        "Возвращаемся тем же путём. Пишу на всякий",
+        "случай, потому что тем же путём тоже",
+        "не выходит.»",
+        "",
+        "Даты нет. Есть счёт дней: девятый."
+    });
+
+    add("graves", "Три могилы", {
+        "Крайние три надгробья стоят отдельно,",
+        "и камень у них другой — тёсаный.",
+        "",
+        "На первом: имя, которого в Ольховке нет",
+        "ни у кого и не было.",
+        "На втором: то же имя и приписка «сын».",
+        "На третьем не имя, а только слово:",
+        "«ждёт».",
+        "",
+        "Даты на всех трёх одинаковые, и они",
+        "старше самой Ольховки на без малого",
+        "сто лет."
+    });
+
+    add("sexton", "Тетрадь могильщика", {
+        "«Вытащили из топи троих. Одежда чужая,",
+        "сукно доброе, обувь городская.",
+        "",
+        "Отпел, закопал, надгробья вытесал из того",
+        "камня, что при них и лежал: они его,",
+        "видать, на себе везли.",
+        "",
+        "Имена списал с их бумаги, а бумага",
+        "размокла, и я не всё разобрал. Третьего",
+        "имени не разобрал совсем.",
+        "",
+        "Написал «ждёт». Пусть уж лучше ждёт,",
+        "чем никак.",
+        "",
+        "Староста велел в опись не вносить: люди",
+        "и так пугаются, что даты старше деревни.»"
     });
 
     // --- Регион II: Шов ---
@@ -1532,6 +1628,53 @@ void Content::build_enemies() {
     keeper.on_hit_effect = "slow"; keeper.on_hit_chance = 35; keeper.on_hit_power = 1;
     add(keeper);
 
+    // --- Ольховый лоскут: топь и погост ---
+
+    EnemyDef leech;
+    leech.id = "bog_leech"; leech.name = "Болотная пиявка"; leech.female = true;
+    leech.stats.max_hp = 34; leech.stats.max_ap = 10; leech.stats.attack = 72;
+    leech.stats.dmg_min = 3; leech.stats.dmg_max = 7; leech.stats.block = 8;
+    leech.stats.armor = 1;   leech.stats.ap_atk = 3;
+    leech.exp = 30; leech.gold_min = 2; leech.gold_max = 10;
+    leech.drops = { Drop("bog_root", 45) };
+    leech.detect = 5; leech.kill_counter = "kill_leech";
+    leech.on_hit_effect = "poison"; leech.on_hit_chance = 45; leech.on_hit_power = 1;
+    add(leech);
+
+    EnemyDef drowned;
+    drowned.id = "drowned_man"; drowned.name = "Утопший возчик";
+    drowned.stats.max_hp = 48; drowned.stats.max_ap = 10; drowned.stats.attack = 76;
+    drowned.stats.dmg_min = 5; drowned.stats.dmg_max = 10; drowned.stats.block = 14;
+    drowned.stats.armor = 3;   drowned.stats.ap_atk = 4;
+    drowned.exp = 52; drowned.gold_min = 6; drowned.gold_max = 22;
+    drowned.drops = { Drop("drover_knife", 25), Drop("bog_root", 30),
+                      Drop("torch", 35) };
+    drowned.detect = 6; drowned.kill_counter = "kill_drowned";
+    drowned.on_hit_effect = "slow"; drowned.on_hit_chance = 30; drowned.on_hit_power = 1;
+    add(drowned);
+
+    EnemyDef bwalker;
+    bwalker.id = "bog_walker"; bwalker.name = "Болотный ходок";
+    bwalker.stats.max_hp = 88; bwalker.stats.max_ap = 11; bwalker.stats.attack = 80;
+    bwalker.stats.dmg_min = 7; bwalker.stats.dmg_max = 13; bwalker.stats.block = 18;
+    bwalker.stats.armor = 5;   bwalker.stats.ap_atk = 4;
+    bwalker.exp = 130; bwalker.gold_min = 30; bwalker.gold_max = 70;
+    bwalker.drops = { Drop("bog_cloak", 60), Drop("bog_root", 100) };
+    bwalker.detect = 7; bwalker.kill_counter = "kill_bwalker";
+    bwalker.on_hit_effect = "poison"; bwalker.on_hit_chance = 50; bwalker.on_hit_power = 2;
+    add(bwalker);
+
+    EnemyDef bshade;
+    bshade.id = "barrow_shade"; bshade.name = "Тень с погоста"; bshade.female = true;
+    bshade.stats.max_hp = 40; bshade.stats.max_ap = 10; bshade.stats.attack = 74;
+    bshade.stats.dmg_min = 4; bshade.stats.dmg_max = 9; bshade.stats.block = 12;
+    bshade.stats.armor = 2;   bshade.stats.ap_atk = 4;
+    bshade.exp = 44; bshade.gold_min = 4; bshade.gold_max = 18;
+    bshade.drops = { Drop("mourn_ring", 20), Drop("bread", 25) };
+    bshade.detect = 6; bshade.kill_counter = "kill_bshade";
+    bshade.on_hit_effect = "weaken"; bshade.on_hit_chance = 30; bshade.on_hit_power = 1;
+    add(bshade);
+
     // --- Регион II: Шов ---
 
     EnemyDef stray;
@@ -2127,6 +2270,38 @@ void Content::build_quests() {
     q.stages = {
         QuestStageDef(1, "Гурию нужен рецепт чернил и 3 чернильных орешка из леса."),
         QuestStageDef(QUEST_DONE, "Гурий начал возить чистые книги.")
+    };
+    quests_.push_back(q);
+
+    // --- Ольховый лоскут: топь и погост ---
+
+    q = QuestDef();
+    q.id = "swamproot"; q.name = "Болотный корень";
+    q.stages = {
+        QuestStageDef(1, "Ладе нужны 5 болотных корней: из Гнилой топи всё чаще "
+                         "приносят отравленных, а противоядие она варит на них."),
+        QuestStageDef(QUEST_DONE, "Корни у Лады. Мазь сварена — теперь в топь ходят "
+                                  "и возвращаются.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "strangers"; q.name = "Чужие имена";
+    q.stages = {
+        QuestStageDef(1, "На погосте три могилы, которых Ольховка не копала. "
+                         "Мирон просит прочесть надгробья и принести опись."),
+        QuestStageDef(QUEST_DONE, "Даты на камнях старше деревни на сто лет. "
+                                  "Мирон велел никому не рассказывать.")
+    };
+    quests_.push_back(q);
+
+    q = QuestDef();
+    q.id = "drowned"; q.name = "Дорога под водой"; q.secret = true;
+    q.stages = {
+        QuestStageDef(1, "Вода в топи солёная, а под ней лежит мощёная дорога. "
+                         "В Ольховке мостовых не делали никогда."),
+        QuestStageDef(QUEST_DONE, "Верстовой камень со дна считает вёрсты от города, "
+                                  "которого в этих краях нет.")
     };
     quests_.push_back(q);
 
@@ -2781,6 +2956,14 @@ void Content::build_triggers() {
         triggers_.push_back(t);
     };
 
+    // --- Ольховый лоскут: топь и погост ---
+    // Первая тайна, до которой игрок доходит сам: солёная вода и мостовая
+    // под ней. Разгадка — вещь со дна, а не разговор.
+    add(TriggerKind::NoteTaken, "bog", 1, "drowned", 1, 0,
+        "Вода солёная, под водой мостовая. Открыта тайна: «Дорога под водой».");
+    add(TriggerKind::ItemGained, "road_stone", 1, "drowned", QUEST_DONE, 1,
+        "Верстовой камень считает от города, которого тут нет. Дорога была не здешняя.");
+
     // Тайна открывается находкой, а не разговором.
     add(TriggerKind::NoteTaken, "seam", 1, "seam", 1, 0,
         "Заметка на полях говорит о шве за алтарём. Открыта тайна: «Шов за алтарём».");
@@ -2980,6 +3163,34 @@ void Content::build_dialogues() {
         q_wait.req_counter = "kill_queen"; q_wait.req_counter_max = 0;
         n.options.push_back(q_wait);
 
+        DlgOption gr_offer;
+        gr_offer.text = "Что за могилы стоят отдельно на погосте?";
+        gr_offer.next = "strangers_offer";
+        gr_offer.req_quest  = "strangers"; gr_offer.req_stage_min  = QUEST_NONE; gr_offer.req_stage_max  = QUEST_NONE;
+        gr_offer.req_quest2 = "wolves";    gr_offer.req_stage2_min = QUEST_DONE; gr_offer.req_stage2_max = QUEST_DONE;
+        n.options.push_back(gr_offer);
+
+        // Одной описи мало: надо и камни прочесть своими глазами.
+        DlgOption gr_done;
+        gr_done.text = "Опись у меня, и надгробья я прочёл.";
+        gr_done.next = "strangers_reward";
+        gr_done.req_quest = "strangers"; gr_done.req_stage_min = 1; gr_done.req_stage_max = 1;
+        gr_done.req_item = "grave_list"; gr_done.req_item_count = 1;
+        gr_done.req_note = "graves";
+        n.options.push_back(gr_done);
+
+        DlgOption gr_wait;
+        gr_wait.text = "Ещё не разобрался с могилами.";
+        gr_wait.next = "strangers_wait";
+        gr_wait.req_quest = "strangers"; gr_wait.req_stage_min = 1; gr_wait.req_stage_max = 1;
+        n.options.push_back(gr_wait);
+
+        DlgOption gr_after;
+        gr_after.text = "Так что с теми тремя?";
+        gr_after.next = "strangers_after";
+        gr_after.req_quest = "strangers"; gr_after.req_stage_min = QUEST_DONE; gr_after.req_stage_max = QUEST_DONE;
+        n.options.push_back(gr_after);
+
         n.options.push_back(bye("Пойду."));
         add(n);
     }
@@ -3107,6 +3318,26 @@ void Content::build_dialogues() {
         moss_wait.req_quest = "moss"; moss_wait.req_stage_min = 1; moss_wait.req_stage_max = 1;
         n.options.push_back(moss_wait);
 
+        DlgOption root_offer;
+        root_offer.text = "Из топи опять кого-то принесли?";
+        root_offer.next = "root_offer";
+        root_offer.req_quest  = "swamproot"; root_offer.req_stage_min  = QUEST_NONE; root_offer.req_stage_max  = QUEST_NONE;
+        root_offer.req_quest2 = "moss";      root_offer.req_stage2_min = QUEST_DONE; root_offer.req_stage2_max = QUEST_DONE;
+        n.options.push_back(root_offer);
+
+        DlgOption root_done;
+        root_done.text = "Пять корней из топи.";
+        root_done.next = "root_reward";
+        root_done.req_quest = "swamproot"; root_done.req_stage_min = 1; root_done.req_stage_max = 1;
+        root_done.req_item = "bog_root";   root_done.req_item_count = 5;
+        n.options.push_back(root_done);
+
+        DlgOption root_wait;
+        root_wait.text = "Корней пока мало.";
+        root_wait.next = "root_wait";
+        root_wait.req_quest = "swamproot"; root_wait.req_stage_min = 1; root_wait.req_stage_max = 1;
+        n.options.push_back(root_wait);
+
         DlgOption trade;
         trade.text = "Покажи, что есть из настоев.";
         trade.open_shop = true;
@@ -3187,6 +3418,130 @@ void Content::build_dialogues() {
         take.give_item = "salve"; take.give_count = 3;
         take.give_gold = 60; take.give_exp = 90;
         n.options.push_back(take);
+        add(n);
+    }
+
+    // --- Ольховый лоскут: топь и погост ---
+
+    {
+        DlgNode n; n.id = "root_offer";
+        n.text = "Лада откладывает пучок и вытирает руки.\n"
+                 "— Принесли. Третьего за месяц.\n"
+                 "\n"
+                 "Ходят в топь за клюквой, возвращаются синие. Яд там не змеиный\n"
+                 "и не паучий — я такого не знаю, а я много знаю.\n"
+                 "\n"
+                 "Одно средство помогает: корень, который в самой топи и растёт.\n"
+                 "Так всегда: что травит, то рядом и лечит.\n"
+                 "\n"
+                 "Принеси пять корней. И мазью намажься, прежде чем лезть,\n"
+                 "вот тебе банка — за так, мне не жалко, мне живые нужны.";
+        DlgOption take;
+        take.text = "Схожу в топь.";
+        take.next = "root_wait";
+        take.set_quest = "swamproot"; take.set_stage = 1;
+        take.give_item = "salve"; take.give_count = 2;
+        n.options.push_back(take);
+        n.options.push_back(bye("Пусть за клюквой не ходят."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "root_wait";
+        n.text = "— Пять корней. Растут на кочках, лист как у щавеля, только\n"
+                 "мельче и жёстче.\n"
+                 "И на воду там не смотри подолгу. Не почему-то, а просто\n"
+                 "не смотри.";
+        n.options.push_back(bye("Понял."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "root_reward";
+        n.text = "Лада перебирает корни, нюхает каждый и вдруг останавливается.\n"
+                 "\n"
+                 "— Солёные.\n"
+                 "\n"
+                 "— Корень пресной воды, а солёный. Так не бывает, и вот он.\n"
+                 "\n"
+                 "Она ссыпает их в ступку и больше про это не говорит —\n"
+                 "по лицу видно, что решила не думать.\n"
+                 "\n"
+                 "— Плащ возьми. С утопшего снят, зато вода с него скатывается.";
+        DlgOption take;
+        take.text = "Принять плащ. [200 опыта]";
+        take.set_quest = "swamproot"; take.set_stage = QUEST_DONE;
+        take.take_item = "bog_root"; take.take_count = 5;
+        take.give_item = "bog_cloak"; take.give_count = 1;
+        take.give_gold = 90; take.give_exp = 200;
+        n.options.push_back(take);
+        add(n);
+    }
+
+    {
+        DlgNode n; n.id = "strangers_offer";
+        n.text = "Мирон перестаёт щуриться, и лицо у него делается закрытое.\n"
+                 "\n"
+                 "— Крайние три. Не наши.\n"
+                 "\n"
+                 "Их не Ольховка копала: они уже стояли, когда мой дед сюда\n"
+                 "пришёл. Камень тёсаный, у нас такого не тешут.\n"
+                 "\n"
+                 "Я туда не хожу и другим не советую, а надо бы разобраться:\n"
+                 "погост-то наш, а лежит в нём непонятно кто.\n"
+                 "\n"
+                 "Прочти надгробья сам, своими глазами. И у могильщика в сарае\n"
+                 "опись лежала — принеси, сверю.";
+        DlgOption take;
+        take.text = "Схожу на погост.";
+        take.next = "strangers_wait";
+        take.set_quest = "strangers"; take.set_stage = 1;
+        n.options.push_back(take);
+        n.options.push_back(bye("Мёртвых не тревожат."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "strangers_wait";
+        n.text = "— Крайние три, у самой ограды. И опись в сарае.\n"
+                 "\n"
+                 "Могильщик наш помер давно, а сарай стоит. Замка там нет:\n"
+                 "воровать у могильщика — последнее дело.";
+        n.options.push_back(bye("Схожу."));
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "strangers_reward";
+        n.text = "Мирон читает опись, шевеля губами, потом откладывает и долго\n"
+                 "смотрит в стену.\n"
+                 "\n"
+                 "— Даты.\n"
+                 "\n"
+                 "— Ольховке сто девяносто лет, я по церковной книге считал.\n"
+                 "А тут на камне — старше почти на сто. И одежда городская,\n"
+                 "и обувь городская, и мостовая под топью, про которую мне ещё\n"
+                 "дед говорил, а я не верил.\n"
+                 "\n"
+                 "Он складывает опись вчетверо и прячет за пазуху.\n"
+                 "\n"
+                 "— Никому не говори. Не потому, что тайна. Потому, что скажешь —\n"
+                 "и спросят: а мы-то откуда? А я не знаю.\n"
+                 "\n"
+                 "Возьми за труды. И кольцо возьми, если не брезгуешь: могильщик\n"
+                 "его при них нашёл и в опись не внёс.";
+        DlgOption take;
+        take.text = "Взять плату. [180 опыта]";
+        take.set_quest = "strangers"; take.set_stage = QUEST_DONE;
+        take.take_item = "grave_list"; take.take_count = 1;
+        take.give_item = "mourn_ring"; take.give_count = 1;
+        take.give_gold = 120; take.give_exp = 180;
+        n.options.push_back(take);
+        add(n);
+    }
+    {
+        DlgNode n; n.id = "strangers_after";
+        n.text = "— Лежат. Пусть лежат.\n"
+                 "\n"
+                 "Я третьему на камень имя дописывать не стал. Там «ждёт»\n"
+                 "написано, и, знаешь, пусть так и будет: мало ли.";
+        n.options.push_back(bye("Пусть."));
         add(n);
     }
 

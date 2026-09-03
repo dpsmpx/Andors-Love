@@ -75,6 +75,7 @@ village.objects = [
     "bed 10 3",
     "sign 12 6 Ольховка. Восточные ворота ведут в Ольховый лес.",
     "sign 44 9 За воротами начинается лес. Волки выходят к самой тропе.",
+    "sign 4 6 Западная дорога кончается погостом. Дальше только топь.",
     "item 11 16 bread 2",
     "item 30 16 torch 1",
     "note 30 2 child",
@@ -83,6 +84,7 @@ village.objects = [
     "spawn 20 15 rat 2 4",
     "spawn 44 15 rat 1 3",
     "exit 46 8 forest 2 8",
+    "exit 1 8 graveyard 44 9",
 ]
 
 # ------------------------------------------------------------------ ЛЕС
@@ -119,6 +121,67 @@ forest.objects = [
     "exit 24 16 ruins 24 3",
     "exit 12 1 goatpath 24 15 quest=goatpath:1 "
     "deny=Тропа наверх зарастает и никуда, кажется, не ведёт. Гурий что-то про неё говорил.",
+    "exit 45 13 swamp 24 14 quest=swamproot:1 "
+    "deny=Низина за деревьями стоит под водой и пахнет тухлым. Лезть туда без нужды не стоит.",
+]
+
+# ------------------------------------------------------------ ПОГОСТ
+# Сразу за околицей, по западной дороге. Крайние три надгробья стоят
+# отдельно, и камень у них другой.
+graveyard = Map("graveyard", "Ольховский погост", ",")
+graveyard.rect(2, 3, 45, 15, ",")
+graveyard.rect(2, 8, 45, 9, "=")                 # дорога насквозь
+for y in (5, 12):                                # ряды могил
+    for x in range(10, 40, 4):
+        graveyard.rect(x, y, x, y, "#")
+graveyard.rect(4, 12, 8, 14, "#")                # сарай могильщика
+graveyard.rect(5, 13, 7, 13, ".")                # внутри: тетрадь и ящик
+graveyard.rect(6, 14, 6, 14, ".")                # дверь
+graveyard.rect(41, 4, 43, 6, "#")                # три отдельных надгробья
+graveyard.rect(42, 5, 42, 7, ".")                # подход к ним с дороги
+graveyard.rect(8, 3, 10, 3, "T").rect(30, 15, 33, 15, "T")
+graveyard.objects = [
+    "sign 24 10 Ольховский погост. Ограда низкая, калитка не запирается.",
+    "sign 40 7 Три камня стоят отдельно, и тёсаны они не здешней рукой.",
+    "note 42 5 graves",
+    "note 5 13 sexton",
+    "item 12 15 bread 1",
+    "chest 7 13 60 - grave_list:1 salve:1 torch:2",
+    "spawn 16 4 barrow_shade 2 4",
+    "spawn 34 13 barrow_shade 2 4",
+    "spawn 20 15 rat 2 4",
+    "exit 45 9 village 2 8",
+    "exit 2 9 swamp 44 9 quest=swamproot:1 "
+    "deny=Дальше дороги нет, одна топь. Лада про неё говорила недоброе.",
+]
+
+# ------------------------------------------------------------- ГНИЛАЯ ТОПЬ
+# Первый «неправильный» лоскут: вода солёная, а под водой — мощёная дорога,
+# которой в этих краях быть не может.
+swamp = Map("swamp", "Гнилая топь", "~")
+swamp.rect(2, 3, 45, 15, "~")
+swamp.rect(2, 8, 45, 10, ",")                    # гряда кочек поперёк
+swamp.rect(10, 4, 13, 14, ",")                   # кочки-островки
+swamp.rect(22, 4, 26, 14, ",")
+swamp.rect(34, 4, 38, 14, ",")
+swamp.rect(24, 5, 24, 13, "=")                   # мостовая, видная сквозь воду
+swamp.rect(2, 14, 45, 15, "~")
+swamp.rect(11, 12, 12, 14, ",")
+swamp.rect(23, 14, 25, 15, ",")                  # мостовая выходит на юг, к лесу
+swamp.objects = [
+    "sign 24 11 Вода стоит и не цветёт. Под ней, где помельче, видна тёсаная мостовая.",
+    "note 12 6 bog",
+    "note 36 13 drovers",
+    "item 24 5 road_stone 1",
+    "item 36 5 bog_root 2",
+    "item 11 13 bog_root 1",
+    "chest 37 9 90 - bog_root:2 salve:2 drover_knife:1",
+    "spawn 12 9 bog_leech 3 5",
+    "spawn 36 9 bog_leech 2 4",
+    "spawn 25 12 drowned_man 2 4",
+    "spawn 24 4 bog_walker 1 2",
+    "exit 44 9 graveyard 3 9",
+    "exit 24 15 forest 44 13",
 ]
 
 # -------------------------------------------------------------- ПЕЩЕРА
@@ -1114,7 +1177,7 @@ finale.objects = [
     "exit 24 15 zeropoint 11 8",
 ]
 
-MAPS = [village, forest, cave, ruins, sanctum, vault,
+MAPS = [village, forest, cave, ruins, sanctum, vault, graveyard, swamp,
         goatpath, glassfield, mill, market, bridge, saltmines,
         caravanserai, doubled,
         halfcity, endless, foundry, canal, counter_tower, archive,
@@ -1145,6 +1208,7 @@ def check():
     by_id = {m.id: m for m in MAPS}
     entries = {"village": (5, 8), "forest": (2, 8), "cave": (3, 9),
                "ruins": (24, 3), "sanctum": (3, 9), "vault": (3, 9),
+               "graveyard": (45, 9), "swamp": (44, 9),
                "goatpath": (24, 15), "glassfield": (3, 9), "mill": (24, 15),
                "market": (3, 9), "bridge": (24, 3), "saltmines": (24, 3),
                "caravanserai": (24, 15), "doubled": (3, 9),

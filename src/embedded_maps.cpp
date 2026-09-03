@@ -620,6 +620,7 @@ exit 1 8 village 45 8
 exit 45 2 cave 3 9
 exit 24 16 ruins 24 3
 exit 12 1 goatpath 24 15 quest=goatpath:1 deny=Тропа наверх зарастает и никуда, кажется, не ведёт. Гурий что-то про неё говорил.
+exit 45 13 swamp 24 14 quest=swamproot:1 deny=Низина за деревьями стоит под водой и пахнет тухлым. Лезть туда без нужды не стоит.
 end)MAP";
 
 const char k_foundry[] = R"MAP(name Литейный двор
@@ -862,6 +863,41 @@ item 12 5 rune_stone 1
 chest 36 11 640 - order_draught:3 rune_stone:2 node_core:1
 spawn 24 5 master_shadow 1 2
 exit 24 15 node3 9 12
+end)MAP";
+
+const char k_graveyard[] = R"MAP(name Ольховский погост
+size 48 18
+grid
+################################################
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,#
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,#
+#,,,,,,,TTT,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,#
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,###,,,#
+#,,,,,,,,,#,,,#,,,#,,,#,,,#,,,#,,,#,,,#,,#.#,,,#
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,#.#,,,#
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,.,,,,#
+#,============================================,#
+#,============================================,#
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,#
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,#
+#,,,#####,#,,,#,,,#,,,#,,,#,,,#,,,#,,,#,,,,,,,,#
+#,,,#...#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,#
+#,,,##.##,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,#
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,TTTT,,,,,,,,,,,,,#
+#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,#
+################################################
+objects
+sign 24 10 Ольховский погост. Ограда низкая, калитка не запирается.
+sign 40 7 Три камня стоят отдельно, и тёсаны они не здешней рукой.
+note 42 5 graves
+note 5 13 sexton
+item 12 15 bread 1
+chest 7 13 60 - grave_list:1 salve:1 torch:2
+spawn 16 4 barrow_shade 2 4
+spawn 34 13 barrow_shade 2 4
+spawn 20 15 rat 2 4
+exit 45 9 village 2 8
+exit 2 9 swamp 44 9 quest=swamproot:1 deny=Дальше дороги нет, одна топь. Лада про неё говорила недоброе.
 end)MAP";
 
 const char k_grove[] = R"MAP(name Роща, где не темнеет
@@ -1482,6 +1518,43 @@ exit 31 9 vault 3 9 key=seam_key quest=seam:1 deny=Северная грань �
 exit 15 16 homepath 44 9 quest=driftway:2 deny=Южная ниша глухая. По тропе, которой ты не прошёл, обратно не ходят.
 end)MAP";
 
+const char k_swamp[] = R"MAP(name Гнилая топь
+size 48 18
+grid
+################################################
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#~~~~~~~~~,,,,~~~~~~~~,,,,,~~~~~~~,,,,,~~~~~~~~#
+#~~~~~~~~~,,,,~~~~~~~~,,=,,~~~~~~~,,,,,~~~~~~~~#
+#~~~~~~~~~,,,,~~~~~~~~,,=,,~~~~~~~,,,,,~~~~~~~~#
+#~~~~~~~~~,,,,~~~~~~~~,,=,,~~~~~~~,,,,,~~~~~~~~#
+#~,,,,,,,,,,,,,,,,,,,,,,=,,,,,,,,,,,,,,,,,,,,,~#
+#~,,,,,,,,,,,,,,,,,,,,,,=,,,,,,,,,,,,,,,,,,,,,~#
+#~,,,,,,,,,,,,,,,,,,,,,,=,,,,,,,,,,,,,,,,,,,,,~#
+#~~~~~~~~~,,,,~~~~~~~~,,=,,~~~~~~~,,,,,~~~~~~~~#
+#~~~~~~~~~,,,,~~~~~~~~,,=,,~~~~~~~,,,,,~~~~~~~~#
+#~~~~~~~~~,,,,~~~~~~~~,,=,,~~~~~~~,,,,,~~~~~~~~#
+#~~~~~~~~~~,,~~~~~~~~~~,,,~~~~~~~~~~~~~~~~~~~~~#
+#~~~~~~~~~~~~~~~~~~~~~~,,,~~~~~~~~~~~~~~~~~~~~~#
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+################################################
+objects
+sign 24 11 Вода стоит и не цветёт. Под ней, где помельче, видна тёсаная мостовая.
+note 12 6 bog
+note 36 13 drovers
+item 24 5 road_stone 1
+item 36 5 bog_root 2
+item 11 13 bog_root 1
+chest 37 9 90 - bog_root:2 salve:2 drover_knife:1
+spawn 12 9 bog_leech 3 5
+spawn 36 9 bog_leech 2 4
+spawn 25 12 drowned_man 2 4
+spawn 24 4 bog_walker 1 2
+exit 44 9 graveyard 3 9
+exit 24 15 forest 44 13
+end)MAP";
+
 const char k_upstair[] = R"MAP(name Лестница вверх
 size 48 18
 grid
@@ -1579,6 +1652,7 @@ npc 24 5 enchanter
 bed 10 3
 sign 12 6 Ольховка. Восточные ворота ведут в Ольховый лес.
 sign 44 9 За воротами начинается лес. Волки выходят к самой тропе.
+sign 4 6 Западная дорога кончается погостом. Дальше только топь.
 item 11 16 bread 2
 item 30 16 torch 1
 note 30 2 child
@@ -1587,6 +1661,7 @@ chest 44 3 40 - bread:2 herb_potion:1
 spawn 20 15 rat 2 4
 spawn 44 15 rat 1 3
 exit 46 8 forest 2 8
+exit 1 8 graveyard 44 9
 end)MAP";
 
 const char k_well[] = R"MAP(name Колодец Двух Вёдер
@@ -1683,6 +1758,7 @@ const char* embedded_map(const char* id) {
     if (std::strcmp(id, "glassfield") == 0) return k_glassfield;
     if (std::strcmp(id, "goatpath") == 0) return k_goatpath;
     if (std::strcmp(id, "grave") == 0) return k_grave;
+    if (std::strcmp(id, "graveyard") == 0) return k_graveyard;
     if (std::strcmp(id, "grove") == 0) return k_grove;
     if (std::strcmp(id, "halfcity") == 0) return k_halfcity;
     if (std::strcmp(id, "homepath") == 0) return k_homepath;
@@ -1701,6 +1777,7 @@ const char* embedded_map(const char* id) {
     if (std::strcmp(id, "ruins") == 0) return k_ruins;
     if (std::strcmp(id, "saltmines") == 0) return k_saltmines;
     if (std::strcmp(id, "sanctum") == 0) return k_sanctum;
+    if (std::strcmp(id, "swamp") == 0) return k_swamp;
     if (std::strcmp(id, "upstair") == 0) return k_upstair;
     if (std::strcmp(id, "vault") == 0) return k_vault;
     if (std::strcmp(id, "village") == 0) return k_village;

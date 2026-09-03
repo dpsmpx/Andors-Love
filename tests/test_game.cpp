@@ -39,7 +39,7 @@ void section(const char* name) { std::cout << "\n== " << name << " ==\n"; }
 // Полный список локаций мира. Держится в одном месте: тесты обходят его
 // целиком, и новая локация не может тихо выпасть из проверок.
 const char* const ALL_LOCATIONS[] = {
-    "village", "forest", "cave", "ruins", "sanctum", "vault",
+    "village", "forest", "cave", "ruins", "sanctum", "vault", "graveyard", "swamp",
     "goatpath", "glassfield", "mill", "market", "bridge", "saltmines",
     "caravanserai", "doubled",
     "halfcity", "endless", "foundry", "canal", "counter", "archive",
@@ -684,6 +684,8 @@ void test_content_integrity() {
     // Все переходы диалогов ведут в существующие узлы, а награды — в реальные предметы.
     const char* nodes[] = {"elder_root","elder_offer","elder_taken","elder_progress",
                            "elder_reward","elder_after","elder_queen_offer",
+                           "strangers_offer","strangers_wait","strangers_reward","strangers_after",
+                           "root_offer","root_wait","root_reward",
                            "elder_queen_wait","elder_queen_reward",
                            "herbalist_root","herb_offer","herb_taken","herb_progress",
                            "herb_reward","moss_offer","moss_wait","moss_reward",
@@ -768,6 +770,7 @@ void test_content_integrity() {
 
     // Добыча врагов должна ссылаться на существующие предметы.
     const char* mobs[] = {"rat", "wolf", "bandit", "wolf_alpha", "spider", "bat",
+                          "bog_leech", "drowned_man", "bog_walker", "barrow_shade",
                           "spider_queen", "brigand", "bandit_chief", "wraith", "keeper",
                           "archivist", "stray", "glass_hound", "mill_rat", "salt_ghoul",
                           "caravan_shade", "salt_mother", "bridge_walker",
@@ -1636,6 +1639,7 @@ void test_books_and_notes() {
 
     // --- записки в базе ---
     const char* note_ids[] = {"ink", "miner", "watch", "zero", "child", "proto", "hermit",
+                              "bog", "drovers", "graves", "sexton",
                               "seam", "cinch", "order", "double",
                               "goat", "glass", "mill", "market", "prohor",
                               "caravan", "salt", "bridge",
@@ -1879,6 +1883,18 @@ void test_playthrough() {
         return false;
     };
 
+    // Победить противника честной боевой механикой.
+    auto fight = [&](int uid) {
+        g.start_combat(uid);
+        for (int turns = 0; turns < 600 && g.combat().active; ++turns) {
+            g.player().hp = g.total().max_hp;
+            if (g.player().ap < g.attack_cost()) g.player().ap = g.total().max_ap;
+            g.combat_attack(false);
+        }
+        g.player().effects.clear();      // тест не про выживание под ядом
+        return !g.combat().active;
+    };
+
     // Подобрать с карты все экземпляры предмета в текущей локации.
     auto gather = [&](const std::string& item_id) {
         const Location* loc = g.here();
@@ -1889,17 +1905,25 @@ void test_playthrough() {
             if (g.item_taken(loc->id, static_cast<int>(i))) continue;
             const Vec2 t = loc->items[i].pos;
             const int dx[] = {1, -1, 0, 0}, dy[] = {0, 0, 1, -1};
-            for (int k = 0; k < 4; ++k) {
-                Vec2 from(t.x - dx[k], t.y - dy[k]);
-                if (!loc->walkable(from)) continue;
-                g.player().pos = from;
-                if (g.try_move(dx[k], dy[k]) == Bump::Item) { ++got; break; }
+            bool taken = false;
+            for (int attempt = 0; attempt < 8 && !taken; ++attempt) {
+                for (int k = 0; k < 4 && !taken; ++k) {
+                    Vec2 from(t.x - dx[k], t.y - dy[k]);
+                    if (!loc->walkable(from)) continue;
+                    g.player().pos = from;
+                    Bump b = g.try_move(dx[k], dy[k]);
+                    if (b == Bump::Item) { ++got; taken = true; }
+                    else if (b == Bump::Combat) fight(g.combat().mob_uid);
+                }
+                if (!taken) g.world_turn();
             }
         }
         return got;
     };
 
-    // Подобрать записку с карты настоящим шагом.
+    // Подобрать записку с карты настоящим шагом. Между героем и запиской
+    // может встать моб — тогда шаг уходит в бой, а не в находку, и заход
+    // надо повторить. Без этого тест зависел бы от того, куда мобы забрели.
     auto gather_note = [&](const std::string& note_id) {
         const Location* loc = g.here();
         if (!loc) return false;
@@ -1908,26 +1932,19 @@ void test_playthrough() {
             if (g.note_taken(loc->id, static_cast<int>(i))) return true;
             const Vec2 t = loc->notes[i].pos;
             const int dx[] = {1, -1, 0, 0}, dy[] = {0, 0, 1, -1};
-            for (int k = 0; k < 4; ++k) {
-                Vec2 from(t.x - dx[k], t.y - dy[k]);
-                if (!loc->walkable(from)) continue;
-                g.player().pos = from;
-                if (g.try_move(dx[k], dy[k]) == Bump::Note) return true;
+            for (int attempt = 0; attempt < 8; ++attempt) {
+                for (int k = 0; k < 4; ++k) {
+                    Vec2 from(t.x - dx[k], t.y - dy[k]);
+                    if (!loc->walkable(from)) continue;
+                    g.player().pos = from;
+                    Bump b = g.try_move(dx[k], dy[k]);
+                    if (b == Bump::Note) return true;
+                    if (b == Bump::Combat) fight(g.combat().mob_uid);
+                }
+                g.world_turn();
             }
         }
         return false;
-    };
-
-    // Победить противника честной боевой механикой.
-    auto fight = [&](int uid) {
-        g.start_combat(uid);
-        for (int guard = 0; guard < 600 && g.combat().active; ++guard) {
-            g.player().hp = g.total().max_hp;
-            if (g.player().ap < g.attack_cost()) g.player().ap = g.total().max_ap;
-            g.combat_attack(false);
-        }
-        g.player().effects.clear();      // тест не про выживание под ядом
-        return !g.combat().active;
     };
 
     // Перебить в текущей локации всех мобов заданного вида (с респавном).
@@ -2029,6 +2046,86 @@ void test_playthrough() {
     g.apply_option(c.node("moss_reward")->options[0],        "", &shop);
     eq(g.player().quests["queen"], QUEST_DONE, "квест на матку закрыт");
     eq(g.player().quests["moss"],  QUEST_DONE, "квест на мох закрыт");
+
+    // --- погост: чужие имена ---
+    // Погост открыт с самого начала: он сразу за околицей, и попасть туда
+    // можно раньше, чем спросить о нём Мирона.
+    g.player().loc = "village";
+    check(travel("graveyard"), "переход на погост по западной дороге");
+    eqs(g.player().loc, "graveyard", "герой на погосте");
+    check(gather_note("graves"), "надгробья прочитаны");
+    check(gather_note("sexton"), "тетрадь могильщика найдена");
+    {
+        const Location* gy = g.here();
+        int ci = -1;
+        if (gy)
+            for (std::size_t i = 0; i < gy->chests.size(); ++i) ci = static_cast<int>(i);
+        check(ci >= 0 && g.open_chest(ci), "сарай могильщика открыт");
+    }
+    check(g.count_item("grave_list") >= 1, "опись погоста найдена в сарае");
+
+    g.player().loc = "village";
+    check(visible("elder_root", "strangers_offer"), "Мирон рассказывает про крайние три могилы");
+    g.apply_option(c.node("strangers_offer")->options[0], "", &shop);
+    eq(g.quest_stage("strangers"), 1, "квест «Чужие имена» взят");
+    check(visible("elder_root", "strangers_reward"), "с описью и прочитанными камнями есть что сказать");
+    g.apply_option(c.node("strangers_reward")->options[0], "", &shop);
+    eq(g.quest_stage("strangers"), QUEST_DONE, "квест «Чужие имена» закрыт");
+    eq(g.count_item("grave_list"), 0, "опись осталась у Мирона");
+    check(visible("elder_root", "strangers_after"), "и Мирону теперь есть что добавить");
+
+    // --- гнилая топь: без нужды туда не пускают ---
+    check(visible("herbalist_root", "root_offer"), "закрыв мох, Лада заговаривает о топи");
+    check(travel("graveyard"), "снова на погост");
+    check(!travel("swamp"), "без Ладиного дела в топь не лезут");
+    eqs(g.player().loc, "graveyard", "герой остаётся на погосте");
+
+    g.player().loc = "village";
+    g.apply_option(c.node("root_offer")->options[0], "", &shop);
+    eq(g.quest_stage("swamproot"), 1, "квест «Болотный корень» взят");
+    check(g.count_item("salve") >= 2, "Лада дала мазь вперёд");
+
+    check(travel("graveyard"), "к западной дороге");
+    check(travel("swamp"), "с делом топь пускает");
+    eqs(g.player().loc, "swamp", "герой в топи");
+    check(gather_note("bog"), "замер воды найден");
+    eq(g.quest_stage("drowned"), 1, "солёная вода открыла тайну «Дорога под водой»");
+    check(gather_note("drovers"), "размокший путевой лист найден");
+    check(gather("road_stone") >= 1, "верстовой камень поднят со дна");
+    eq(g.quest_stage("drowned"), QUEST_DONE, "тайна «Дорога под водой» разгадана");
+
+    // По мостовой под водой действительно ходят: это дорога, а не топь.
+    {
+        const Location* sw = g.here();
+        bool road_under = false;
+        for (int y = 1; y < 17 && !road_under; ++y)
+            for (int x = 1; x < 47; ++x)
+                if (sw->at(Vec2(x, y)) == Tile::Road && sw->walkable(Vec2(x, y))) {
+                    road_under = true;
+                    break;
+                }
+        check(road_under, "мостовая под водой проходима");
+    }
+
+    gather("bog_root");
+    guard = 0;
+    while (g.count_item("bog_root") < 5 && guard++ < 80) {
+        if (hunt("bog_leech", 1) == 0) g.world_turn();
+    }
+    check(g.count_item("bog_root") >= 5, "пять болотных корней собраны");
+    check(hunt("bog_walker", 1) == 1, "болотный ходок повержен");
+
+    // Топь выводит и в лес: западная дорога и лесная низина — одно место.
+    check(travel("forest"), "из топи выходят в лес");
+    eqs(g.player().loc, "forest", "герой снова в лесу");
+
+    g.player().loc = "village";
+    g.apply_option(c.node("root_reward")->options[0], "", &shop);
+    eq(g.quest_stage("swamproot"), QUEST_DONE, "квест «Болотный корень» закрыт");
+    check(g.count_item("bog_root") < 5, "пять корней ушли в ступку");
+    check(g.count_item("bog_cloak") >= 1, "плащ болотной кожи принят");
+
+    g.player().loc = "forest";
 
     // --- развалины: атаман ---
     check(travel("ruins"), "переход на развалины");
@@ -2790,6 +2887,7 @@ void test_playthrough() {
     // --- итог ---
     const char* all_quests[] = {"wolves", "amulet", "pelts", "moss", "books",
                                 "queen", "outpost", "zero_point", "enchanter",
+                                "swamproot", "strangers", "drowned",
                                 "seam", "cinch",
                                 "goatpath", "glass", "mill", "market", "doubled",
                                 "caravan", "salt", "bridge",
