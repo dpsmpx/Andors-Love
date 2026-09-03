@@ -4,6 +4,7 @@
 struct SDL_Window;
 struct SDL_Renderer;
 struct SDL_Texture;
+struct SDL_Surface;
 
 // Тонкий слой поверх SDL2: прямоугольники, рамки и текст вшитым шрифтом.
 // Ничего не знает про игру — только про то, как положить пиксели на экран.
@@ -26,6 +27,12 @@ struct Rect {
         return px >= x && py >= y && px < x + w && py < y + h;
     }
 };
+
+// Поверхность 32 бита на пиксель, RGBA в порядке байтов памяти.
+// Намеренно через SDL_CreateRGBSurface с явными масками: обёртка
+// SDL_CreateRGBSurfaceWithFormat появилась только в SDL 2.0.5, а в C4Droid
+// лежит SDL2 постарше, и на ней сборка просто не компилируется.
+SDL_Surface* new_surface32(int w, int h);
 
 class Canvas {
 public:

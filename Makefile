@@ -45,10 +45,17 @@ DEP     := $(OBJ:.o=.d) $(GFX_OBJ:.o=.d)
 BIN ?= andors-love
 GUI_BIN ?= andors-love-gui
 
-# SDL2 ищется через sdl2-config; на Android его нет, там флаги задаёт C4Droid,
-# поэтому значения переопределяемы.
+# SDL2 ищется через sdl2-config; если его нет, остаётся простой -lSDL2.
+# Значения переопределяемы: на Android окружение задаёт C4Droid.
 SDL_CFLAGS ?= $(shell sdl2-config --cflags 2>/dev/null)
 SDL_LIBS   ?= $(shell sdl2-config --libs 2>/dev/null || echo -lSDL2)
+
+# На Android SDL2 подменяет точку входа: main становится SDL_main, и вызывает
+# его загрузчик, а не система. Чтобы он нашёл символ в готовом файле, тот
+# должен остаться видимым — иначе получаем «your app doesn't properly link to
+# SDL2». На настольной машине флаг ничего не ломает, только чуть увеличивает
+# бинарник; выключается через SDL_EXPORT=.
+SDL_EXPORT ?= -rdynamic
 
 .PHONY: all gui run debug test embed font clean
 
@@ -67,7 +74,7 @@ build/%.o: src/%.cpp | build
 gui: $(GUI_BIN)
 
 $(GUI_BIN): $(GFX_OBJ) $(CORE)
-	$(CXX) $(CXXSTD) $(CXXFLAGS) $(GFX_OBJ) $(CORE) -o $@ $(SDL_LIBS) $(LDFLAGS)
+	$(CXX) $(CXXSTD) $(CXXFLAGS) $(SDL_EXPORT) $(GFX_OBJ) $(CORE) -o $@ $(SDL_LIBS) $(LDFLAGS)
 
 build/gfx/%.o: src/gfx/%.cpp | build
 	$(CXX) $(ALL_CXXFLAGS) $(SDL_CFLAGS) -c $< -o $@
