@@ -6,6 +6,9 @@
 #include "../src/embedded_maps.h"
 #include "../src/ui.h"
 #include "../src/platform.h"
+#include "../src/gfx/font.h"
+#include "../src/gfx/touch.h"
+#include "../src/gfx/walk.h"
 
 #include <cstdio>
 #include <fstream>
@@ -50,6 +53,23 @@ const char* const ALL_LOCATIONS[] = {
     "firstseam", "gallery", "measures", "meeting", "node1", "cinchheart",
     "zeropoint", "finale"};
 const int N_LOCATIONS = static_cast<int>(sizeof(ALL_LOCATIONS) / sizeof(ALL_LOCATIONS[0]));
+
+// Все записки мира: список держится в одном месте, чтобы новая
+// записка не могла тихо выпасть из проверок.
+const char* const ALL_NOTES[] = {"ink", "miner", "watch", "zero", "child", "proto", "hermit",
+                              "bog", "drovers", "graves", "sexton",
+                              "seam", "cinch", "order", "double",
+                              "goat", "glass", "mill", "market", "prohor",
+                              "caravan", "salt", "bridge",
+                              "cityhalf", "endless", "deadwater", "counting",
+                              "lists", "foundry", "halves", "lastclerk",
+                              "gates", "watchwrit", "read", "unsealed", "charts",
+                              "novice", "keepsake", "ovens", "refusal",
+                              "secondnode", "thirdnode", "emptygrave",
+                              "drift", "tomorrow", "otherside", "stair", "lastorder",
+                              "marks", "wellrule", "homeward", "houses", "edgeview",
+                              "oldseam", "readlines", "roomrule", "walkers",
+                              "firstnode", "cinchwork", "allatonce", "threeways"};
 
 // ------------------------------------------------------------------ тесты
 
@@ -1354,6 +1374,247 @@ void test_portals() {
     eq(placed, PORTAL_LIMIT, "поставлено ровно столько, сколько разрешено");
 }
 
+// ------------------------------------------------------- графическая часть
+// Проверяется то, что можно проверить без окна: разбор UTF-8 и покрытие
+// шрифта, распознавание жестов и ходьба по тапу. Рисование проверяется
+// отдельно — прогоном `andors-love-gui --script` со снимками экрана.
+
+void test_font() {
+    section("шрифт: UTF-8 и покрытие");
+
+    // Разбор UTF-8 посимвольно.
+    {
+        const std::string s = "aЖ«—";
+        std::size_t i = 0;
+        eq(static_cast<int>(gfx::utf8_next(s, i)), 'a', "латиница разбирается");
+        eq(static_cast<int>(gfx::utf8_next(s, i)), 0x416, "кириллица разбирается");
+        eq(static_cast<int>(gfx::utf8_next(s, i)), 0xAB, "кавычка разбирается");
+        eq(static_cast<int>(gfx::utf8_next(s, i)), 0x2014, "тире разбирается");
+        eq(static_cast<int>(i), static_cast<int>(s.size()), "строка разобрана до конца");
+        eq(static_cast<int>(gfx::utf8_next(s, i)), 0, "за концом строки — ноль");
+    }
+
+    // Битая последовательность не должна зацикливать разбор.
+    {
+        std::string bad;
+        bad += static_cast<char>(0xD0);      // начало двухбайтового и обрыв
+        std::size_t i = 0;
+        eq(static_cast<int>(gfx::utf8_next(bad, i)), 0xFFFD, "обрыв даёт замену");
+        check(i > 0, "и разбор всё равно двигается вперёд");
+
+        std::string lone;
+        lone += static_cast<char>(0x80);     // одинокий байт продолжения
+        i = 0;
+        eq(static_cast<int>(gfx::utf8_next(lone, i)), 0xFFFD, "одинокий байт — замена");
+        eq(static_cast<int>(i), 1, "и сдвиг ровно на байт");
+    }
+
+    check(gfx::has_glyph('A'), "латиница в шрифте есть");
+    check(gfx::has_glyph(0x416), "кириллица в шрифте есть");
+    check(gfx::has_glyph(0x451), "буква ё в шрифте есть");
+    check(!gfx::has_glyph(0x4E00), "чего в шрифте нет, того нет");
+    check(gfx::glyph(0x4E00) == gfx::glyph('?'),
+          "для неизвестного символа рисуется вопросительный знак");
+
+    // Пробел обязан быть пустым: иначе весь текст в кляксах.
+    {
+        const unsigned char* sp = gfx::glyph(' ');
+        bool empty = true;
+        for (int i = 0; i < gfx::FONT_H; ++i) if (sp[i]) empty = false;
+        check(empty, "пробел пустой");
+    }
+
+    // Главное: всё, что игра умеет напечатать, шрифт умеет нарисовать.
+    // Иначе дыра в тексте найдётся не тестом, а игроком.
+    const Content& c = Content::get();
+    std::string all;
+    for (const QuestDef& q : c.quests()) {
+        all += q.name;
+        for (const QuestStageDef& st : q.stages) all += st.text;
+    }
+    for (const SkillDef& s : c.skills()) { all += s.name; all += s.desc; }
+    for (const RaceDef& r : c.races())   { all += r.name; all += r.desc; }
+    for (const SpecDef& s : c.specs())   { all += s.name; all += s.desc; }
+    for (const EnchantDef& e : c.enchants()) { all += e.name; all += e.desc; }
+    for (const QuestTrigger& t : c.triggers()) all += t.message;
+    for (const char* nid : ALL_NOTES) {
+        const NoteDef* n = c.note(nid);
+        if (!n) continue;
+        all += n->title;
+        for (const std::string& l : n->lines) all += l;
+    }
+    for (const char* eid : {"pull", "cut", "hold"}) {
+        const EndingDef* e = c.ending(eid);
+        if (!e) continue;
+        all += e->name;
+        for (const std::string& l : e->lines) all += l;
+    }
+    World w("data/maps");
+    for (const char* lid : ALL_LOCATIONS) {
+        const Location* loc = w.location(lid);
+        if (!loc) continue;
+        all += loc->name;
+        for (const MapSign& s : loc->signs) all += s.text;
+    }
+
+    std::vector<unsigned> missing;
+    std::size_t i = 0;
+    while (i < all.size()) {
+        const unsigned cp = gfx::utf8_next(all, i);
+        if (cp == '\n' || cp == 0) continue;
+        if (gfx::has_glyph(cp)) continue;
+        bool known = false;
+        for (unsigned m : missing) if (m == cp) known = true;
+        if (!known) missing.push_back(cp);
+    }
+    std::string report;
+    for (unsigned m : missing) report += " U+" + to_str(static_cast<int>(m));
+    check(missing.empty(), "весь текст игры покрыт шрифтом; нет глифов:" + report);
+}
+
+void test_gestures() {
+    section("жесты: тап, удержание, свайп");
+
+    gfx::Pointer p;
+    p.configure(20, 300);
+    gfx::Gesture g;
+
+    // Тап: коснулся и отпустил, не сдвинувшись.
+    p.down(1, 100, 100, 0);
+    p.up(1, 102, 101, 60);
+    check(p.poll(&g), "тап распознан");
+    eq(static_cast<int>(g.kind), static_cast<int>(gfx::G_TAP), "именно тап");
+    eq(g.x, 102, "координата отпускания");
+    check(!p.poll(&g), "и больше ничего");
+
+    // Удержание: палец на месте дольше порога — это бег, а не тап.
+    p.clear();
+    p.down(1, 50, 60, 1000);
+    p.tick(1100);
+    check(!p.poll(&g), "до порога удержание не срабатывает");
+    p.tick(1400);
+    check(p.poll(&g), "после порога срабатывает");
+    eq(static_cast<int>(g.kind), static_cast<int>(gfx::G_HOLD_BEGIN), "это удержание");
+    check(p.holding(), "палец считается удерживаемым");
+    p.move(1, 70, 90, 1500);
+    eq(p.hold_x(), 70, "цель бега едет за пальцем");
+    eq(p.hold_y(), 90, "и по второй оси тоже");
+    p.up(1, 70, 90, 1600);
+    check(p.poll(&g), "отпускание после удержания даёт событие");
+    eq(static_cast<int>(g.kind), static_cast<int>(gfx::G_HOLD_END), "конец удержания");
+    check(!p.holding(), "и удержание кончилось");
+    check(!p.poll(&g), "тапом отпускание после удержания не считается");
+
+    // Свайп: сдвиг дальше порога даёт шаг, а долгий сдвиг — несколько шагов.
+    p.clear();
+    p.down(2, 200, 200, 0);
+    p.move(2, 265, 202, 30);          // три порога вправо
+    int swipes = 0, last_dx = 0;
+    while (p.poll(&g)) {
+        eq(static_cast<int>(g.kind), static_cast<int>(gfx::G_SWIPE), "это свайп");
+        ++swipes;
+        last_dx = g.dx;
+    }
+    eq(swipes, 3, "длинный свайп даёт столько шагов, сколько порогов пройдено");
+    eq(last_dx, 1, "направление вправо");
+
+    p.up(2, 265, 202, 60);
+    check(!p.poll(&g), "после свайпа отпускание тапом не считается");
+
+    // Вертикаль отличается от горизонтали по большей составляющей.
+    p.clear();
+    p.down(3, 10, 10, 0);
+    p.move(3, 12, 40, 20);
+    check(p.poll(&g), "вертикальный свайп распознан");
+    eq(g.dy, 1, "направление вниз");
+    eq(g.dx, 0, "и без горизонтальной составляющей");
+
+    // Второй палец не ломает первый.
+    p.clear();
+    p.down(4, 10, 10, 0);
+    p.down(5, 400, 400, 10);
+    p.up(5, 400, 400, 40);
+    p.up(4, 10, 10, 80);
+    int taps = 0;
+    while (p.poll(&g)) if (g.kind == gfx::G_TAP) ++taps;
+    eq(taps, 2, "два пальца дают два тапа, и ни один не потерян");
+}
+
+void test_walk() {
+    section("ходьба по тапу");
+
+    Game g;
+    g.new_game("Ходок", "human", "swordsman");
+    const Location* loc = g.here();
+    check(loc != nullptr, "локация загружена");
+    if (!loc) return;
+
+    // Идёт к цели и доходит.
+    {
+        gfx::Walker w;
+        const Vec2 from = g.player().pos;
+        Vec2 target(from.x + 4, from.y);
+        check(loc->walkable(target), "цель проходима");
+        w.go(target, false);
+        check(w.active(), "ходьба началась");
+        unsigned t = 0;
+        for (int i = 0; i < 200 && w.active(); ++i) {
+            w.update(g, t);
+            t += gfx::Walker::step_ms(false);
+        }
+        eq(g.player().pos.x, target.x, "дошёл по горизонтали");
+        eq(g.player().pos.y, target.y, "и по вертикали");
+        eq(static_cast<int>(w.last_stop()), static_cast<int>(gfx::WS_ARRIVED), "именно дошёл");
+        check(!w.active(), "и остановился сам");
+    }
+
+    // Шаг делается не чаще, чем положено: иначе бег и шаг неразличимы.
+    {
+        gfx::Walker w;
+        const Vec2 from = g.player().pos;
+        w.go(Vec2(from.x + 4, from.y), false);
+        check(w.update(g, 0), "первый шаг делается сразу");
+        check(!w.update(g, 10), "второй раньше времени — нет");
+        check(w.update(g, gfx::Walker::step_ms(false)), "а по времени — да");
+        check(gfx::Walker::step_ms(true) < gfx::Walker::step_ms(false),
+              "бег быстрее шага");
+    }
+
+    // Упёрся в стену — остановился, а не топчется вечно.
+    {
+        Game g2;
+        g2.new_game("Ходок", "human", "swordsman");
+        const Location* l2 = g2.here();
+        gfx::Walker w;
+        // Цель внутри дома: стена на пути, и обойти её жадный шаг не умеет —
+        // именно так это и обещано игроку.
+        check(l2 != nullptr, "локация загружена");
+        if (!l2) return;
+        Vec2 wall(g2.player().pos.x, g2.player().pos.y);
+        bool found = false;
+        for (int y = g2.player().pos.y - 1; y >= 1 && !found; --y)
+            if (!l2->walkable(Vec2(g2.player().pos.x, y))) { wall = Vec2(g2.player().pos.x, y); found = true; }
+        check(found, "над героем есть стена");
+        w.go(wall, false);
+        unsigned t = 0;
+        int guard = 0;
+        while (w.active() && guard++ < 500) { w.update(g2, t); t += 200; }
+        check(!w.active(), "ходьба к недостижимой цели прекращается");
+        eq(static_cast<int>(w.last_stop()), static_cast<int>(gfx::WS_BLOCKED),
+           "и прекращается именно упором");
+        check(g2.player().pos.y > wall.y, "герой остановился перед стеной, а не в ней");
+    }
+
+    // Подбор с земли ходьбу не прерывает, а разговор — прерывает.
+    check(!gfx::walk_interrupted_by(Bump::Moved), "обычный шаг ходьбу не рвёт");
+    check(!gfx::walk_interrupted_by(Bump::Item), "подобранная вещь тоже");
+    check(!gfx::walk_interrupted_by(Bump::Note), "и записка");
+    check(gfx::walk_interrupted_by(Bump::Npc), "а житель — рвёт");
+    check(gfx::walk_interrupted_by(Bump::Exit), "и переход");
+    check(gfx::walk_interrupted_by(Bump::Combat), "и бой");
+    check(gfx::walk_interrupted_by(Bump::Chest), "и сундук");
+}
+
 // Развязка: три исхода, из них выбирается ровно один, и обратно не отыграть.
 void test_finale() {
     section("развязка: три исхода");
@@ -1638,21 +1899,9 @@ void test_books_and_notes() {
     const Content& c = Content::get();
 
     // --- записки в базе ---
-    const char* note_ids[] = {"ink", "miner", "watch", "zero", "child", "proto", "hermit",
-                              "bog", "drovers", "graves", "sexton",
-                              "seam", "cinch", "order", "double",
-                              "goat", "glass", "mill", "market", "prohor",
-                              "caravan", "salt", "bridge",
-                              "cityhalf", "endless", "deadwater", "counting",
-                              "lists", "foundry", "halves", "lastclerk",
-                              "gates", "watchwrit", "read", "unsealed", "charts",
-                              "novice", "keepsake", "ovens", "refusal",
-                              "secondnode", "thirdnode", "emptygrave",
-                              "drift", "tomorrow", "otherside", "stair", "lastorder",
-                              "marks", "wellrule", "homeward", "houses", "edgeview",
-                              "oldseam", "readlines", "roomrule", "walkers",
-                              "firstnode", "cinchwork", "allatonce", "threeways"};
-    for (const char* id : note_ids) {
+    eq(static_cast<int>(sizeof(ALL_NOTES) / sizeof(ALL_NOTES[0])), 61,
+       "список записок в тесте покрывает все записки базы");
+    for (const char* id : ALL_NOTES) {
         const NoteDef* n = c.note(id);
         check(n != nullptr, std::string("записка ") + id + " описана");
         if (!n) continue;
@@ -2943,6 +3192,9 @@ int main() {
     test_book_save_roundtrip();
     test_no_escape_needed();
     test_content_integrity();
+    test_font();
+    test_gestures();
+    test_walk();
     test_finale();
     test_playthrough();
 
