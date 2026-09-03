@@ -31,6 +31,36 @@ CXXFLAGS ?= -O2 $(WARN)
 DEPFLAGS := -MMD -MP
 LDFLAGS  ?=
 
+# Платформа определяется по компилятору, а не по машине, на которой запущен
+# make: так же верно отвечает и кросс-сборка. Спрашиваем сам компилятор —
+# «x86_64-w64-mingw32» и подобные значат Windows. Если -dumpmachine недоступен
+# (сборщик без $(shell)), остаётся переменная OS, которую задаёт сама Windows.
+TARGET_TRIPLE := $(shell $(CXX) -dumpmachine 2>/dev/null)
+ifneq (,$(findstring mingw,$(TARGET_TRIPLE)))
+  WINDOWS := 1
+endif
+ifneq (,$(findstring cygwin,$(TARGET_TRIPLE)))
+  WINDOWS := 1
+endif
+ifeq ($(TARGET_TRIPLE),)
+  ifeq ($(OS),Windows_NT)
+    WINDOWS := 1
+  endif
+endif
+
+ifdef WINDOWS
+  # Компоновщик Windows сам дописывает .exe, если у выходного файла нет
+  # расширения. Без этого make каждый раз не находит цель и пересобирает её
+  # заново: файл-то называется иначе, чем то, что он ждал.
+  EXE := .exe
+  # Код PE и так позиционно независим — -fPIC компилятор для Windows либо
+  # ругает как бесполезный, либо молча игнорирует.
+  PIC :=
+else
+  EXE :=
+  PIC := -fPIC
+endif
+
 ALL_CXXFLAGS := $(CXXSTD) $(CXXFLAGS) $(DEPFLAGS)
 
 # Логика игры и терминальная оболочка. Графическая оболочка лежит в src/gfx
@@ -43,8 +73,8 @@ GFX_OBJ := $(GFX_SRC:src/gfx/%.cpp=build/gfx/%.o)
 DEP     := $(OBJ:.o=.d) $(GFX_OBJ:.o=.d)
 # Переопределяется: make BIN=result — некоторые сборщики (в том числе C4Droid)
 # ожидают исполняемый файл под своим именем.
-BIN ?= andors-love
-GUI_BIN ?= andors-love-gui
+BIN ?= andors-love$(EXE)
+GUI_BIN ?= andors-love-gui$(EXE)
 # Android-сборка графики: там приложение — не исполняемый файл, а разделяемая
 # библиотека. Её загружает SDL-активность и вызывает в ней SDL_main.
 GUI_SO ?= libandors-love-gui.so
@@ -59,7 +89,15 @@ SDL_LIBS   ?= $(shell sdl2-config --libs 2>/dev/null || echo -lSDL2)
 # должен остаться видимым — иначе получаем «your app doesn't properly link to
 # SDL2». На настольной машине флаг ничего не ломает, только чуть увеличивает
 # бинарник; выключается через SDL_EXPORT=.
-SDL_EXPORT ?= -rdynamic
+#
+# На Windows его нет вовсе: -rdynamic — флаг компоновщика ELF, а MinGW ругается
+# «unrecognized command-line option». Точку входа там разворачивает не он, а
+# библиотека SDL2main: она даёт настоящий main/WinMain, который зовёт SDL_main.
+ifdef WINDOWS
+  SDL_EXPORT ?=
+else
+  SDL_EXPORT ?= -rdynamic
+endif
 
 .PHONY: all gui gui-so run debug test embed font clean
 
@@ -72,7 +110,7 @@ $(BIN): $(OBJ)
 	$(CXX) $(CXXSTD) $(CXXFLAGS) $(OBJ) -o $@ $(LDFLAGS)
 
 build/%.o: src/%.cpp | build
-	$(CXX) $(ALL_CXXFLAGS) -fPIC -c $< -o $@
+	$(CXX) $(ALL_CXXFLAGS) $(PIC) -c $< -o $@
 
 # --- графическая сборка ---
 # gui    — обычный исполняемый файл: настольная машина, Termux с X-сервером.
@@ -95,9 +133,10 @@ $(GUI_SO): $(GFX_OBJ) $(CORE)
 	$(CXX) $(CXXSTD) $(SO_CXXFLAGS) -shared $(GFX_OBJ) $(CORE) -o $@ $(SDL_LIBS) $(LDFLAGS)
 
 # -fPIC нужен объектам, которые пойдут в разделяемую библиотеку; на код
-# исполняемого файла он не влияет, поэтому ставится всем без разбора.
+# исполняемого файла он не влияет, поэтому ставится всем без разбора — кроме
+# Windows, где позиционно независим весь код и флаг лишний.
 build/gfx/%.o: src/gfx/%.cpp | build
-	$(CXX) $(ALL_CXXFLAGS) -fPIC $(SDL_CFLAGS) -c $< -o $@
+	$(CXX) $(ALL_CXXFLAGS) $(PIC) $(SDL_CFLAGS) -c $< -o $@
 
 build:
 	@mkdir -p build build/gfx
@@ -112,7 +151,7 @@ run: $(BIN)
 GFX_TESTABLE := build/gfx/font.o build/gfx/font_data.o build/gfx/touch.o build/gfx/walk.o
 TEST_SRC := tests/test_game.cpp
 TEST_OBJ := $(filter-out build/main.o,$(OBJ)) $(GFX_TESTABLE)
-TEST_BIN := build/run-tests
+TEST_BIN := build/run-tests$(EXE)
 
 test: $(TEST_BIN)
 	@./$(TEST_BIN)

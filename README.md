@@ -45,7 +45,7 @@ make gui-so       # то же для Android: библиотека для SDL-а
 
 ```bash
 make run      # собрать и сразу запустить
-make test     # 3572 регрессионных проверки
+make test     # 3628 регрессионных проверок
 make debug    # сборка с ASan + UBSan
 make font     # перегенерировать вшитый шрифт (нужен python3-pil)
 make gui-so   # графика для Android: libandors-love-gui.so
@@ -66,6 +66,34 @@ make clean
 Каталог сохранений выбирается так же по очереди: `ANDORS_LOVE_SAVE`, `saves/`
 в рабочем каталоге, `$HOME/.andors-love`, `saves/` рядом с бинарником,
 `$TMPDIR/andors-love` — первый, куда удаётся записать.
+
+**На Windows** — MSYS2, окружение UCRT64:
+
+```bash
+pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-make \
+                   mingw-w64-ucrt-x86_64-SDL2
+mingw32-make gui
+./andors-love-gui.exe
+```
+
+Makefile сам видит, что компилятор целится в Windows (по `-dumpmachine`), и
+подстраивается: не передаёт `-rdynamic` — это флаг компоновщика ELF, MinGW о
+нём не знает и падает с `unrecognized command-line option`; точку входа там
+разворачивает библиотека `SDL2main`, которую подставляет `sdl2-config`. Заодно
+к именам целей дописывается `.exe`, иначе make не находит собранный файл и
+пересобирает его каждый раз.
+
+Готовый `.exe` тянет за собой библиотеки из `ucrt64/bin`. Чтобы он запускался
+и вне MSYS-оболочки, соберите рантайм внутрь и положите рядом `SDL2.dll`:
+
+```bash
+mingw32-make gui LDFLAGS="-static-libgcc -static-libstdc++"
+cp /ucrt64/bin/SDL2.dll .
+```
+
+Терминальная сборка (`mingw32-make`) там тоже работает: ввод идёт через
+`conio`, вывод — через ANSI-последовательности Windows 10 и консоль,
+переключённую в UTF-8.
 
 **На смартфоне** (Termux или C4Droid) — см. [`docs/android.md`](docs/android.md).
 Интерфейс подстраивается под ширину терминала: от 28 колонок и выше.
