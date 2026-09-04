@@ -23,10 +23,14 @@ public:
     Tileset();
     ~Tileset();
 
-    // Загружает лист. Возвращает false и пишет причину в err, если файл есть,
-    // но не читается; отсутствие файла — не ошибка и не повод для ругани,
-    // так что его проверяют вызовом exists() заранее.
-    bool load(SDL_Renderer* ren, const std::string& path, std::string* err);
+    // Собирает графику: сперва лист одним файлом, если он есть, потом
+    // отдельные файлы каталога поверх него — нарисованный отдельно тайл
+    // важнее того же тайла из листа. Возвращает false, если не нашлось
+    // ни одного тайла; причину нечитаемого файла кладёт в err.
+    bool load(SDL_Renderer* ren, const std::string& dir, const std::string& sheet,
+              std::string* err);
+    // Готовые картинки по слотам — этим пользуется и load, и тесты.
+    bool build(SDL_Renderer* ren, const std::vector<Image>& tiles, std::string* err);
     void unload();
 
     bool ok() const { return tex_ != 0; }

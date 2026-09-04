@@ -1790,7 +1790,71 @@ void test_tiles() {
         eq(gfx::slot_of_glyph('~'), -1, "у постороннего знака слота нет");
     }
 
-    // Лист по умолчанию: то, что игра отдаёт по --export-tiles.
+    // Имена файлов: у каждого занятого слота своё, и ни одно не повторяется —
+    // иначе два тайла спорили бы за один файл.
+    {
+        const char* names[64];
+        int named = 0, clash = 0;
+        for (int i = 0; i < gfx::TJTM_SLOTS; ++i) {
+            const char* f = gfx::slot_file(i);
+            if (!f) continue;
+            for (int k = 0; k < named; ++k)
+                if (std::string(names[k]) == f) ++clash;
+            names[named++] = f;
+        }
+        eq(named, static_cast<int>(Tile::Count) + 10, "имя есть у каждого занятого слота");
+        eq(clash, 0, "и ни одно имя не повторяется");
+        check(gfx::slot_file(7) == 0, "у свободного слота имени нет");
+        check(std::string(gfx::slot_file(gfx::SLOT_WALL)) == "wall", "стена лежит в wall.png");
+    }
+
+    // Графика по файлам: пишем вид по умолчанию, читаем обратно.
+    {
+        const std::string dir = "build/test-tiles";
+        std::string err;
+        check(gfx::save_slot_files(dir, 32, &err), "тайлы сохранены по файлам");
+        check(err.empty(), "и без жалоб");
+
+        std::vector<gfx::Image> tiles;
+        const int got = gfx::load_slot_files(dir, &tiles, &err);
+        eq(got, static_cast<int>(Tile::Count) + 10, "прочитано столько же, сколько записано");
+        check(err.empty(), "и снова без жалоб");
+        eq(static_cast<int>(tiles.size()), gfx::TJTM_SLOTS, "слотов по-прежнему 64");
+        eq(tiles[gfx::SLOT_WALL].w, 32, "тайл стены нужного размера");
+        check(tiles[7].empty(), "свободный слот пуст");
+
+        // Отдельный файл может быть любого размера: потолка в 63 пикселя,
+        // который был у листа, для одного файла нет.
+        gfx::Image big(64, 64);
+        big.clear(10, 20, 30, 255);
+        check(gfx::png_write(dir + "/wall.png", big, &err), "тайл покрупнее записан");
+        std::vector<gfx::Image> again;
+        gfx::load_slot_files(dir, &again, &err);
+        eq(again[gfx::SLOT_WALL].w, 64, "и прочитан как есть");
+        eq(again[gfx::SLOT_FLOOR].w, 32, "а соседний остался прежним");
+
+        // Нечитаемый файл называет себя, но остальные тайлы не отменяет.
+        {
+            std::ofstream junk((dir + "/grass.png").c_str(), std::ios::binary);
+            junk << "не png";
+        }
+        std::vector<gfx::Image> third;
+        std::string err2;
+        const int left = gfx::load_slot_files(dir, &third, &err2);
+        check(!err2.empty(), "про испорченный файл сказано");
+        check(err2.find("grass.png") != std::string::npos, "и названо какой именно");
+        eq(left, static_cast<int>(Tile::Count) + 10 - 1, "остальные тайлы прочитаны");
+        check(third[gfx::SLOT_GRASS].empty(), "а испорченный слот остался пустым");
+
+        // Пустой каталог — не ошибка: графики просто нет.
+        std::vector<gfx::Image> none;
+        std::string err3;
+        eq(gfx::load_slot_files("build/test-tiles-empty", &none, &err3), 0,
+           "из пустого каталога не читается ничего");
+        check(err3.empty(), "и это не повод ругаться");
+    }
+
+    // Лист по умолчанию: то, что игра отдаёт по --export-sheet.
     {
         const gfx::Image sheet = gfx::default_sheet(gfx::TILE_PX);
         eq(sheet.w, gfx::TJTM_COLS * (gfx::TILE_PX + 1), "ширина листа");

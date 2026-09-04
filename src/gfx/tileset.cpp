@@ -1,5 +1,7 @@
 #include "tileset.h"
 
+#include "../paths.h"
+
 #include <SDL2/SDL.h>
 
 namespace gfx {
@@ -19,15 +21,44 @@ bool Tileset::has(int slot) const {
     return src_[slot].w > 0 && src_[slot].h > 0;
 }
 
-bool Tileset::load(SDL_Renderer* ren, const std::string& path, std::string* err) {
+bool Tileset::load(SDL_Renderer* ren, const std::string& dir, const std::string& sheet,
+                   std::string* err) {
+    unload();
+
+    std::vector<Image> tiles(static_cast<std::size_t>(TJTM_SLOTS));
+
+    // Лист кладётся первым слоем: он мог остаться от прежних версий редактора,
+    // где набор хранился одной картинкой.
+    if (!sheet.empty() && paths::file_exists(sheet)) {
+        Image img;
+        std::string one;
+        if (png_read(sheet, &img, &one) && tjtm_slice(img, &tiles, &one)) {
+            // порядок важен: отдельные файлы лягут поверх
+        } else if (err && err->empty()) {
+            *err = sheet + ": " + one;
+        }
+    }
+
+    // Отдельные файлы — то, что сохраняет редактор, и они главнее.
+    load_slot_files(dir, &tiles, err);
+
+    int found = 0;
+    for (int i = 0; i < TJTM_SLOTS; ++i)
+        if (!tiles[static_cast<std::size_t>(i)].empty()) ++found;
+    if (!found) {
+        if (err && err->empty()) *err = "не найдено ни одного тайла";
+        return false;
+    }
+    return build(ren, tiles, err);
+}
+
+bool Tileset::build(SDL_Renderer* ren, const std::vector<Image>& tiles, std::string* err) {
     unload();
     if (!ren) { if (err) *err = "нет отрисовщика"; return false; }
-
-    Image sheet;
-    if (!png_read(path, &sheet, err)) return false;
-
-    std::vector<Image> tiles;
-    if (!tjtm_slice(sheet, &tiles, err)) return false;
+    if (tiles.size() != static_cast<std::size_t>(TJTM_SLOTS)) {
+        if (err) *err = "нужно ровно 64 слота";
+        return false;
+    }
 
     for (int i = 0; i < TJTM_SLOTS; ++i) {
         const Image& t = tiles[static_cast<std::size_t>(i)];

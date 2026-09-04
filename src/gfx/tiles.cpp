@@ -1,6 +1,8 @@
 #include "tiles.h"
 
 #include "font.h"
+#include "../paths.h"
+#include "../platform.h"
 
 namespace gfx {
 
@@ -182,6 +184,74 @@ const char* slot_name(int slot) {
         case SLOT_NOTE:      return "записка";
         default:             return "свободный";
     }
+}
+
+const char* slot_file(int slot) {
+    switch (slot) {
+        case SLOT_FLOOR:     return "floor";
+        case SLOT_WALL:      return "wall";
+        case SLOT_WATER:     return "water";
+        case SLOT_TREE:      return "tree";
+        case SLOT_GRASS:     return "grass";
+        case SLOT_ROAD:      return "road";
+        case SLOT_DEADWATER: return "deadwater";
+        case SLOT_PLAYER:    return "player";
+        case SLOT_NPC:       return "npc";
+        case SLOT_MOB:       return "mob";
+        case SLOT_EXIT:      return "exit";
+        case SLOT_SIGN:      return "sign";
+        case SLOT_ITEM:      return "item";
+        case SLOT_BED:       return "bed";
+        case SLOT_CHEST:     return "chest";
+        case SLOT_PORTAL:    return "portal";
+        case SLOT_NOTE:      return "note";
+        default:             return 0;
+    }
+}
+
+// ------------------------------------------------------------ графика по файлам
+
+int load_slot_files(const std::string& dir, std::vector<Image>* tiles, std::string* err) {
+    if (!tiles || dir.empty()) return 0;
+    if (tiles->size() != static_cast<std::size_t>(TJTM_SLOTS))
+        tiles->assign(static_cast<std::size_t>(TJTM_SLOTS), Image());
+
+    int loaded = 0;
+    for (int i = 0; i < TJTM_SLOTS; ++i) {
+        const char* base = slot_file(i);
+        if (!base) continue;
+        const std::string path = dir + "/" + base + ".png";
+        if (!paths::file_exists(path)) continue;
+
+        Image img;
+        std::string one;
+        if (!png_read(path, &img, &one)) {
+            // Про нечитаемый файл надо сказать: художник правит картинку и
+            // ждёт, что в игре что-то изменится. Но остальные тайлы это не
+            // отменяет — читаем дальше.
+            if (err && err->empty()) *err = path + ": " + one;
+            continue;
+        }
+        (*tiles)[static_cast<std::size_t>(i)] = img;
+        ++loaded;
+    }
+    return loaded;
+}
+
+bool save_slot_files(const std::string& dir, int size, std::string* err) {
+    if (dir.empty()) { fail(err, "не задан каталог"); return false; }
+    if (!platform::make_dir(dir)) { fail(err, "не создать каталог " + dir); return false; }
+
+    for (int i = 0; i < TJTM_SLOTS; ++i) {
+        const char* base = slot_file(i);
+        if (!base) continue;
+        const Image art = default_slot_art(i, size);
+        if (art.empty()) continue;
+        const std::string path = dir + "/" + base + ".png";
+        std::string one;
+        if (!png_write(path, art, &one)) { fail(err, path + ": " + one); return false; }
+    }
+    return true;
 }
 
 // ------------------------------------------------------------ вид по умолчанию

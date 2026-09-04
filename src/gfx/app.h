@@ -198,7 +198,7 @@ private:
     unsigned now_ms_;
     bool     died_;              // экран смерти показывается один раз
     std::string data_root_;      // тот же, что у игры: сводка грузится оттуда же
-    std::string tiles_path_;     // лист тайлов; может не существовать, и это норма
+    std::string tiles_path_;     // каталог графики; может не существовать, и это норма
     std::string save_dir_;
     std::string save_path_;
     std::string status_;        // последняя строка журнала, показанная в HUD

@@ -74,22 +74,35 @@ std::string data_root(const char* argv0) {
     return "data/maps";
 }
 
-std::string tiles_file(const char* argv0) {
-    if (const char* env = std::getenv("ANDORS_LOVE_TILES"))
-        if (file_exists(env)) return env;
+namespace {
 
-    if (file_exists("data/tiles/tiles.png")) return "data/tiles/tiles.png";
+// Каталог считается каталогом графики, если в нём лежит хоть что-то, что
+// игра умеет прочитать. Проверяем самый частый тайл и лист: перебирать все
+// семнадцать имён ради выбора каталога незачем.
+bool has_tiles(const std::string& dir) {
+    if (dir.empty()) return false;
+    return file_exists(dir + "/floor.png") || file_exists(dir + "/grass.png") ||
+           file_exists(dir + "/tiles.png");
+}
+
+} // namespace
+
+std::string tiles_dir(const char* argv0) {
+    if (const char* env = std::getenv("ANDORS_LOVE_TILES"))
+        if (has_tiles(env)) return env;
+
+    if (has_tiles("data/tiles")) return "data/tiles";
 
     const std::string exe = platform::exe_dir(argv0);
     if (!exe.empty()) {
-        const std::string in_data = exe + "/data/tiles/tiles.png";
-        if (file_exists(in_data)) return in_data;
-        // Самый простой случай: игроку отдали один файл игры, и он положил
-        // рядом нарисованный лист.
-        const std::string beside = exe + "/tiles.png";
-        if (file_exists(beside)) return beside;
+        const std::string in_data = exe + "/data/tiles";
+        if (has_tiles(in_data)) return in_data;
+        // Самый простой случай: игроку отдали игру одним файлом, и он положил
+        // рядом каталог с нарисованными тайлами.
+        const std::string beside = exe + "/tiles";
+        if (has_tiles(beside)) return beside;
     }
-    return "data/tiles/tiles.png";
+    return "data/tiles";
 }
 
 } // namespace paths

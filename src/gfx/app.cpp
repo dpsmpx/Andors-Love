@@ -50,10 +50,13 @@ bool App::start(int argc, char** argv, int win_w, int win_h) {
     // Лист тайлов необязателен: без него игра рисует как рисовала. Поэтому
     // отсутствие файла молчит, а вот испорченный файл — говорит: иначе
     // художник правил бы картинку и гадал, почему ничего не меняется.
-    tiles_path_ = paths::tiles_file(argv0);
+    tiles_path_ = paths::tiles_dir(argv0);
     std::string terr;
-    if (!tiles_.load(c_.renderer(), tiles_path_, &terr) && paths::file_exists(tiles_path_))
-        SDL_Log("лист тайлов %s: %s", tiles_path_.c_str(), terr.c_str());
+    tiles_.load(c_.renderer(), tiles_path_, tiles_path_ + "/tiles.png", &terr);
+    // Пустой каталог молчит: графика необязательна. А вот файл, который есть,
+    // но не читается, надо назвать — иначе художник правит картинку и гадает,
+    // почему в игре ничего не меняется.
+    if (!terr.empty()) SDL_Log("графика: %s", terr.c_str());
 
     refresh_save_summary();
     return true;
