@@ -488,7 +488,8 @@ void Content::build_items() {
     // разное и квестовое
     add(mk_item("wolf_pelt", "Волчья шкура", ItemKind::Misc, 18, "Кузнец такие принимает."));
     add(mk_item("rat_tail",  "Крысиный хвост", ItemKind::Misc, 4,  "Ценности немного."));
-    add(mk_item("torch",     "Факел", ItemKind::Misc, 10, "В лесу спокойнее."));
+    add(mk_item("torch",     "Факел", ItemKind::Light, 10,
+                "Горит ровно и долго. Под землёй без него видно на шаг."));
     add(mk_item("amulet",    "Амулет Лады", ItemKind::Misc, 0,
                 "Медный амулет с зелёным камнем. Явно чужой."));
 }
@@ -6362,6 +6363,21 @@ const SkillDef* Content::skill(const std::string& id) const {
 const EndingDef* Content::ending(const std::string& id) const {
     std::map<std::string, EndingDef>::const_iterator it = endings_.find(id);
     return it == endings_.end() ? nullptr : &it->second;
+}
+
+bool Content::location_dark(const std::string& loc_id) const {
+    // Подземелья: под землёй нет ни солнца, ни окон. Список короткий и лежит
+    // на виду, чтобы его было легко пополнить новой локацией.
+    static const char* const DARK[] = {
+        "cave",        // Барсучья пещера
+        "saltmines",   // Соляные шахты
+        "well",        // Колодец Двух Вёдер
+        "grave",       // Могила Первого Мастера
+        "vault"        // Схрон Ордена
+    };
+    for (std::size_t i = 0; i < sizeof DARK / sizeof DARK[0]; ++i)
+        if (loc_id == DARK[i]) return true;
+    return false;
 }
 
 std::string Content::quest_stage_text(const std::string& quest_id, int stage) const {

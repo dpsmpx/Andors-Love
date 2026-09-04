@@ -257,6 +257,12 @@ public:
     // Текст этапа квеста; пустая строка, если этап не описан.
     std::string quest_stage_text(const std::string& quest_id, int stage) const;
 
+    // Темно ли в локации. Свойство держится здесь, а не в файле карты,
+    // намеренно: формат карт разбирает сторонний редактор, и он отвергает
+    // незнакомые директивы. Добавить `dark` в карту значило бы сломать его
+    // на всех тёмных локациях разом.
+    bool location_dark(const std::string& loc_id) const;
+
     const std::vector<SkillDef>&   skills()   const { return skills_; }
     const std::vector<QuestDef>&   quests()   const { return quests_; }
     const std::vector<RaceDef>&    races()    const { return races_; }

@@ -111,6 +111,25 @@ public:
     Rng&            rng()          { return rng_; }
     int             turn() const   { return turn_; }
 
+    // Сколько процентов удара проходит сквозь любую броню. Ноль означал бы
+    // полную неуязвимость от брони, сто — что брони нет вовсе.
+    static const int ARMOR_MIN_PCT = 40;
+
+    // --- свет ---
+    //
+    // В тёмной локации герой видит только то, до чего дотягивается свет.
+    // Без огня это шаг вокруг себя, с факелом в руке — шесть клеток. Стены
+    // свет не пропускают, так что за углом темно, даже если он близко.
+    static const int SIGHT_DARK  = 1;   // без света
+    static const int SIGHT_TORCH = 6;   // с факелом в руке
+
+    // Радиус обзора в клетках; -1 — светло, видно всю карту.
+    int  sight_radius() const;
+    // Сказать игроку, что здесь темно, если это так.
+    void announce_dark();
+    // Видит ли герой эту клетку прямо сейчас.
+    bool cell_lit(Vec2 p) const;
+
     const std::vector<Mob>& mobs() const { return mobs_; }
     Mob*        mob_at(Vec2 p, const std::string& loc);
     const Mob*  mob_by_uid(int uid) const;

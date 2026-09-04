@@ -2027,6 +2027,146 @@ void test_walk() {
 }
 
 // Развязка: три исхода, из них выбирается ровно один, и обратно не отыграть.
+void test_dark() {
+    section("темнота: подземелья и факел");
+
+    const Content& c = Content::get();
+    check(c.location_dark("cave"), "в пещере темно");
+    check(c.location_dark("saltmines"), "в шахтах тоже");
+    check(!c.location_dark("village"), "а в деревне светло");
+    check(!c.location_dark("grove"), "и в роще, где не темнеет, — тем более");
+
+    Game g;
+    g.new_game("Тьма", "human", "swordsman");
+    eq(g.sight_radius(), -1, "на свету видно всю карту");
+    check(g.cell_lit(Vec2(g.player().pos.x + 20, g.player().pos.y)), "и дальний угол тоже");
+
+    // Уводим героя под землю.
+    g.player().loc = "cave";
+    const Location* cave = g.here();
+    check(cave != nullptr, "пещера загружена");
+    if (!cave) return;
+
+    // Ищем открытое место: от него удобно мерить круг света.
+    Vec2 open(0, 0);
+    bool found = false;
+    for (int y = 1; y < cave->h - 1 && !found; ++y)
+        for (int x = 1; x < cave->w - 1 && !found; ++x) {
+            const Vec2 p(x, y);
+            int free_around = 0;
+            for (int dy = -1; dy <= 1; ++dy)
+                for (int dx = -1; dx <= 1; ++dx)
+                    if (cave->walkable(Vec2(x + dx, y + dy))) ++free_around;
+            if (cave->walkable(p) && free_around == 9) { open = p; found = true; }
+        }
+    check(found, "в пещере нашлось открытое место");
+    if (!found) return;
+    g.player().pos = open;
+
+    // Без огня — шаг вокруг себя.
+    eq(g.sight_radius(), Game::SIGHT_DARK, "без света виден только шаг");
+    check(g.cell_lit(open), "своя клетка видна всегда");
+    check(g.cell_lit(Vec2(open.x + 1, open.y)), "соседняя — тоже");
+    check(g.cell_lit(Vec2(open.x + 1, open.y + 1)), "и по диагонали: круг, а не крест");
+    check(!g.cell_lit(Vec2(open.x + 2, open.y)), "а через клетку уже темно");
+
+    // Факел в сумке не светит — только в руке.
+    g.add_item("torch", 1);
+    eq(g.sight_radius(), Game::SIGHT_DARK, "факел в сумке не светит");
+    check(g.equip("torch"), "факел взят в руку");
+    eq(g.sight_radius(), Game::SIGHT_TORCH, "и теперь видно дальше");
+
+    // Считаем освещённые клетки, а не гадаем про конкретную: в пещере рядом
+    // может оказаться стена, и «клетка в трёх шагах» ничего не доказывала бы.
+    {
+        int lit_torch = 0;
+        for (int y = 0; y < cave->h; ++y)
+            for (int x = 0; x < cave->w; ++x)
+                if (g.cell_lit(Vec2(x, y))) ++lit_torch;
+        check(g.unequip(Slot::Shield), "факел убран");
+        int lit_dark = 0;
+        for (int y = 0; y < cave->h; ++y)
+            for (int x = 0; x < cave->w; ++x)
+                if (g.cell_lit(Vec2(x, y))) ++lit_dark;
+        check(lit_torch > lit_dark, "с факелом видно больше, чем без него");
+        check(lit_dark <= 9, "без света — не больше клетки вокруг себя");
+        check(lit_torch > 12, "а с факелом — заметно шире");
+        check(g.equip("torch"), "факел снова в руке");
+    }
+
+    // Факел занимает руку щита: держать и то, и другое нельзя.
+    const std::size_t hand = static_cast<std::size_t>(Slot::Shield);
+    eqs(g.player().equipped[hand], "torch", "факел занял левую руку");
+    g.add_item("buckler", 1);
+    check(g.equip("buckler"), "щит взят вместо факела");
+    eqs(g.player().equipped[hand], "buckler", "и вытеснил его");
+    eq(g.sight_radius(), Game::SIGHT_DARK, "со щитом в руке снова темно");
+
+    // Дальше радиуса не видно ничего, даже в упор к стене.
+    check(g.equip("torch"), "факел обратно в руку");
+    check(!g.cell_lit(Vec2(open.x + Game::SIGHT_TORCH + 2, open.y)),
+          "за границей света темно при любом факеле");
+
+    // Свет не проходит сквозь стены: за углом темно, как бы близко он ни был.
+    {
+        bool checked = false;
+        for (int y = 1; y < cave->h - 1 && !checked; ++y)
+            for (int x = 1; x < cave->w - 1 && !checked; ++x) {
+                const Vec2 p(x, y);
+                if (!cave->walkable(p)) continue;
+                // Ищем клетку в радиусе света, закрытую стеной.
+                for (int dy = -3; dy <= 3 && !checked; ++dy)
+                    for (int dx = -3; dx <= 3 && !checked; ++dx) {
+                        const Vec2 q(x + dx, y + dy);
+                        if (!cave->in_bounds(q)) continue;
+                        if (dx * dx + dy * dy > Game::SIGHT_TORCH * Game::SIGHT_TORCH) continue;
+                        if (cave->visible(p, q)) continue;
+                        g.player().pos = p;
+                        check(!g.cell_lit(q), "клетку за стеной свет не достаёт");
+                        checked = true;
+                    }
+            }
+        check(checked, "в пещере нашлось, что проверить на просвет");
+    }
+}
+
+void test_balance() {
+    section("баланс: броня и кривая уровней");
+
+    // Броня снимает часть удара, но не весь: иначе к середине игры герой
+    // становится неуязвимым, и это именно то, чем игра болела.
+    {
+        Game g;
+        g.new_game("Проба", "human", "swordsman");
+        check(Game::ARMOR_MIN_PCT > 0, "сквозь броню что-то проходит всегда");
+        check(Game::ARMOR_MIN_PCT < 100, "но броня всё же на что-то влияет");
+
+        // Тяжёлый удар сквозь любую броню остаётся тяжёлым.
+        const int raw = 30;
+        const int through = raw * Game::ARMOR_MIN_PCT / 100;
+        check(through >= 10, "тридцатью очками урона нельзя ударить на единицу");
+    }
+
+    // Кривая растёт быстрее прямой: иначе поздние уровни стоят столько же,
+    // сколько ранние, и всё содержимое игры выводит героя за предел навыков.
+    {
+        Game g;
+        g.new_game("Проба", "human", "swordsman");
+        Player& p = g.player();
+        p.level = 5;  const int at5  = g.exp_to_next();
+        p.level = 10; const int at10 = g.exp_to_next();
+        p.level = 30; const int at30 = g.exp_to_next();
+        check(at10 > at5, "следующий уровень дороже предыдущего");
+        check(at30 > 3 * at10, "и дорожает быстрее, чем просто вдвое-втрое");
+
+        // Всех очков навыка в игре не должно хватать на все семь до предела.
+        long need = 0;
+        for (int l = 1; l < 27; ++l) { p.level = l; need += g.exp_to_next(); }
+        p.level = 1;
+        check(need > 25000, "к 27-му уровню нужен весь опыт мира");
+    }
+}
+
 void test_finale() {
     section("развязка: три исхода");
     const Content& c = Content::get();
@@ -2543,16 +2683,34 @@ void test_playthrough() {
         return false;
     };
 
+    // Сколько рангов навыков куплено — вместе с нерастраченными очками это
+    // весь опыт, который герой успел превратить в силу.
+    auto total_ranks = [&](Game& gg) {
+        int n = 0;
+        for (std::map<std::string, int>::const_iterator it = gg.player().skills.begin();
+             it != gg.player().skills.end(); ++it) n += it->second;
+        return n;
+    };
+
     // Победить противника честной боевой механикой.
+    //
+    // Тест проверяет проходимость содержимого, а не выживание: здоровье и силы
+    // герою возвращают каждый ход — в том числе после ответного удара врага,
+    // иначе смерть засчиталась бы победой (бой ведь тоже кончился). И победа
+    // определяется по исчезнувшему врагу, а не по «бой больше не идёт»:
+    // отличать одно от другого обязательно, иначе непроходимый противник
+    // тихо считается убитым.
     auto fight = [&](int uid) {
         g.start_combat(uid);
         for (int turns = 0; turns < 600 && g.combat().active; ++turns) {
             g.player().hp = g.total().max_hp;
             if (g.player().ap < g.attack_cost()) g.player().ap = g.total().max_ap;
             g.combat_attack(false);
+            if (g.player_dead()) g.player().hp = g.total().max_hp;
         }
         g.player().effects.clear();      // тест не про выживание под ядом
-        return !g.combat().active;
+        if (g.player().hp <= 0) g.player().hp = g.total().max_hp;
+        return g.mob_by_uid(uid) == 0;
     };
 
     // Подобрать с карты все экземпляры предмета в текущей локации.
@@ -3566,7 +3724,14 @@ void test_playthrough() {
     check(g.books().size() >= 2, "библиотека наполнилась находками и своими книгами");
     check(g.book(diary) != nullptr, "своя книга дожила до конца прохождения");
 
-    check(g.player().level >= 36, "к развязке герой прошёл весь мир");
+    // Вилка, а не «не меньше»: нижняя граница ловит пропущенное содержимое,
+    // верхняя — возврат к прежней кривой, на которой всё содержимое выводило
+    // героя к сороковому уровню. Там все семь навыков развиты до предела,
+    // тратить очки больше некуда, и мир перестаёт сопротивляться.
+    check(g.player().level >= 24, "к развязке герой прошёл весь мир");
+    check(g.player().level <= 30, "и не перерос его: очки навыка ещё нужно выбирать");
+    check(g.player().skill_points + total_ranks(g) < 7 * 5,
+          "к концу игры развито не всё подряд — на всё очков не хватает");
     std::cout << "  (итог: уровень " << g.player().level
               << ", золота " << g.player().gold
               << ", квестов пройдено " << (sizeof(all_quests) / sizeof(all_quests[0]))
@@ -3608,6 +3773,8 @@ int main() {
     test_walk();
     test_png();
     test_tiles();
+    test_dark();
+    test_balance();
     test_finale();
     test_playthrough();
 

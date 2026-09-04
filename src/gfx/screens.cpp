@@ -38,7 +38,7 @@ void App::push(Modal::Kind k) {
             "  > переход ! табличка  * предмет\n"
             "  & лежанка C сундук    O портал   ? записка";
     }
-    stack_.push_back(m);
+    push_modal(m);
 }
 
 void App::push_text_input(const std::string& title, const std::string& book_id,
@@ -49,7 +49,7 @@ void App::push_text_input(const std::string& title, const std::string& book_id,
     m.index   = index;
     m.buffer  = initial;
     m.max_len = max_len;
-    stack_.push_back(m);
+    push_modal(m);
     SDL_StartTextInput();          // на Android поднимает экранную клавиатуру
 }
 
@@ -73,7 +73,13 @@ void App::push_message(const std::string& title, const std::string& body) {
     Modal m(Modal::Message);
     m.title = title;
     m.body = body;
-    stack_.push_back(m);
+    push_modal(m);
+}
+
+void App::push_modal(const Modal& m) {
+    Modal copy = m;
+    copy.born_press = ptr_.press_id();
+    stack_.push_back(copy);
 }
 
 void App::pop() { if (!stack_.empty()) stack_.pop_back(); }

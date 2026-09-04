@@ -70,7 +70,9 @@ std::vector<std::string> render_map(Game& g, const Location& loc, int vw, int vh
         for (int x = 0; x < vw; ++x) {
             Vec2 p{ox + x, oy + y};
             char ch = ' ';
-            if (loc.in_bounds(p)) {
+            // В темноте клетка остаётся пустой: в тексте это та же полная
+            // темнота, что чёрный квадрат в графике.
+            if (loc.in_bounds(p) && g.cell_lit(p)) {
                 ch = tile_glyph(loc.at(p));
                 if (loc.bed_at(p))  ch = glyph::BED;
                 int ci = loc.chest_index_at(p);

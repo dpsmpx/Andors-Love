@@ -545,14 +545,14 @@ void App::apply_dialogue_option(const DlgOption& o) {
             Modal em(Modal::Ending);
             em.title = "РАЗВЯЗКА: " + e->name;
             em.body = body;
-            stack_.push_back(em);
+            push_modal(em);
         }
         return;
     }
     if (!shop.empty()) {
         Modal sm(Modal::Shop);
         sm.arg = shop;
-        stack_.push_back(sm);
+        push_modal(sm);
         return;
     }
     if (ench) { push(Modal::Enchant); return; }
@@ -560,7 +560,7 @@ void App::apply_dialogue_option(const DlgOption& o) {
         Modal dm(Modal::Dialogue);
         dm.arg = npc->id;
         dm.node = next;
-        stack_.push_back(dm);
+        push_modal(dm);
     }
 }
 
@@ -599,7 +599,7 @@ void App::activate_row(Modal& m, int index) {
             if (id[0] == '!') { g_.unequip(static_cast<Slot>(to_int(id.substr(1)))); return; }
             Modal im(Modal::ItemMenu);
             im.arg = id;
-            stack_.push_back(im);
+            push_modal(im);
             return;
         }
 
@@ -651,7 +651,7 @@ void App::activate_row(Modal& m, int index) {
             Modal bm(Modal::Book);
             bm.arg = id;
             bm.title = b ? b->title : std::string("Книга");
-            stack_.push_back(bm);
+            push_modal(bm);
             return;
         }
 
@@ -686,7 +686,7 @@ void App::activate_row(Modal& m, int index) {
             if (id.empty() || !g_.can_enchant(id)) return;
             Modal em(Modal::EnchantPick);
             em.arg = id;
-            stack_.push_back(em);
+            push_modal(em);
             return;
         }
 

@@ -238,7 +238,16 @@ int Game::attack_cost() const {
     return c < 1 ? 1 : c;
 }
 
-int Game::exp_to_next() const { return 40 + 35 * plr_.level; }
+int Game::exp_to_next() const {
+    // Кривая квадратичная, а не прямая. При прямой каждый следующий уровень
+    // стоил столько же, сколько предыдущий приносил силы, и всё содержимое
+    // игры выводило героя к сороковому уровню — там уже некуда тратить очки
+    // навыка, все семь развиты до предела, и мир перестаёт сопротивляться.
+    // Теперь тот же опыт приводит примерно к двадцать шестому: выбирать,
+    // куда вложить очко, приходится до самого конца.
+    const int l = plr_.level;
+    return 50 + 25 * l + 3 * l * l;
+}
 
 void Game::grant_exp(int amount) {
     if (amount <= 0) return;
@@ -388,6 +397,35 @@ bool Game::drop_item(const std::string& id) {
     return true;
 }
 
+// --------------------------------------------------------------- свет
+
+int Game::sight_radius() const {
+    if (!Content::get().location_dark(plr_.loc)) return -1;
+
+    // «В руке» — это надето, а не лежит в сумке: факел в мешке не светит.
+    const std::size_t hand = static_cast<std::size_t>(Slot::Shield);
+    if (hand < plr_.equipped.size() && !plr_.equipped[hand].empty()) {
+        const ItemDef* d = Content::get().item(plr_.equipped[hand]);
+        if (d && d->kind == ItemKind::Light) return SIGHT_TORCH;
+    }
+    return SIGHT_DARK;
+}
+
+bool Game::cell_lit(Vec2 p) const {
+    const int r = sight_radius();
+    if (r < 0) return true;
+
+    const int dx = p.x - plr_.pos.x, dy = p.y - plr_.pos.y;
+    // Круг, а не квадрат: свет от огня не бывает угловатым. Прибавка r к
+    // квадрату радиуса включает в круг диагонали — иначе при радиусе в клетку
+    // герой не видел бы даже углов вокруг себя.
+    if (dx * dx + dy * dy > r * r + r) return false;
+
+    // Стена свет не пропускает: за углом темно, как бы близко он ни был.
+    const Location* loc = here();
+    return !loc || loc->visible(plr_.pos, p);
+}
+
 // --------------------------------------------------------------- мобы
 
 Mob* Game::mob_at(Vec2 p, const std::string& loc) {
@@ -421,6 +459,13 @@ void Game::fill_mob_inventory(Mob& m, const EnemyDef& e) {
     }
     for (const ActiveEffect& a : e.innate)
         apply_effect(m.effects, a.id, a.turns, a.power);
+}
+
+void Game::announce_dark() {
+    // Сказать про темноту нужно каждый раз, а не только при первом входе:
+    // игрок мог оставить факел на поверхности и вернуться уже без него.
+    if (sight_radius() != SIGHT_DARK) return;
+    msg("Здесь темно. Без огня в руке видно только на шаг вокруг себя.");
 }
 
 void Game::spawn_initial(const Location& loc) {
@@ -898,6 +943,7 @@ Bump Game::try_move(int dx, int dy) {
         plr_.pos = ex->dest;
         spawn_initial(*dst);
         msg("Ты приходишь в локацию «" + dst->name + "».");
+        announce_dark();
         return Bump::Exit;
     }
 
@@ -918,6 +964,7 @@ Bump Game::try_move(int dx, int dy) {
             plr_.pos = dst.pos;
             spawn_initial(*dl);
             msg("Портал переносит тебя в локацию «" + dl->name + "».");
+            announce_dark();
             return Bump::Portal;
         }
     }
@@ -1158,7 +1205,16 @@ int Game::resolve_hit(const Stats& atk, const Stats& def, int stance_pct,
     bool crit = rng_.chance(atk.crit + crit_bonus);
     int raw = rng_.range(atk.dmg_min, atk.dmg_max) * stance_pct / 100;
     if (crit) raw *= 2;
+
+    // Броня снимает часть удара, но не весь. Раньше она вычиталась начисто,
+    // и к середине игры любой удар доходил ровно единицей: броня героя
+    // обгоняла урон почти всех врагов, и его переставали пробивать вовсе.
+    // Теперь сквозь броню всегда проходит хотя бы ARMOR_MIN_PCT удара —
+    // на слабых ударах это ничего не меняет (там и так был пол в единицу),
+    // а тяжёлый удар остаётся тяжёлым, сколько брони ни надень.
     int dmg = raw - def.armor;
+    const int floor_dmg = raw * ARMOR_MIN_PCT / 100;
+    if (dmg < floor_dmg) dmg = floor_dmg;
     if (dmg < 1) dmg = 1;
     if (line) *line = (crit ? "КРИТ " : "") + to_str(dmg) + " урона";
     return dmg;
