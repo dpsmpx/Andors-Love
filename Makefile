@@ -148,7 +148,8 @@ run: $(BIN)
 # Тесты линкуются со всей логикой и с той частью графического слоя, которую
 # можно проверить без окна: шрифт, жесты, ходьба. Рисование проверяется
 # отдельно — прогоном `./andors-love-gui --script` со снимками экрана.
-GFX_TESTABLE := build/gfx/font.o build/gfx/font_data.o build/gfx/touch.o build/gfx/walk.o
+GFX_TESTABLE := build/gfx/font.o build/gfx/font_data.o build/gfx/touch.o \
+                build/gfx/walk.o build/gfx/png.o build/gfx/tiles.o
 TEST_SRC := tests/test_game.cpp
 TEST_OBJ := $(filter-out build/main.o,$(OBJ)) $(GFX_TESTABLE)
 TEST_BIN := build/run-tests$(EXE)

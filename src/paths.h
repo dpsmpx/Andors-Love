@@ -21,4 +21,13 @@ std::string save_dir(const char* argv0);
 // был понятным; сами карты при этом всё равно есть вшитые в бинарник.
 std::string data_root(const char* argv0);
 
+// Существует ли файл и читается ли он.
+bool file_exists(const std::string& path);
+
+// Лист тайлов: $ANDORS_LOVE_TILES, data/tiles/tiles.png в рабочем каталоге,
+// то же рядом с бинарником, наконец просто tiles.png рядом с ним. Файл
+// необязателен: без него игра рисует карту заливкой и знаками шрифта, так
+// что «не нашли» — это не ошибка, а отсутствие необязательного украшения.
+std::string tiles_file(const char* argv0);
+
 } // namespace paths

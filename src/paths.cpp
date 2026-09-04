@@ -46,6 +46,12 @@ std::string save_dir(const char* argv0) {
     return "saves";   // не нашли — оставим привычный путь ради понятной ошибки
 }
 
+bool file_exists(const std::string& path) {
+    if (path.empty()) return false;
+    std::ifstream probe(path.c_str(), std::ios::binary);
+    return static_cast<bool>(probe);
+}
+
 namespace {
 
 bool has_maps(const std::string& dir) {
@@ -66,6 +72,24 @@ std::string data_root(const char* argv0) {
     if (!exe.empty() && has_maps(exe + "/data/maps")) return exe + "/data/maps";
 
     return "data/maps";
+}
+
+std::string tiles_file(const char* argv0) {
+    if (const char* env = std::getenv("ANDORS_LOVE_TILES"))
+        if (file_exists(env)) return env;
+
+    if (file_exists("data/tiles/tiles.png")) return "data/tiles/tiles.png";
+
+    const std::string exe = platform::exe_dir(argv0);
+    if (!exe.empty()) {
+        const std::string in_data = exe + "/data/tiles/tiles.png";
+        if (file_exists(in_data)) return in_data;
+        // Самый простой случай: игроку отдали один файл игры, и он положил
+        // рядом нарисованный лист.
+        const std::string beside = exe + "/tiles.png";
+        if (file_exists(beside)) return beside;
+    }
+    return "data/tiles/tiles.png";
 }
 
 } // namespace paths

@@ -3,6 +3,7 @@
 #include "../paths.h"
 #include "../platform.h"
 #include "font.h"
+#include "tileset.h"
 
 #include <SDL2/SDL.h>
 
@@ -14,48 +15,13 @@ namespace gfx {
 
 namespace {
 
-// Цвет клетки по типу местности. Мир рисуется цветом, а не только знаком:
-// с этого и начинается «переход на графику».
-Color tile_color(Tile t) {
-    switch (t) {
-        case Tile::Floor:     return Color(52, 50, 46);
-        case Tile::Wall:      return Color(78, 74, 68);
-        case Tile::Water:     return Color(34, 62, 104);
-        case Tile::Tree:      return Color(30, 62, 38);
-        case Tile::Grass:     return Color(38, 58, 34);
-        case Tile::Road:      return Color(72, 62, 44);
-        case Tile::DeadWater: return Color(44, 58, 58);
-        default:              return Color(20, 20, 20);
-    }
-}
-
-// Мелкая рябь поверх заливки: без неё поле выглядит плоской клеёнкой.
-unsigned tile_texture(Tile t) {
-    switch (t) {
-        case Tile::Wall:      return 0x2592;   // ▒
-        case Tile::Tree:      return 'T';
-        case Tile::Grass:     return ',';
-        case Tile::Water:     return '~';
-        case Tile::DeadWater: return ':';
-        default:              return 0;
-    }
-}
-
-Color object_color(unsigned cp) {
-    switch (cp) {
-        case glyph::PLAYER: return Color(255, 248, 220);
-        case glyph::NPC:    return Color(120, 200, 255);
-        case glyph::MOB:    return Color(232, 96, 88);
-        case glyph::EXIT:   return Color(240, 216, 120);
-        case glyph::SIGN:   return Color(200, 190, 150);
-        case glyph::ITEM:   return Color(140, 230, 150);
-        case glyph::BED:    return Color(210, 160, 220);
-        case glyph::CHEST:  return Color(230, 180, 100);
-        case glyph::PORTAL: return Color(180, 140, 255);
-        case glyph::NOTE:   return Color(230, 230, 160);
-        default:            return Color(200, 200, 200);
-    }
-}
+// Вид по умолчанию — тот, которым карта рисуется без листа тайлов. Цвета и
+// знаки для него лежат в tiles.cpp: оттуда их берёт и эта отрисовка, и
+// экспорт листа. Две копии рано или поздно разошлись бы, и в файле оказалось
+// бы не то, что на экране.
+Color rgba_to_color(Rgba c) { return Color(c.r, c.g, c.b, c.a); }
+Color tile_color(Tile t) { return rgba_to_color(default_tile_color(t)); }
+Color object_color(unsigned cp) { return rgba_to_color(default_object_color(cp)); }
 
 } // namespace
 
@@ -80,6 +46,15 @@ bool App::start(int argc, char** argv, int win_w, int win_h) {
         return false;
     }
     ptr_.configure(c_.touch_unit() / 3);
+
+    // Лист тайлов необязателен: без него игра рисует как рисовала. Поэтому
+    // отсутствие файла молчит, а вот испорченный файл — говорит: иначе
+    // художник правил бы картинку и гадал, почему ничего не меняется.
+    tiles_path_ = paths::tiles_file(argv0);
+    std::string terr;
+    if (!tiles_.load(c_.renderer(), tiles_path_, &terr) && paths::file_exists(tiles_path_))
+        SDL_Log("лист тайлов %s: %s", tiles_path_.c_str(), terr.c_str());
+
     refresh_save_summary();
     return true;
 }
@@ -587,8 +562,12 @@ void App::draw_world() {
             const Vec2 p(ox + gx, oy + gy);
             const Tile t = loc->at(p);
             const Rect cell(left + gx * cw, top + gy * chh, cw, chh);
+            // Нарисованный тайл заменяет вид по умолчанию, ненарисованный —
+            // нет. Поэтому набор можно рисовать по одному тайлу: готовое
+            // появляется в игре сразу, остальное выглядит как раньше.
+            if (tiles_.draw(c_.renderer(), slot_of_tile(t), cell)) continue;
             c_.fill(cell, tile_color(t));
-            const unsigned tg = tile_texture(t);
+            const unsigned tg = default_tile_texture(t);
             if (tg) c_.glyph_at(cell.x + gpad, cell.y, tg, Color(0, 0, 0, 70), sc);
         }
     }
@@ -617,15 +596,20 @@ void App::draw_world() {
     for (const Obj& o : objs) {
         const int gx = o.p.x - ox, gy = o.p.y - oy;
         if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) continue;
-        c_.glyph_at(left + gx * cw + gpad, top + gy * chh, o.cp, object_color(o.cp), sc);
+        const Rect cell(left + gx * cw, top + gy * chh, cw, chh);
+        if (tiles_.draw(c_.renderer(), slot_of_glyph(o.cp), cell)) continue;
+        c_.glyph_at(cell.x + gpad, cell.y, o.cp, object_color(o.cp), sc);
     }
 
-    // Герой рисуется последним, с подложкой: его видно всегда.
+    // Герой рисуется последним: его видно всегда.
     const int px = g_.player().pos.x - ox, py = g_.player().pos.y - oy;
     if (px >= 0 && py >= 0 && px < cols && py < rows) {
         const Rect cell(left + px * cw, top + py * chh, cw, chh);
-        c_.fill(cell, Color(120, 110, 60, 140));
-        c_.glyph_at(cell.x + gpad, cell.y, glyph::PLAYER, object_color(glyph::PLAYER), sc);
+        if (!tiles_.draw(c_.renderer(), SLOT_PLAYER, cell)) {
+            c_.fill(cell, rgba_to_color(default_player_backing()));
+            c_.glyph_at(cell.x + gpad, cell.y, glyph::PLAYER,
+                        object_color(glyph::PLAYER), sc);
+        }
     }
 
     // Цель ходьбы: видно, куда герой идёт и что приказ принят.

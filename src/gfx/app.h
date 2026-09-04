@@ -1,5 +1,6 @@
 #pragma once
 #include "draw.h"
+#include "tileset.h"
 #include "gui.h"
 #include "touch.h"
 #include "walk.h"
@@ -166,6 +167,7 @@ private:
     Canvas   c_;
     Pointer  ptr_;
     Walker   walk_;
+    Tileset  tiles_;
     Game     g_;
 
     enum Mode { MODE_MENU, MODE_CREATE, MODE_PLAY };
@@ -196,6 +198,7 @@ private:
     unsigned now_ms_;
     bool     died_;              // экран смерти показывается один раз
     std::string data_root_;      // тот же, что у игры: сводка грузится оттуда же
+    std::string tiles_path_;     // лист тайлов; может не существовать, и это норма
     std::string save_dir_;
     std::string save_path_;
     std::string status_;        // последняя строка журнала, показанная в HUD
