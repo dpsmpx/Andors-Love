@@ -3,9 +3,11 @@
 #include "../paths.h"
 #include "../platform.h"
 #include "font.h"
+#include "tileset.h"
 
 #include <SDL2/SDL.h>
 
+#include <cstdio>
 #include <cstdlib>
 #include <sstream>
 
@@ -13,48 +15,13 @@ namespace gfx {
 
 namespace {
 
-// Цвет клетки по типу местности. Мир рисуется цветом, а не только знаком:
-// с этого и начинается «переход на графику».
-Color tile_color(Tile t) {
-    switch (t) {
-        case Tile::Floor:     return Color(52, 50, 46);
-        case Tile::Wall:      return Color(78, 74, 68);
-        case Tile::Water:     return Color(34, 62, 104);
-        case Tile::Tree:      return Color(30, 62, 38);
-        case Tile::Grass:     return Color(38, 58, 34);
-        case Tile::Road:      return Color(72, 62, 44);
-        case Tile::DeadWater: return Color(44, 58, 58);
-        default:              return Color(20, 20, 20);
-    }
-}
-
-// Мелкая рябь поверх заливки: без неё поле выглядит плоской клеёнкой.
-unsigned tile_texture(Tile t) {
-    switch (t) {
-        case Tile::Wall:      return 0x2592;   // ▒
-        case Tile::Tree:      return 'T';
-        case Tile::Grass:     return ',';
-        case Tile::Water:     return '~';
-        case Tile::DeadWater: return ':';
-        default:              return 0;
-    }
-}
-
-Color object_color(unsigned cp) {
-    switch (cp) {
-        case glyph::PLAYER: return Color(255, 248, 220);
-        case glyph::NPC:    return Color(120, 200, 255);
-        case glyph::MOB:    return Color(232, 96, 88);
-        case glyph::EXIT:   return Color(240, 216, 120);
-        case glyph::SIGN:   return Color(200, 190, 150);
-        case glyph::ITEM:   return Color(140, 230, 150);
-        case glyph::BED:    return Color(210, 160, 220);
-        case glyph::CHEST:  return Color(230, 180, 100);
-        case glyph::PORTAL: return Color(180, 140, 255);
-        case glyph::NOTE:   return Color(230, 230, 160);
-        default:            return Color(200, 200, 200);
-    }
-}
+// Вид по умолчанию — тот, которым карта рисуется без листа тайлов. Цвета и
+// знаки для него лежат в tiles.cpp: оттуда их берёт и эта отрисовка, и
+// экспорт листа. Две копии рано или поздно разошлись бы, и в файле оказалось
+// бы не то, что на экране.
+Color rgba_to_color(Rgba c) { return Color(c.r, c.g, c.b, c.a); }
+Color tile_color(Tile t) { return rgba_to_color(default_tile_color(t)); }
+Color object_color(unsigned cp) { return rgba_to_color(default_object_color(cp)); }
 
 } // namespace
 
@@ -78,7 +45,19 @@ bool App::start(int argc, char** argv, int win_w, int win_h) {
         SDL_Log("%s", c_.error().c_str());
         return false;
     }
-    ptr_.configure(c_.touch_unit() / 3, 320);
+    ptr_.configure(c_.touch_unit() / 3);
+
+    // Лист тайлов необязателен: без него игра рисует как рисовала. Поэтому
+    // отсутствие файла молчит, а вот испорченный файл — говорит: иначе
+    // художник правил бы картинку и гадал, почему ничего не меняется.
+    tiles_path_ = paths::tiles_dir(argv0);
+    std::string terr;
+    tiles_.load(c_.renderer(), tiles_path_, tiles_path_ + "/tiles.png", &terr);
+    // Пустой каталог молчит: графика необязательна. А вот файл, который есть,
+    // но не читается, надо назвать — иначе художник правит картинку и гадает,
+    // почему в игре ничего не меняется.
+    if (!terr.empty()) SDL_Log("графика: %s", terr.c_str());
+
     refresh_save_summary();
     return true;
 }
@@ -98,28 +77,16 @@ int App::run(int argc, char** argv) {
 
 void App::step(unsigned now_ms) {
     now_ms_ = now_ms;
-    ptr_.tick(now_ms_);
 
     Gesture gs;
     while (ptr_.poll(&gs)) {
         if (gs.kind == G_TAP) on_tap(gs.x, gs.y);
         else if (gs.kind == G_SWIPE) on_swipe(gs.dx, gs.dy);
-        else if (gs.kind == G_HOLD_BEGIN) {
-            // Задержка на поле — бег к точке под пальцем.
-            if (mode_ == MODE_PLAY && !modal_open() && !g_.combat().active) {
-                Vec2 cell;
-                if (cell_at(gs.x, gs.y, &cell)) walk_.go(cell, true);
-            }
-        } else if (gs.kind == G_HOLD_END) {
-            if (walk_.running()) walk_.stop();
-        }
     }
 
-    // Бег ведёт героя за пальцем, пока палец на экране.
-    if (mode_ == MODE_PLAY && walk_.active() && walk_.running() && ptr_.holding()) {
-        Vec2 cell;
-        if (cell_at(ptr_.hold_x(), ptr_.hold_y(), &cell)) walk_.retarget(cell);
-    }
+    // Палец на карте — герой идёт к нему. Это состояние, а не событие:
+    // держишь — идёт, ведёшь пальцем — цель едет следом.
+    follow_finger();
 
     if (mode_ == MODE_PLAY && !modal_open() && !g_.combat().active) {
         if (walk_.update(g_, now_ms_)) {
@@ -282,13 +249,40 @@ void App::on_text(const char* utf8) {
         new_name_ += utf8;
 }
 
+// Есть ли смысл идти в эту клетку. Стена — нет; всё остальное, вплоть до
+// таблички и врага, — да: до них ходьба доводит и делает то же, что шаг
+// вручную. Предикат один на удержание и на тап, иначе палец и касание
+// понимали бы карту по-разному.
+bool App::reachable_cell(const Location& loc, Vec2 cell) {
+    return loc.walkable(cell) || loc.exit_at(cell) || loc.npc_at(cell) ||
+           loc.sign_at(cell) || g_.mob_at(cell, loc.id);
+}
+
+void App::follow_finger() {
+    if (mode_ != MODE_PLAY || modal_open() || g_.combat().active) return;
+    if (!ptr_.pressed()) return;
+
+    Vec2 cell;
+    if (!cell_at(ptr_.press_x(), ptr_.press_y(), &cell)) return;
+
+    // В стену идти незачем: палец на непроходимой клетке — это или промах,
+    // или намерение открыть меню, и оба разбираются на отпускании.
+    const Location* loc = g_.here();
+    if (!loc || !reachable_cell(*loc, cell)) return;
+
+    // Держишь дольше — герой переходит на бег. Отдельного жеста для бега
+    // нет: удержание и есть движение, а долгое удержание — быстрое.
+    const bool run = ptr_.held_ms(now_ms_) >= RUN_AFTER_MS;
+    walk_.retarget(cell, run);
+}
+
 void App::on_swipe(int dx, int dy) {
     // В открытом окне свайп листает — список или текст, смотря что показано.
     if (Modal* m = top()) { scroll_modal(*m, dy); return; }
-    if (mode_ != MODE_PLAY) return;
-    if (g_.combat().active) return;
-    walk_.stop();
-    step_player(dx, dy);
+    // На карте свайп ничего не делает сам: он лишь ведёт палец, а за героем
+    // следит follow_finger. Раньше свайп выдавал по шагу на каждый пройденный
+    // порог, и одно движение пальца уносило героя на десяток клеток разом.
+    (void)dx; (void)dy;
 }
 
 void App::world_tap(int x, int y) {
@@ -307,18 +301,20 @@ void App::world_tap(int x, int y) {
     Vec2 cell;
     if (!cell_at(x, y, &cell)) return;
 
-    // Тап по пустому месту, когда герой стоит, открывает меню. Если он идёт —
-    // тап его останавливает: это привычнее, чем открывать меню на ходу.
-    if (walk_.active()) { walk_.stop(); return; }
-
     const Location* loc = g_.here();
     if (!loc) return;
-    if (cell.x == g_.player().pos.x && cell.y == g_.player().pos.y) { push(Modal::GameMenu); return; }
-    if (!loc->walkable(cell) && !loc->exit_at(cell) && !loc->npc_at(cell) &&
-        !loc->sign_at(cell) && !g_.mob_at(cell, loc->id)) {
+
+    // Тап по себе или в стену — меню, но только если герой стоит. На ходу
+    // то же касание просто останавливает его: меню, выскочившее посреди
+    // дороги от промаха по стене, — последнее, что нужно бегущему.
+    const bool on_self = (cell.x == g_.player().pos.x && cell.y == g_.player().pos.y);
+    if (on_self || !reachable_cell(*loc, cell)) {
+        if (walk_.active()) { walk_.stop(); return; }
         push(Modal::GameMenu);
         return;
     }
+    // По остальному тап задаёт цель и отпускает: короткое касание отправляет
+    // героя туда и после того, как палец убрали, — «тапнул и пошёл».
     walk_.go(cell, false);
 }
 
@@ -569,8 +565,12 @@ void App::draw_world() {
             const Vec2 p(ox + gx, oy + gy);
             const Tile t = loc->at(p);
             const Rect cell(left + gx * cw, top + gy * chh, cw, chh);
+            // Нарисованный тайл заменяет вид по умолчанию, ненарисованный —
+            // нет. Поэтому набор можно рисовать по одному тайлу: готовое
+            // появляется в игре сразу, остальное выглядит как раньше.
+            if (tiles_.draw(c_.renderer(), slot_of_tile(t), cell)) continue;
             c_.fill(cell, tile_color(t));
-            const unsigned tg = tile_texture(t);
+            const unsigned tg = default_tile_texture(t);
             if (tg) c_.glyph_at(cell.x + gpad, cell.y, tg, Color(0, 0, 0, 70), sc);
         }
     }
@@ -599,15 +599,20 @@ void App::draw_world() {
     for (const Obj& o : objs) {
         const int gx = o.p.x - ox, gy = o.p.y - oy;
         if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) continue;
-        c_.glyph_at(left + gx * cw + gpad, top + gy * chh, o.cp, object_color(o.cp), sc);
+        const Rect cell(left + gx * cw, top + gy * chh, cw, chh);
+        if (tiles_.draw(c_.renderer(), slot_of_glyph(o.cp), cell)) continue;
+        c_.glyph_at(cell.x + gpad, cell.y, o.cp, object_color(o.cp), sc);
     }
 
-    // Герой рисуется последним, с подложкой: его видно всегда.
+    // Герой рисуется последним: его видно всегда.
     const int px = g_.player().pos.x - ox, py = g_.player().pos.y - oy;
     if (px >= 0 && py >= 0 && px < cols && py < rows) {
         const Rect cell(left + px * cw, top + py * chh, cw, chh);
-        c_.fill(cell, Color(120, 110, 60, 140));
-        c_.glyph_at(cell.x + gpad, cell.y, glyph::PLAYER, object_color(glyph::PLAYER), sc);
+        if (!tiles_.draw(c_.renderer(), SLOT_PLAYER, cell)) {
+            c_.fill(cell, rgba_to_color(default_player_backing()));
+            c_.glyph_at(cell.x + gpad, cell.y, glyph::PLAYER,
+                        object_color(glyph::PLAYER), sc);
+        }
     }
 
     // Цель ходьбы: видно, куда герой идёт и что приказ принят.
@@ -633,6 +638,7 @@ int App::run_script(const std::vector<std::string>& script, const std::string& o
 
     unsigned clock = 0;
     int fake_id = 100;
+    const unsigned FRAME_MS = 16;
 
     for (std::size_t i = 0; i < script.size() && !quit_; ++i) {
         std::istringstream ls(script[i]);
@@ -646,13 +652,16 @@ int App::run_script(const std::vector<std::string>& script, const std::string& o
             clock += 40;
             ptr_.up(fake_id, x, y, clock);
         } else if (cmd == "hold") {
+            // Палец опускается и остаётся: дальше его двигают drag-ом,
+            // а отпускают release-ом. Ходьбу ведёт именно это состояние.
             int x = 0, y = 0; ls >> x >> y;
             ++fake_id;
             ptr_.down(fake_id, x, y, clock);
-            clock += 400;
-            ptr_.tick(clock);
+        } else if (cmd == "drag") {
+            int x = 0, y = 0; ls >> x >> y;
+            ptr_.move(fake_id, x, y, clock);
         } else if (cmd == "release") {
-            ptr_.up(fake_id, ptr_.hold_x(), ptr_.hold_y(), clock);
+            ptr_.up(fake_id, ptr_.press_x(), ptr_.press_y(), clock);
         } else if (cmd == "swipe") {
             int dx = 0, dy = 0; ls >> dx >> dy;
             ++fake_id;
@@ -668,13 +677,26 @@ int App::run_script(const std::vector<std::string>& script, const std::string& o
             else if (k == "enter") on_key('\r');
             else if (!k.empty()) on_key(static_cast<unsigned char>(k[0]));
         } else if (cmd == "wait") {
+            // Ожидание идёт кадрами, а не одним прыжком часов: удержание
+            // пальца проверяется ровно тем же способом, каким работает
+            // живой цикл, иначе за секунду ожидания вышел бы один шаг.
             int ms = 0; ls >> ms;
-            clock += static_cast<unsigned>(ms);
+            for (int left = ms; left > 0; left -= static_cast<int>(FRAME_MS)) {
+                clock += FRAME_MS;
+                step(clock);
+            }
         } else if (cmd == "type") {
             std::string rest;
             std::getline(ls, rest);
             if (!rest.empty() && rest[0] == ' ') rest.erase(0, 1);
             on_text(rest.c_str());
+        } else if (cmd == "where") {
+            // Печать положения героя: по ней сценарий проверяется снаружи,
+            // как снимки экрана проверяют рисование.
+            std::printf("where %d %d %s %s\n", g_.player().pos.x, g_.player().pos.y,
+                        walk_.active() ? (walk_.running() ? "run" : "walk") : "stand",
+                        g_.here() ? g_.here()->id.c_str() : "-");
+            std::fflush(stdout);
         } else if (cmd == "quit") {
             quit_ = true;
         }
@@ -693,7 +715,7 @@ int App::run_script(const std::vector<std::string>& script, const std::string& o
             if (surf) SDL_FreeSurface(surf);
         }
         c_.present();
-        clock += 16;
+        clock += FRAME_MS;
     }
 
     c_.close();

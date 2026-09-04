@@ -1,5 +1,6 @@
 #pragma once
 #include "draw.h"
+#include "tileset.h"
 #include "gui.h"
 #include "touch.h"
 #include "walk.h"
@@ -65,8 +66,8 @@ public:
     // Прогон по сценарию без человека: команды подаются строками, кадры
     // сохраняются в BMP. Нужен, чтобы графику можно было проверять там, где
     // нет ни экрана, ни пальцев — на сборочной машине и в тестах.
-    // Команды: tap X Y | hold X Y | release | swipe DX DY | key K |
-    //          type ТЕКСТ | wait MS | shot ИМЯ | quit
+    // Команды: tap X Y | hold X Y | drag X Y | release | swipe DX DY |
+    //          key K | type ТЕКСТ | wait MS | where | shot ИМЯ | quit
     int run_script(const std::vector<std::string>& script, const std::string& out_dir,
                    int argc, char** argv);
 
@@ -89,6 +90,11 @@ private:
     void on_tap(int x, int y);
     void on_key(int key);
     void on_swipe(int dx, int dy);
+    // Ходьба по удерживаемому пальцу: цель — клетка под пальцем, темп —
+    // шаг или бег, смотря сколько палец уже держится.
+    void follow_finger();
+    bool reachable_cell(const Location& loc, Vec2 cell);
+    static const unsigned RUN_AFTER_MS = 700;
     // Набранный текст: и с настоящей клавиатуры, и из сценария — одним путём.
     void on_text(const char* utf8);
     void scroll_modal(Modal& m, int rows);
@@ -161,6 +167,7 @@ private:
     Canvas   c_;
     Pointer  ptr_;
     Walker   walk_;
+    Tileset  tiles_;
     Game     g_;
 
     enum Mode { MODE_MENU, MODE_CREATE, MODE_PLAY };
@@ -191,6 +198,7 @@ private:
     unsigned now_ms_;
     bool     died_;              // экран смерти показывается один раз
     std::string data_root_;      // тот же, что у игры: сводка грузится оттуда же
+    std::string tiles_path_;     // каталог графики; может не существовать, и это норма
     std::string save_dir_;
     std::string save_path_;
     std::string status_;        // последняя строка журнала, показанная в HUD

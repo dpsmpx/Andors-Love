@@ -20,11 +20,21 @@ Walker::Walker()
       target_(0, 0), next_ms_(0), stop_(WS_ARRIVED) {}
 
 void Walker::go(Vec2 target, bool run) {
+    // Часы шагов не сбрасываются: они идут поверх всех целей. Иначе можно
+    // было бы разогнать героя, подсовывая ему новую цель каждый раз, как он
+    // дошёл до прежней — по клетке за касание, быстрее любого шага. А если
+    // ходьба стояла дольше паузы, next_ms_ уже позади, и первый шаг всё
+    // равно делается сразу: тап отзывается без задержки.
     active_ = true;
     run_ = run;
     target_ = target;
-    next_ms_ = 0;              // первый шаг делается сразу
     stop_ = WS_RUNNING;
+}
+
+void Walker::retarget(Vec2 target, bool run) {
+    if (!active_) { go(target, run); return; }
+    target_ = target;
+    run_ = run;
 }
 
 void Walker::stop() {
@@ -43,12 +53,14 @@ bool Walker::try_axis(Game& g, int dx, int dy, Bump* out) {
 bool Walker::update(Game& g, unsigned now_ms) {
     if (!active_) return false;
     if (now_ms < next_ms_) return false;
-    next_ms_ = now_ms + step_ms(run_);
 
     const Vec2 p = g.player().pos;
     const int ddx = target_.x - p.x;
     const int ddy = target_.y - p.y;
+    // Стоять на цели — не шаг, и паузы он не стоит: палец уже на герое,
+    // а следующая цель должна сработать сразу.
     if (ddx == 0 && ddy == 0) { stop_ = WS_ARRIVED; active_ = false; return false; }
+    next_ms_ = now_ms + step_ms(run_);
 
     // Сперва по оси, где разница больше: этого хватает, чтобы обойти угол.
     int ax = 0, ay = 0, bx = 0, by = 0;
