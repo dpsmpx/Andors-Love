@@ -80,7 +80,7 @@ void App::step(unsigned now_ms) {
 
     Gesture gs;
     while (ptr_.poll(&gs)) {
-        if (gs.kind == G_TAP) on_tap(gs.x, gs.y);
+        if (gs.kind == G_TAP) on_tap(gs.x, gs.y, gs.press);
         else if (gs.kind == G_SWIPE) on_swipe(gs.dx, gs.dy);
     }
 
@@ -215,10 +215,17 @@ void App::pump_events() {
     }
 }
 
-void App::on_tap(int x, int y) {
+void App::on_tap(int x, int y, unsigned press) {
     // Открытое окно перехватывает касание в любом режиме — иначе окно поверх
     // главного меню было бы видно, но недоступно.
-    if (Modal* m = top()) { modal_tap(*m, x, y); return; }
+    if (Modal* m = top()) {
+        // Кроме одного случая: окно открылось этим же касанием. Так бывает,
+        // когда палец в упор к жителю — шаг упирается в него и заводит
+        // разговор ещё до того, как палец убрали. Отпускание тогда пришлось
+        // бы «мимо окна», и разговор закрывался бы сам собой.
+        if (m->born_press != press) modal_tap(*m, x, y);
+        return;
+    }
     if (mode_ == MODE_MENU) { main_menu_tap(x, y); return; }
     if (mode_ == MODE_CREATE) { create_hero_tap(x, y); return; }
     if (g_.combat().active) { combat_tap(x, y); return; }
@@ -477,7 +484,7 @@ void App::begin_dialogue(const std::string& npc_id) {
     Modal m(Modal::Dialogue);
     m.arg  = npc_id;
     m.node = n->root;
-    stack_.push_back(m);
+    push_modal(m);
 }
 
 // -------------------------------------------------------------- камера/карта
@@ -563,8 +570,11 @@ void App::draw_world() {
     for (int gy = 0; gy < rows; ++gy) {
         for (int gx = 0; gx < cols; ++gx) {
             const Vec2 p(ox + gx, oy + gy);
-            const Tile t = loc->at(p);
             const Rect cell(left + gx * cw, top + gy * chh, cw, chh);
+            // В темноте клетка не рисуется вовсе — не затемняется, а именно
+            // остаётся чёрной: игрок не должен угадывать карту по силуэту.
+            if (!g_.cell_lit(p)) { c_.fill(cell, Color(0, 0, 0, 255)); continue; }
+            const Tile t = loc->at(p);
             // Нарисованный тайл заменяет вид по умолчанию, ненарисованный —
             // нет. Поэтому набор можно рисовать по одному тайлу: готовое
             // появляется в игре сразу, остальное выглядит как раньше.
@@ -599,6 +609,7 @@ void App::draw_world() {
     for (const Obj& o : objs) {
         const int gx = o.p.x - ox, gy = o.p.y - oy;
         if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) continue;
+        if (!g_.cell_lit(o.p)) continue;
         const Rect cell(left + gx * cw, top + gy * chh, cw, chh);
         if (tiles_.draw(c_.renderer(), slot_of_glyph(o.cp), cell)) continue;
         c_.glyph_at(cell.x + gpad, cell.y, o.cp, object_color(o.cp), sc);
@@ -618,7 +629,7 @@ void App::draw_world() {
     // Цель ходьбы: видно, куда герой идёт и что приказ принят.
     if (walk_.active()) {
         const int tx = walk_.target().x - ox, ty = walk_.target().y - oy;
-        if (tx >= 0 && ty >= 0 && tx < cols && ty < rows)
+        if (tx >= 0 && ty >= 0 && tx < cols && ty < rows && g_.cell_lit(walk_.target()))
             c_.frame(Rect(left + tx * cw, top + ty * chh, cw, chh),
                      walk_.running() ? theme().accent : theme().good, 2);
     }

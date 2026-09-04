@@ -44,6 +44,7 @@ Slot slot_for(ItemKind k) {
         case ItemKind::Armor:  return Slot::Armor;
         case ItemKind::Helmet: return Slot::Helmet;
         case ItemKind::Shield: return Slot::Shield;
+        case ItemKind::Light:  return Slot::Shield;
         case ItemKind::Ring:   return Slot::Ring;
         default:               return Slot::Count;
     }
@@ -54,7 +55,7 @@ const char* slot_name(Slot s) {
         case Slot::Weapon: return "Оружие";
         case Slot::Armor:  return "Броня";
         case Slot::Helmet: return "Шлем";
-        case Slot::Shield: return "Щит";
+        case Slot::Shield: return "Левая рука";
         case Slot::Ring:   return "Кольцо";
         default:           return "—";
     }
@@ -69,6 +70,7 @@ const char* kind_name(ItemKind k) {
         case ItemKind::Ring:       return "кольцо";
         case ItemKind::Consumable: return "расходник";
         case ItemKind::Book:       return "книга";
+        case ItemKind::Light:      return "светильник";
         default:                   return "разное";
     }
 }

@@ -28,7 +28,11 @@ struct Gesture {
     GestureKind kind;
     int x, y;       // где это случилось, в пикселях окна
     int dx, dy;     // только для свайпа: -1, 0 или 1
-    Gesture() : kind(G_NONE), x(0), y(0), dx(0), dy(0) {}
+    // Номер касания, из которого вышел жест. По нему видно, что окно открылось
+    // тем же касанием, отпускание которого сейчас разбирается, — иначе одно
+    // движение пальца и открывало бы окно, и тут же его закрывало.
+    unsigned press;
+    Gesture() : kind(G_NONE), x(0), y(0), dx(0), dy(0), press(0) {}
 };
 
 class Pointer {
@@ -55,6 +59,9 @@ public:
     // Сколько миллисекунд палец уже держится. По этому времени решается,
     // идти шагом или бежать.
     unsigned held_ms(unsigned now_ms) const;
+    // Номер текущего касания, а если пальца нет — последнего бывшего.
+    // Номера только растут, поэтому у следующего касания он заведомо другой.
+    unsigned press_id() const;
 
 private:
     struct Touch {
@@ -63,9 +70,10 @@ private:
         int  start_x, start_y;   // точка, от которой меряется свайп
         int  cur_x, cur_y;
         unsigned down_ms;
+        unsigned serial;         // номер этого касания
         bool swiped;             // касание уже ушло в свайпы
         Touch() : id(-1), active(false), start_x(0), start_y(0),
-                  cur_x(0), cur_y(0), down_ms(0), swiped(false) {}
+                  cur_x(0), cur_y(0), down_ms(0), serial(0), swiped(false) {}
     };
 
     Touch* find(int id);
@@ -79,6 +87,7 @@ private:
     int      lead_;              // id ведущего пальца, -1 — ни одного
     int      press_x_, press_y_;
     unsigned press_ms_;
+    unsigned press_serial_;      // сколько касаний было всего
 };
 
 } // namespace gfx

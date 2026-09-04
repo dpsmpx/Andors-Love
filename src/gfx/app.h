@@ -41,6 +41,10 @@ struct Modal {
     };
 
     Kind        kind;
+    // Каким касанием окно открыто. Отпускание того же касания на него не
+    // действует: иначе шаг к жителю открывал бы разговор, а отпускание пальца
+    // тут же его закрывало — окно мигало и пропадало.
+    unsigned    born_press;
     ListView    list;
     int         scroll;        // для текстовых окон
     std::string title;
@@ -53,8 +57,8 @@ struct Modal {
     int         index;
     std::size_t max_len;
 
-    Modal() : kind(GameMenu), scroll(0), selling(false), index(-1), max_len(0) {}
-    explicit Modal(Kind k) : kind(k), scroll(0), selling(false), index(-1), max_len(0) {}
+    Modal() : kind(GameMenu), born_press(0), scroll(0), selling(false), index(-1), max_len(0) {}
+    explicit Modal(Kind k) : kind(k), born_press(0), scroll(0), selling(false), index(-1), max_len(0) {}
 };
 
 class App {
@@ -87,7 +91,7 @@ private:
 
     // --- ввод ---
     void pump_events();
-    void on_tap(int x, int y);
+    void on_tap(int x, int y, unsigned press);
     void on_key(int key);
     void on_swipe(int dx, int dy);
     // Ходьба по удерживаемому пальцу: цель — клетка под пальцем, темп —
@@ -106,6 +110,10 @@ private:
 
     // --- переходы ---
     void push(Modal::Kind k);
+    // Единственная дверь, через которую окно попадает в стек: здесь на нём
+    // отмечается касание, которым оно открыто. Складывать в stack_ напрямую
+    // нельзя — отметку однажды забудут поставить.
+    void push_modal(const Modal& m);
     void push_message(const std::string& title, const std::string& body);
     // Ввод строки поверх всего. index < 0 — название книги, иначе её строка;
     // index == BOOK_APPEND — добавить строку в конец.

@@ -5,7 +5,8 @@
 namespace gfx {
 
 Pointer::Pointer()
-    : swipe_px_(24), lead_(-1), press_x_(0), press_y_(0), press_ms_(0) {}
+    : swipe_px_(24), lead_(-1), press_x_(0), press_y_(0), press_ms_(0),
+      press_serial_(0) {}
 
 void Pointer::configure(int swipe_px) {
     if (swipe_px > 0) swipe_px_ = swipe_px;
@@ -18,6 +19,12 @@ Pointer::Touch* Pointer::find(int id) {
 }
 
 void Pointer::push(const Gesture& g) { queue_.push_back(g); }
+
+unsigned Pointer::press_id() const {
+    for (int i = 0; i < MAX_TOUCHES; ++i)
+        if (touches_[i].active && touches_[i].id == lead_) return touches_[i].serial;
+    return press_serial_;
+}
 
 unsigned Pointer::held_ms(unsigned now_ms) const {
     if (lead_ < 0) return 0;
@@ -33,6 +40,7 @@ void Pointer::down(int id, int x, int y, unsigned now_ms) {
         t.start_x = t.cur_x = x;
         t.start_y = t.cur_y = y;
         t.down_ms = now_ms;
+        t.serial = ++press_serial_;
         t.swiped = false;
 
         if (lead_ < 0) {
@@ -63,6 +71,7 @@ void Pointer::move(int id, int x, int y, unsigned now_ms) {
         Gesture g;
         g.kind = G_SWIPE;
         g.x = x; g.y = y;
+        g.press = t->serial;
         if (std::abs(dx) > std::abs(dy)) {
             g.dx = dx > 0 ? 1 : -1;
             t->start_x += g.dx * swipe_px_;
@@ -86,6 +95,7 @@ void Pointer::up(int id, int x, int y, unsigned now_ms) {
         Gesture g;
         g.kind = G_TAP;
         g.x = x; g.y = y;
+        g.press = t->serial;
         push(g);
     }
     (void)now_ms;

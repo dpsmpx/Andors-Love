@@ -87,8 +87,10 @@ inline Stats operator+(Stats a, const Stats& b) { a += b; return a; }
 
 // ---------- предметы ----------
 
-enum class ItemKind { Misc, Weapon, Armor, Helmet, Shield, Ring, Consumable, Book };
+enum class ItemKind { Misc, Weapon, Armor, Helmet, Shield, Ring, Consumable, Book, Light };
 
+// Светильник занимает ту же руку, что и щит: держать одновременно факел и
+// щит нельзя, и под землёй приходится выбирать между защитой и зрением.
 enum class Slot { Weapon = 0, Armor, Helmet, Shield, Ring, Count };
 
 // Слот, в который надевается предмет; Slot::Count — предмет не надевается.
