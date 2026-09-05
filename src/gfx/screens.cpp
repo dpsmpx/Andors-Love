@@ -145,6 +145,34 @@ void App::hud_buttons(std::vector<Rect>* out) const {
            5, 6, out);
 }
 
+// Журнал занимает то, что осталось над картой. Место там всё равно
+// пустует, а видеть последние строки полезнее, чем чёрный фон.
+//
+// Раньше журнал был между картой и панелью, а карта — сверху. Теперь
+// наоборот: по карте тыкают, и она внизу, под большим пальцем, а журнал
+// читают — ему верх.
+void App::draw_log() {
+    const Rect lr = log_area();
+    const int ch = c_.cell_h();
+    if (lr.h <= ch) return;
+
+    const int lines = (lr.h - ch / 2) / ch;
+    if (lines < 1) return;
+    const std::size_t fit = static_cast<std::size_t>((lr.w - 12) / c_.cell_w());
+    const std::vector<std::string> tail = log_tail(g_.log(), fit, lines);
+
+    // Строки прижаты книзу, к самой карте. Пока журнал не заполнил отведённое,
+    // свежее сообщение всё равно оказывается рядом с картой, а не в другом
+    // конце экрана, и пустое место собирается сверху, где оно читается полем,
+    // а не дырой посреди.
+    int ly = lr.y + lr.h - static_cast<int>(tail.size()) * ch - ch / 2;
+    if (ly < lr.y) ly = lr.y;
+    for (const std::string& s : tail) {
+        c_.text(lr.x + 6, ly, s, theme().faint, c_.scale());
+        ly += ch;
+    }
+}
+
 void App::draw_hud() {
     const Theme& th = theme();
     const Rect hud = hud_area();
@@ -193,20 +221,6 @@ void App::draw_hud() {
         for (int i = 0; i < rows && i < static_cast<int>(ls.size()); ++i) {
             c_.text(6, y, ls[static_cast<std::size_t>(i)], th.faint, sc);
             y += ch;
-        }
-    }
-
-    // Журнал в промежутке между картой и панелью: место всё равно пустует,
-    // а видеть последние строки полезнее, чем чёрный фон.
-    const int gap_top = map_bottom();
-    const int gap_h = hud.y - gap_top;
-    if (gap_h > ch * 2) {
-        const int lines = (gap_h - ch / 2) / ch;
-        const std::size_t fit = static_cast<std::size_t>((c_.width() - 12) / c_.cell_w());
-        int ly = gap_top + ch / 2;
-        for (const std::string& s : log_tail(g_.log(), fit, lines)) {
-            c_.text(6, ly, s, th.faint, sc);
-            ly += ch;
         }
     }
 

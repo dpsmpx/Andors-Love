@@ -154,6 +154,7 @@ private:
     void combat_layout(std::vector<Rect>* top_row, std::vector<Rect>* bottom_row,
                        Rect* body) const;
     void hud_buttons(std::vector<Rect>* out) const;
+    void draw_log();
     void activate_row(Modal& m, int index);
     void save_game();
     void load_game();
@@ -164,9 +165,13 @@ private:
     // столько, сколько имеет смысл разглядывать с телефона в руке.
     int  map_scale() const;
     int  map_cell() const;
-    // Нижняя граница нарисованной карты: под ней остаётся место, и оно
-    // отдано журналу — иначе на телефоне полэкрана пустует.
-    int  map_bottom() const;
+    // Прямоугольник, который занимает сама карта. Считается один раз и здесь:
+    // отрисовка и попадание пальцем обязаны брать его из одного места, иначе
+    // тап уходит не в ту клетку, и понять это по картинке нельзя.
+    Rect map_block() const;
+    // Остаток области сверху отдан журналу: иначе на телефоне полэкрана
+    // пустует.
+    Rect log_area() const;
     Rect hud_area() const;
     // Клетка карты под точкой экрана; возвращает false, если мимо карты.
     bool cell_at(int x, int y, Vec2* out) const;

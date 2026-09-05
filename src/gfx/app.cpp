@@ -135,6 +135,7 @@ void App::draw() {
     if (mode_ == MODE_MENU)        draw_main_menu();
     else if (mode_ == MODE_CREATE) draw_create_hero();
     else {
+        draw_log();
         draw_world();
         draw_hud();
         if (g_.combat().active) draw_combat();
@@ -528,10 +529,22 @@ int App::map_scale() const {
 
 int App::map_cell() const { return FONT_H * map_scale(); }
 
-int App::map_bottom() const {
+Rect App::map_block() const {
+    const Rect area = map_area();
     int ox, oy, cols, rows;
     camera(&ox, &oy, &cols, &rows);
-    return map_area().y + rows * map_cell();
+    const int cw = map_cell(), chh = map_cell();
+    const int w = cols * cw, h = rows * chh;
+    // Карта прижата книзу, вплотную к панели. На телефоне в вертикальном
+    // режиме по ней и тыкают чаще всего, а большой палец достаёт снизу;
+    // журнал же читают, но не трогают, и ему место наверху.
+    return Rect(area.x + (area.w - w) / 2, area.y + area.h - h, w, h);
+}
+
+Rect App::log_area() const {
+    const Rect area = map_area();
+    const Rect blk = map_block();
+    return Rect(area.x, area.y, area.w, blk.y - area.y);
 }
 
 void App::camera(int* cx, int* cy, int* cols, int* rows) const {
@@ -553,22 +566,18 @@ void App::camera(int* cx, int* cy, int* cols, int* rows) const {
 }
 
 bool App::cell_at(int x, int y, Vec2* out) const {
-    const Rect area = map_area();
-    if (!area.contains(x, y)) return false;
+    const Rect blk = map_block();
+    if (!blk.contains(x, y)) return false;
     int ox, oy, cols, rows;
     camera(&ox, &oy, &cols, &rows);
-    const int cw = map_cell(), chh = map_cell();
-    const int left = area.x + (area.w - cols * cw) / 2;
-    const int top  = area.y;
-    const int gx = (x - left) / cw, gy = (y - top) / chh;
-    if (x < left || y < top || gx >= cols || gy >= rows) return false;
+    const int gx = (x - blk.x) / map_cell(), gy = (y - blk.y) / map_cell();
+    if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) return false;
     if (out) *out = Vec2(ox + gx, oy + gy);
     return true;
 }
 
 void App::draw_world() {
     const Location* loc = g_.here();
-    const Rect area = map_area();
     if (!loc) {
         c_.text(c_.cell_w(), c_.cell_h(), "Локация не загружена", theme().warn, c_.scale());
         return;
@@ -578,8 +587,9 @@ void App::draw_world() {
     camera(&ox, &oy, &cols, &rows);
     const int sc = map_scale();
     const int cw = map_cell(), chh = map_cell();
-    const int left = area.x + (area.w - cols * cw) / 2;
-    const int top  = area.y;
+    const Rect blk = map_block();
+    const int left = blk.x;
+    const int top  = blk.y;
     // Глиф уже клетки: центрируем, иначе знаки липнут к левому краю.
     const int gpad = (cw - FONT_W * sc) / 2;
 
