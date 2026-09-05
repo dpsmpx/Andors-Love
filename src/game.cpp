@@ -10,12 +10,16 @@ int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
 Game::Game(const std::string& data_root) : world_(data_root), log_epoch_(0) {}
 
-void Game::msg(const std::string& m) {
+void Game::msg(const std::string& m, MsgTone tone) {
     log_.push_back(m);
+    log_tone_.push_back(static_cast<unsigned char>(tone));
     if (log_.size() > LOG_MAX) {
         // Срезается сразу тысяча записей, а не одна на сообщение: иначе
-        // каждая новая строка двигала бы весь журнал целиком.
-        log_.erase(log_.begin(), log_.begin() + static_cast<std::ptrdiff_t>(LOG_TRIM));
+        // каждая новая строка двигала бы весь журнал целиком. Важности
+        // режутся тем же куском: разойдись длины — и красить начнёт не то.
+        const std::ptrdiff_t cut = static_cast<std::ptrdiff_t>(LOG_TRIM);
+        log_.erase(log_.begin(), log_.begin() + cut);
+        log_tone_.erase(log_tone_.begin(), log_tone_.begin() + cut);
         ++log_epoch_;
     }
 }
@@ -71,6 +75,7 @@ void Game::new_game(const std::string& name, const std::string& race,
     respawn_left_ = RESPAWN_TURNS;
     cb_ = Combat();
     log_.clear();
+    log_tone_.clear();
     ++log_epoch_;
     rng_.set_seed(0x5EEDC0DEULL);
 
@@ -258,18 +263,22 @@ int Game::exp_to_next() const {
 void Game::grant_exp(int amount) {
     if (amount <= 0) return;
     plr_.exp += amount;
-    msg("Получено " + to_str(amount) + " опыта.");
+    msg("Получено " + to_str(amount) + " опыта.", MsgTone::Good);
     while (plr_.exp >= exp_to_next()) {
         plr_.exp -= exp_to_next();
         ++plr_.level;
         ++plr_.skill_points;
-        plr_.base.max_hp += 4;
+        // Здоровье само не растёт. Уровень даёт балл навыка, а во что его
+        // вложить — в «Крепость» ради запаса здоровья или во что-то другое —
+        // решает игрок. Прежняя надбавка в +4 к здоровью это решение
+        // принимала за него и делала «Крепость» вдобавком к тому, что и так
+        // капало само.
         plr_.base.attack += 1;
         if (plr_.level % 3 == 0) plr_.base.max_ap += 1;
         Stats t = total();
         plr_.hp = t.max_hp;
         plr_.ap = t.max_ap;
-        msg("УРОВЕНЬ " + to_str(plr_.level) + "! Есть очко навыка (клавиша K).");
+        msg("УРОВЕНЬ " + to_str(plr_.level) + "! Есть очко навыка (клавиша K).", MsgTone::Loud);
     }
 }
 
@@ -278,10 +287,9 @@ bool Game::learn_skill(const std::string& id) {
     if (!s) return false;
     if (plr_.skill_points <= 0) { msg("Нет свободных очков навыка."); return false; }
     int& rank = plr_.skills[id];
-    if (rank >= s->max_rank) { msg("Навык уже развит до предела."); return false; }
     ++rank;
     --plr_.skill_points;
-    msg("Навык «" + s->name + "» повышен до " + to_str(rank) + ".");
+    msg("Навык «" + s->name + "» повышен до " + to_str(rank) + ".", MsgTone::Good);
     Stats t = total();
     if (plr_.hp > t.max_hp) plr_.hp = t.max_hp;
     if (plr_.ap > t.max_ap) plr_.ap = t.max_ap;
@@ -471,7 +479,7 @@ void Game::announce_dark() {
     // Сказать про темноту нужно каждый раз, а не только при первом входе:
     // игрок мог оставить факел на поверхности и вернуться уже без него.
     if (sight_radius() != SIGHT_DARK) return;
-    msg("Здесь темно. Без огня в руке видно только на шаг вокруг себя.");
+    msg("Здесь темно. Без огня в руке видно только на шаг вокруг себя.", MsgTone::Bad);
 }
 
 void Game::spawn_initial(const Location& loc) {
@@ -649,7 +657,7 @@ void Game::move_mobs() {
 
         if (np == plr_.pos) {                          // дошёл до игрока — бой
             if (e->aggressive) {
-                msg(e->name + " бросается на тебя!");
+                msg(e->name + " бросается на тебя!", MsgTone::Bad);
                 start_combat(m.uid);
                 return;                                // остальные ждут конца боя
             }
@@ -701,7 +709,7 @@ bool Game::start_book(const std::string& title) {
     b.title = trunc(title.empty() ? "Без названия" : title, BOOK_TITLE_MAX);
     b.lines.push_back("");
     plr_.books.push_back(b);
-    msg("Начата книга «" + b.title + "». Библиотека — клавиша B.");
+    msg("Начата книга «" + b.title + "». Библиотека — клавиша B.", MsgTone::Good);
     return true;
 }
 
@@ -777,7 +785,7 @@ bool Game::take_note(int index) {
 
     // Счётчик позволяет требовать находку в диалоге.
     plr_.counters["note_" + nd->id] = 1;
-    msg("Найдена записка: «" + nd->title + "». Читать — клавиша B.");
+    msg("Найдена записка: «" + nd->title + "». Читать — клавиша B.", MsgTone::Good);
     fire_event(TriggerKind::NoteTaken, nd->id);
     return true;
 }
@@ -801,17 +809,17 @@ bool Game::open_chest(int index) {
     }
 
     chests_.insert(loc->id + ":" + to_str(index));
-    msg("Сундук открыт.");
+    msg("Сундук открыт.", MsgTone::Good);
     if (ch.gold > 0) {
         plr_.gold += ch.gold;
         msg("В сундуке " + to_str(ch.gold) + " " +
-            plural(ch.gold, "монета", "монеты", "монет") + ".");
+            plural(ch.gold, "монета", "монеты", "монет") + ".", MsgTone::Good);
     }
     for (const ItemStack& st : ch.items) {
         add_item(st.id, st.count);
         const ItemDef* d = Content::get().item(st.id);
         msg("Взято: " + std::string(d ? d->name : st.id) +
-            (st.count > 1 ? " x" + to_str(st.count) : "") + ".");
+            (st.count > 1 ? " x" + to_str(st.count) : "") + ".", MsgTone::Good);
     }
     return true;
 }
@@ -875,7 +883,7 @@ void Game::world_turn() {
         if (plr_.hp > t.max_hp) plr_.hp = t.max_hp;
         if (plr_.hp < 0) plr_.hp = 0;
         if (plr_.hp != before && delta < 0)
-            msg("Эффекты отнимают " + to_str(before - plr_.hp) + " здоровья.");
+            msg("Эффекты отнимают " + to_str(before - plr_.hp) + " здоровья.", MsgTone::Bad);
     }
     for (Mob& m : mobs_) {
         if (m.loc != plr_.loc) continue;
@@ -898,7 +906,7 @@ void Game::rest() {
     plr_.hp = t.max_hp;
     plr_.ap = t.max_ap;
     plr_.momentum = 0;
-    msg("Ты отдыхаешь. Здоровье и силы восстановлены.");
+    msg("Ты отдыхаешь. Здоровье и силы восстановлены.", MsgTone::Good);
 }
 
 // ---------------------------------------------------------- перемещение
@@ -987,7 +995,7 @@ Bump Game::try_move(int dx, int dy) {
             add_item(mi.item_id, mi.count);
             const ItemDef* d = Content::get().item(mi.item_id);
             msg("Поднято: " + std::string(d ? d->name : mi.item_id) +
-                (mi.count > 1 ? " x" + to_str(mi.count) : "") + ".");
+                (mi.count > 1 ? " x" + to_str(mi.count) : "") + ".", MsgTone::Good);
             return Bump::Item;
         }
     }
@@ -1103,9 +1111,9 @@ void Game::apply_option(const DlgOption& o, const std::string& npc_shop,
         recheck_state_triggers();
         const QuestDef* q = c.quest(o.set_quest);
         const std::string qname = q ? q->name : o.set_quest;
-        if (o.set_stage == QUEST_DONE) msg("Квест завершён: «" + qname + "».");
-        else if (o.set_stage == 1)     msg("Взят квест: «" + qname + "».");
-        else                           msg("Квест «" + qname + "» продвинулся.");
+        if (o.set_stage == QUEST_DONE) msg("Квест завершён: «" + qname + "».", MsgTone::Loud);
+        else if (o.set_stage == 1)     msg("Взят квест: «" + qname + "».", MsgTone::Loud);
+        else                           msg("Квест «" + qname + "» продвинулся.", MsgTone::Loud);
     }
     if (!o.set_counter.empty()) plr_.counters[o.set_counter] = o.set_counter_value;
     // Забираем до выдачи, чтобы обмен «предмет за предмет» не упирался в порядок.
@@ -1120,16 +1128,16 @@ void Game::apply_option(const DlgOption& o, const std::string& npc_shop,
         add_item(o.give_item, o.give_count);
         const ItemDef* d = c.item(o.give_item);
         msg("Получено: " + std::string(d ? d->name : o.give_item) +
-            (o.give_count > 1 ? " x" + to_str(o.give_count) : "") + ".");
+            (o.give_count > 1 ? " x" + to_str(o.give_count) : "") + ".", MsgTone::Good);
     }
     if (o.give_gold > 0) {
         plr_.gold += o.give_gold;
-        msg("Получено " + to_str(o.give_gold) + " золотых.");
+        msg("Получено " + to_str(o.give_gold) + " золотых.", MsgTone::Good);
     }
     if (o.rest) rest();
     if (o.portal_gift && !plr_.portal_master) {
         plr_.portal_master = true;
-        msg("Открыт навык «Мастер нулевой точки»: теперь ты умеешь ставить порталы (P).");
+        msg("Открыт навык «Мастер нулевой точки»: теперь ты умеешь ставить порталы (P).", MsgTone::Loud);
     }
     if (o.give_exp > 0) grant_exp(o.give_exp);
     if (o.open_shop && shop_out) *shop_out = o.shop_id.empty() ? npc_shop : o.shop_id;
@@ -1167,13 +1175,23 @@ bool Game::buy(const ShopDef& s, const std::string& item_id) {
     return true;
 }
 
-bool Game::sell(const ShopDef& s, const std::string& item_id) {
+bool Game::sell(const ShopDef& s, const std::string& item_id, int count) {
     const ItemDef* d = Content::get().item(item_id);
     if (!d) return false;
-    if (!remove_item(item_id, 1)) return false;
-    int p = sell_price(s, *d);
-    plr_.gold += p;
-    msg("Продано: " + d->name + " за " + to_str(p) + ".");
+    // Сколько просят — столько и продаём, но не больше, чем есть, и не
+    // меньше одной штуки. Обрезание живёт здесь, а не в окне: продать
+    // двадцать хвостов, имея три, нельзя никаким путём — ни пальцем,
+    // ни с клавиатуры, ни из терминальной оболочки.
+    const int have = count_item(item_id);
+    if (have <= 0) return false;
+    if (count < 1) count = 1;
+    if (count > have) count = have;
+    if (!remove_item(item_id, count)) return false;
+    const int one = sell_price(s, *d);
+    const int total = one * count;
+    plr_.gold += total;
+    if (count == 1) msg("Продано: " + d->name + " за " + to_str(total) + ".");
+    else msg("Продано: " + d->name + " x" + to_str(count) + " за " + to_str(total) + ".");
     return true;
 }
 
@@ -1326,7 +1344,7 @@ bool Game::combat_flee() {
     int chance = (plr_.stance == Stance::Cautious) ? 70 : 55;
     if (rng_.chance(chance)) {
         combat_log("Ты разрываешь дистанцию.");
-        msg("Ты сбежал из боя.");
+        msg("Ты сбежал из боя.", MsgTone::Bad);
         cb_.active = false;
         cb_.mob_uid = -1;
         plr_.momentum = 0;
@@ -1406,18 +1424,18 @@ void Game::kill_mob(Mob& m) {
 
     const std::string beaten = e->female ? " повержена" : " повержен";
     combat_log(e->name + beaten + "!");
-    msg(e->name + beaten + ".");
+    msg(e->name + beaten + ".", MsgTone::Good);
 
     if (m.gold > 0) {
         plr_.gold += m.gold;
         msg("Найдено " + to_str(m.gold) + " " +
-            plural(m.gold, "монета", "монеты", "монет") + ".");
+            plural(m.gold, "монета", "монеты", "монет") + ".", MsgTone::Good);
     }
     for (const ItemStack& st : m.inv) {
         add_item(st.id, st.count);
         const ItemDef* def = Content::get().item(st.id);
         msg("Добыча: " + std::string(def ? def->name : st.id) +
-            (st.count > 1 ? " x" + to_str(st.count) : "") + ".");
+            (st.count > 1 ? " x" + to_str(st.count) : "") + ".", MsgTone::Good);
     }
     if (!e->kill_counter.empty()) {
         ++plr_.counters[e->kill_counter];

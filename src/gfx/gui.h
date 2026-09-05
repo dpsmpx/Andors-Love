@@ -105,6 +105,11 @@ int text_block_rows(const Canvas& c, const Rect& r, const std::string& s);
 int text_lines(Canvas& c, const Rect& r, const std::vector<std::string>& lines,
                Color col, int scroll_rows);
 
+// То же, но каждая строка своего цвета: длина colors совпадает с lines. Нужно
+// журналу, где важное выделено, а обычное приглушено.
+int text_lines(Canvas& c, const Rect& r, const std::vector<std::string>& lines,
+               const std::vector<Color>& colors, int scroll_rows);
+
 // Полоса прокрутки у правого края области. Без неё непонятно, что содержимое
 // длиннее окна и в каком месте ты сейчас находишься.
 void scrollbar(Canvas& c, const Rect& r, int total, int visible, int scroll);

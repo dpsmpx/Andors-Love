@@ -233,8 +233,10 @@ std::string reflow(const std::string& text) {
 }
 
 std::vector<std::string> log_tail(const std::vector<std::string>& lines,
-                                  std::size_t width, int rows) {
+                                  std::size_t width, int rows,
+                                  std::vector<std::size_t>* src) {
     std::vector<std::string> out;
+    if (src) src->clear();
     if (rows <= 0) return out;
 
     // Идём с конца: разворачивать весь журнал ради нескольких последних
@@ -243,11 +245,13 @@ std::vector<std::string> log_tail(const std::vector<std::string>& lines,
         const std::vector<std::string> part = wrap(lines[k], width);
         for (std::size_t i = part.size(); i-- > 0; ) {
             out.push_back(part[i]);
+            if (src) src->push_back(k);
             if (static_cast<int>(out.size()) >= rows) break;
         }
         if (static_cast<int>(out.size()) >= rows) break;
     }
     std::reverse(out.begin(), out.end());
+    if (src) std::reverse(src->begin(), src->end());
     return out;
 }
 

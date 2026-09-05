@@ -233,8 +233,12 @@ int text_block(Canvas& c, const Rect& r, const std::string& s, Color col,
     return text_lines(c, r, lay_out(c, r, s), col, scroll_rows);
 }
 
-int text_lines(Canvas& c, const Rect& r, const std::vector<std::string>& lines,
-               Color col, int scroll_rows) {
+namespace {
+
+// Общая работа обоих text_lines: что именно рисовать и куда. Цвет берётся
+// у вызывающего — этим варианты и различаются, и только этим.
+int lines_impl(Canvas& c, const Rect& r, const std::vector<std::string>& lines,
+               Color col, const std::vector<Color>* colors, int scroll_rows) {
     const int ch = c.cell_h();
     const int vis = ch > 0 ? r.h / ch : 0;
 
@@ -243,11 +247,25 @@ int text_lines(Canvas& c, const Rect& r, const std::vector<std::string>& lines,
     for (int k = 0; k < vis; ++k) {
         const int i = scroll_rows + k;
         if (i < 0 || i >= static_cast<int>(lines.size())) break;
-        c.text(r.x, r.y + k * ch, lines[static_cast<std::size_t>(i)], col, c.scale());
+        const std::size_t u = static_cast<std::size_t>(i);
+        const Color use = (colors && u < colors->size()) ? (*colors)[u] : col;
+        c.text(r.x, r.y + k * ch, lines[u], use, c.scale());
         ++drawn;
     }
     c.clip_off();
     return drawn;
+}
+
+} // namespace
+
+int text_lines(Canvas& c, const Rect& r, const std::vector<std::string>& lines,
+               Color col, int scroll_rows) {
+    return lines_impl(c, r, lines, col, 0, scroll_rows);
+}
+
+int text_lines(Canvas& c, const Rect& r, const std::vector<std::string>& lines,
+               const std::vector<Color>& colors, int scroll_rows) {
+    return lines_impl(c, r, lines, Color(), &colors, scroll_rows);
 }
 
 } // namespace gfx

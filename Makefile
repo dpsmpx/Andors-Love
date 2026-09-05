@@ -99,7 +99,7 @@ else
   SDL_EXPORT ?= -rdynamic
 endif
 
-.PHONY: all gui gui-so run debug test embed font clean
+.PHONY: all gui gui-so run debug test check-maps embed font clean
 
 all: $(BIN)
 
@@ -164,10 +164,16 @@ debug: CXXFLAGS := -g -O0 $(WARN) -fsanitize=address,undefined
 debug: LDFLAGS  := -fsanitize=address,undefined
 debug: clean $(BIN)
 
+# Проверка карт. Файлы data/maps/*.map первичны и правятся руками, поэтому
+# ошибку в них ловит не сборка, а этот скрипт: он ничего не пишет.
+check-maps:
+	@python3 tools/check_maps.py
+
 # Карты вшиты в src/embedded_maps.cpp, чтобы игра работала без внешних файлов
 # (сборка APK, копирование одним бинарником). Файл лежит в репозитории —
-# эта цель нужна только после правки карт и требует python3.
-embed:
+# эта цель нужна только после правки карт и требует python3. Проверка идёт
+# первой: вшить сломанную карту молча — худшее, что тут может случиться.
+embed: check-maps
 	@python3 tools/embed_maps.py
 
 # Растровый шрифт вшит в src/gfx/font_data.cpp и лежит в репозитории —

@@ -80,6 +80,17 @@ struct Combat {
 constexpr int MOMENTUM_MAX  = 5;
 constexpr int MOMENTUM_COST = 3;      // цена мощного удара
 
+// Насколько событие заметное. Журнал красит по этому строки: за долгий бой
+// лента набирает три десятка строк, и «УРОВЕНЬ 8!» среди них тонет, если всё
+// написано одним цветом. Тонов нарочно мало — четыре различимы с одного
+// взгляда, а десяток превратился бы в вторую азбуку, которую надо помнить.
+enum class MsgTone {
+    Plain,   // обычный ход дела
+    Good,    // добыча, награда, покупка, исцеление
+    Bad,     // урон, потеря, отказ, опасность
+    Loud     // веха: уровень, квест, развязка, гибель
+};
+
 // Журнал листается до начала партии, поэтому хранится целиком. Предел нужен
 // не для экономии, а чтобы очень долгая игра не съедала память без счёта:
 // полное прохождение со всеми пятьюдесятью четырьмя квестами набирает около
@@ -245,7 +256,9 @@ public:
     int   buy_price(const ShopDef& s, const ItemDef& d) const;
     int   sell_price(const ShopDef& s, const ItemDef& d) const;
     bool  buy(const ShopDef& s, const std::string& item_id);
-    bool  sell(const ShopDef& s, const std::string& item_id);
+    // count обрезается до [1, сколько есть] внутри: окно продажи и любой
+    // другой вызывающий не могут разойтись в том, что считают допустимым.
+    bool  sell(const ShopDef& s, const std::string& item_id, int count = 1);
 
     // --- бой ---
     void  start_combat(int mob_uid);
@@ -257,9 +270,14 @@ public:
     bool  player_dead() const { return plr_.hp <= 0; }
 
     // --- сообщения ---
-    void  msg(const std::string& m);
+    // Важность указывается на месте события: только там и известно, веха это
+    // или обычный ход дела. Угадывать её потом по тексту значило бы разбирать
+    // русские фразы на глаз и ошибаться на каждой новой формулировке.
+    void  msg(const std::string& m, MsgTone tone = MsgTone::Plain);
     const std::vector<std::string>& log() const { return log_; }
-    void  clear_log() { log_.clear(); ++log_epoch_; }
+    // Важности идут строка в строку с журналом: длины совпадают всегда.
+    const std::vector<unsigned char>& log_tones() const { return log_tone_; }
+    void  clear_log() { log_.clear(); log_tone_.clear(); ++log_epoch_; }
     // Счётчик срезаний начала журнала. По одной длине кэш переноса строк
     // отличить срезание не может: журнал успевает дорасти до прежней длины
     // другими записями. Счётчик отличает его точно и стоит одно сравнение.
@@ -303,6 +321,7 @@ private:
     std::set<std::string>    notes_;      // "локация:индекс" подобранных записок
     std::set<std::string>    visited_;    // локации, где уже расставлены мобы
     std::vector<std::string> log_;
+    std::vector<unsigned char> log_tone_;
     unsigned long log_epoch_;
     mutable std::string      err_;
 

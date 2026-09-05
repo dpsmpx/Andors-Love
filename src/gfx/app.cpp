@@ -60,13 +60,22 @@ const std::vector<std::string>& App::log_lines(int cols) const {
     // только дописывается, и трогать разложенное незачем.
     if (log_lines_w_ != cols || log_lines_ep_ != ep || log_lines_src_ > lg.size()) {
         log_lines_.clear();
+        log_tones_.clear();
         log_lines_src_ = 0;
         log_lines_w_ = cols;
         log_lines_ep_ = ep;
     }
+    const std::vector<unsigned char>& tones = g_.log_tones();
     for (std::size_t i = log_lines_src_; i < lg.size(); ++i) {
         const std::vector<std::string> part = wrap(lg[i], static_cast<std::size_t>(cols));
-        for (std::size_t k = 0; k < part.size(); ++k) log_lines_.push_back(part[k]);
+        // Важность запоминается вместе со строками: у длинной записи обе
+        // половины одного цвета, а искать её потом по номеру было бы нечем —
+        // после переноса связь строки с записью теряется.
+        const unsigned char t = i < tones.size() ? tones[i] : 0;
+        for (std::size_t k = 0; k < part.size(); ++k) {
+            log_lines_.push_back(part[k]);
+            log_tones_.push_back(t);
+        }
     }
     log_lines_src_ = lg.size();
     return log_lines_;
@@ -121,10 +130,15 @@ int App::run(int argc, char** argv) {
 void App::step(unsigned now_ms) {
     now_ms_ = now_ms;
 
+    // Часы распознавателя идут до разбора очереди: удержание должно попасть
+    // в ту же порцию событий, что и всё остальное этого кадра.
+    ptr_.tick(now_ms_);
+
     Gesture gs;
     while (ptr_.poll(&gs)) {
         if (gs.kind == G_TAP) on_tap(gs.x, gs.y, gs.press);
         else if (gs.kind == G_SWIPE) on_swipe(gs.dx, gs.dy);
+        else if (gs.kind == G_LONG) on_long(gs.x, gs.y, gs.press);
     }
 
     // Палец на карте — герой идёт к нему. Это состояние, а не событие:
@@ -276,6 +290,14 @@ void App::on_tap(int x, int y, unsigned press) {
     world_tap(x, y);
 }
 
+// Удержание — второе действие над строкой списка. В мире его нет: там палец
+// на месте и так значит «иди сюда», и всплывать поверх ходьбы нечему.
+void App::on_long(int x, int y, unsigned press) {
+    Modal* m = top();
+    if (!m || m->born_press == press) return;
+    modal_long(*m, x, y);
+}
+
 void App::scroll_modal(Modal& m, int rows) {
     // Текстовые окна листаются своим счётчиком строк, списки — своим.
     // Крутить оба сразу — путаница: видно одно, а едет другое.
@@ -293,6 +315,14 @@ void App::on_text(const char* utf8) {
     if (Modal* m = top()) {
         if (m->kind == Modal::TextInput && utf8_len(m->buffer) < m->max_len)
             m->buffer += utf8;
+        // В окне количества набирается число, поэтому буквы туда не попадают
+        // вовсе: проверять ввод после того, как он уже набран, значит спорить
+        // с игроком о том, что он только что видел на экране.
+        if (m->kind == Modal::Amount) {
+            for (const char* p = utf8; *p; ++p)
+                if (*p >= '0' && *p <= '9' && m->buffer.size() < 9) m->buffer += *p;
+            amount_from_text(*m);
+        }
         return;
     }
     if (mode_ == MODE_CREATE && create_step_ == 0 && utf8_len(new_name_) < 16)
@@ -309,6 +339,14 @@ bool App::reachable_cell(const Location& loc, Vec2 cell) {
 }
 
 void App::follow_finger() {
+    // Ползунок количества ведут пальцем так же, как цель на карте: это тоже
+    // состояние пальца, а не событие. Опрашивается тем же кадром и тем же
+    // способом, иначе ползунок дёргался бы по щелчкам вместо того, чтобы
+    // ехать за пальцем.
+    if (Modal* m = top()) {
+        if (m->kind == Modal::Amount && ptr_.pressed()) drag_amount(*m);
+        return;
+    }
     if (mode_ != MODE_PLAY || modal_open() || g_.combat().active) return;
     if (!ptr_.pressed()) return;
 
@@ -380,7 +418,19 @@ void App::on_key(int key) {
                 return;
             }
             if (key == '\r') { commit_text_input(*m); return; }
-            if (key == platform::KEY_ESC) { SDL_StopTextInput(); pop(); return; }
+            if (key == platform::KEY_ESC) { pop(); return; }   // клавиатуру гасит pop
+            return;
+        }
+        if (m->kind == Modal::Amount) {
+            if (key == 8) {
+                if (!m->buffer.empty()) m->buffer.erase(m->buffer.size() - 1);
+                amount_from_text(*m);
+                return;
+            }
+            if (key == '\r') { commit_amount(*m); return; }
+            if (key == platform::KEY_ESC) { pop(); return; }
+            if (key == platform::KEY_UP)   { ++m->amount; clamp_amount(*m); m->buffer = to_str(m->amount); return; }
+            if (key == platform::KEY_DOWN) { --m->amount; clamp_amount(*m); m->buffer = to_str(m->amount); return; }
             return;
         }
         const int n = 1 << 20;

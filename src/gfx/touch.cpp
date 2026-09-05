@@ -5,11 +5,28 @@
 namespace gfx {
 
 Pointer::Pointer()
-    : swipe_px_(24), lead_(-1), press_x_(0), press_y_(0), press_ms_(0),
-      press_serial_(0) {}
+    : swipe_px_(24), long_ms_(500), lead_(-1), press_x_(0), press_y_(0),
+      press_ms_(0), press_serial_(0) {}
 
-void Pointer::configure(int swipe_px) {
+void Pointer::configure(int swipe_px, unsigned long_ms) {
     if (swipe_px > 0) swipe_px_ = swipe_px;
+    if (long_ms > 0) long_ms_ = long_ms;
+}
+
+void Pointer::tick(unsigned now_ms) {
+    for (int i = 0; i < MAX_TOUCHES; ++i) {
+        Touch& t = touches_[i];
+        // Уехавший палец удержанием уже не станет: это была прокрутка или
+        // ведение цели, и всплывать над ними ничего не должно.
+        if (!t.active || t.swiped || t.longed) continue;
+        if (now_ms < t.down_ms || now_ms - t.down_ms < long_ms_) continue;
+        t.longed = true;
+        Gesture g;
+        g.kind = G_LONG;
+        g.x = t.cur_x; g.y = t.cur_y;
+        g.press = t.serial;
+        push(g);
+    }
 }
 
 Pointer::Touch* Pointer::find(int id) {
@@ -42,6 +59,7 @@ void Pointer::down(int id, int x, int y, unsigned now_ms) {
         t.down_ms = now_ms;
         t.serial = ++press_serial_;
         t.swiped = false;
+        t.longed = false;
 
         if (lead_ < 0) {
             lead_ = id;
@@ -89,9 +107,10 @@ void Pointer::up(int id, int x, int y, unsigned now_ms) {
     Touch* t = find(id);
     if (!t) return;
 
-    // Тап — только если палец не уезжал: иначе это была прокрутка или ведение
-    // цели, и подтверждать им ничего не надо.
-    if (!t->swiped) {
+    // Тап — только если палец не уезжал и не сработал как удержание: иначе
+    // это была прокрутка, ведение цели или уже случившееся второе действие,
+    // и подтверждать им ничего не надо. Одно касание — одно действие.
+    if (!t->swiped && !t->longed) {
         Gesture g;
         g.kind = G_TAP;
         g.x = x; g.y = y;
