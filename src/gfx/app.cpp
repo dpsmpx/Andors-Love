@@ -15,6 +15,21 @@ namespace gfx {
 
 namespace {
 
+// Имена тайлов существ: по картинке на жителя и на врага. Список берётся из
+// содержимого игры, поэтому новый житель или враг получает свой тайл сам
+// собой — второго списка, который пришлось бы держать в согласии, нет.
+std::vector<std::string> creature_tile_names() {
+    const Content& c = Content::get();
+    std::vector<std::string> names;
+    for (std::map<std::string, NpcDef>::const_iterator it = c.npcs().begin();
+         it != c.npcs().end(); ++it)
+        names.push_back(creature_tile_name("npc", it->first));
+    for (std::map<std::string, EnemyDef>::const_iterator it = c.enemies().begin();
+         it != c.enemies().end(); ++it)
+        names.push_back(creature_tile_name("mob", it->first));
+    return names;
+}
+
 // Вид по умолчанию — тот, которым карта рисуется без листа тайлов. Цвета и
 // знаки для него лежат в tiles.cpp: оттуда их берёт и эта отрисовка, и
 // экспорт листа. Две копии рано или поздно разошлись бы, и в файле оказалось
@@ -52,7 +67,8 @@ bool App::start(int argc, char** argv, int win_w, int win_h) {
     // художник правил бы картинку и гадал, почему ничего не меняется.
     tiles_path_ = paths::tiles_dir(argv0);
     std::string terr;
-    tiles_.load(c_.renderer(), tiles_path_, tiles_path_ + "/tiles.png", &terr);
+    tiles_.load(c_.renderer(), tiles_path_, tiles_path_ + "/tiles.png",
+                creature_tile_names(), &terr);
     // Пустой каталог молчит: графика необязательна. А вот файл, который есть,
     // но не читается, надо назвать — иначе художник правит картинку и гадает,
     // почему в игре ничего не меняется.
@@ -586,7 +602,9 @@ void App::draw_world() {
     }
 
     // Объекты поверх местности, в том же порядке, что и в терминале.
-    struct Obj { Vec2 p; unsigned cp; };
+    // art — имя собственного тайла существа, если он у него есть. У прочих
+    // объектов пусто: им хватает слота своего вида.
+    struct Obj { Vec2 p; unsigned cp; std::string art; };
     std::vector<Obj> objs;
     for (std::size_t i = 0; i < loc->items.size(); ++i)
         if (!g_.item_taken(loc->id, static_cast<int>(i)))
@@ -602,15 +620,27 @@ void App::draw_world() {
     for (const Vec2& b : loc->beds)    { Obj o; o.p = b;     o.cp = glyph::BED;  objs.push_back(o); }
     for (const Portal& pt : g_.player().portals)
         if (pt.loc == loc->id) { Obj o; o.p = pt.pos; o.cp = glyph::PORTAL; objs.push_back(o); }
-    for (const MapNpc& n : loc->npcs)   { Obj o; o.p = n.pos; o.cp = glyph::NPC;  objs.push_back(o); }
+    for (const MapNpc& n : loc->npcs) {
+        Obj o; o.p = n.pos; o.cp = glyph::NPC;
+        o.art = creature_tile_name("npc", n.npc_id);
+        objs.push_back(o);
+    }
     for (const Mob& m : g_.mobs())
-        if (m.loc == loc->id) { Obj o; o.p = m.pos; o.cp = glyph::MOB; objs.push_back(o); }
+        if (m.loc == loc->id) {
+            Obj o; o.p = m.pos; o.cp = glyph::MOB;
+            o.art = creature_tile_name("mob", m.enemy_id);
+            objs.push_back(o);
+        }
 
     for (const Obj& o : objs) {
         const int gx = o.p.x - ox, gy = o.p.y - oy;
         if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) continue;
         if (!g_.cell_lit(o.p)) continue;
         const Rect cell(left + gx * cw, top + gy * chh, cw, chh);
+        // Свой тайл существа важнее общего: нарисованный житель выглядит
+        // собой, а ненарисованный — как все жители, и только потом уже
+        // знаком шрифта. Три ступени, и каждая работает сама по себе.
+        if (!o.art.empty() && tiles_.draw_named(c_.renderer(), o.art, cell)) continue;
         if (tiles_.draw(c_.renderer(), slot_of_glyph(o.cp), cell)) continue;
         c_.glyph_at(cell.x + gpad, cell.y, o.cp, object_color(o.cp), sc);
     }

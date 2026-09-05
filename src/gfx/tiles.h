@@ -87,6 +87,25 @@ int load_slot_files(const std::string& dir, std::vector<Image>* tiles, std::stri
 // Пишет вид по умолчанию по картинке на слот. Каталог создаётся.
 bool save_slot_files(const std::string& dir, int size, std::string* err);
 
+// --- именованные тайлы ---
+//
+// Кроме семнадцати слотов игра умеет рисовать существо его собственной
+// картинкой: npc_elder.png, mob_rat.png. Имя строится из вида и id существа,
+// а не из номера слота: слотов всего 64, а жителей и врагов больше, и
+// раскладку листа ради них ломать незачем.
+//
+// Ненайденный файл — не ошибка и здесь: существо рисуется общим тайлом
+// жителя или врага, а если и того нет — знаком шрифта, как раньше. Поэтому
+// своих можно рисовать по одному, в любом порядке.
+
+// Имя тайла существа: creature_tile_name("npc", "elder") -> "npc_elder".
+std::string creature_tile_name(const std::string& kind, const std::string& id);
+
+// Читает <dir>/<имя>.png для каждого имени. Длина out совпадает с names,
+// порядок тоже; отсутствие файла оставляет в out пустую картинку.
+int load_named_files(const std::string& dir, const std::vector<std::string>& names,
+                     std::vector<Image>* out, std::string* err);
+
 // --- вид по умолчанию ---
 //
 // Те же цвета и знаки, которыми карта рисуется без листа тайлов. Отсюда их

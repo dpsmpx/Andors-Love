@@ -263,6 +263,11 @@ public:
     // на всех тёмных локациях разом.
     bool location_dark(const std::string& loc_id) const;
 
+    // Перечисление всех жителей и врагов. Нужно графике: по картинке на
+    // существо, и список берётся отсюда, чтобы новый житель получал свой
+    // тайл сам собой, без второго списка где-то ещё.
+    const std::map<std::string, NpcDef>&   npcs()    const { return npcs_; }
+    const std::map<std::string, EnemyDef>& enemies() const { return enemies_; }
     const std::vector<SkillDef>&   skills()   const { return skills_; }
     const std::vector<QuestDef>&   quests()   const { return quests_; }
     const std::vector<RaceDef>&    races()    const { return races_; }
