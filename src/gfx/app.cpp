@@ -41,9 +41,36 @@ Color object_color(unsigned cp) { return rgba_to_color(default_object_color(cp))
 } // namespace
 
 App::App()
-    : mode_(MODE_MENU), quit_(false), has_save_(false),
+    : log_lines_src_(0), log_lines_w_(0), log_lines_ep_(0),
+      mode_(MODE_MENU), quit_(false), has_save_(false),
       create_step_(0), new_race_("human"), new_spec_("swordsman"),
       now_ms_(0), died_(false) {}
+
+const std::vector<std::string>& App::log_lines(int cols) const {
+    const std::vector<std::string>& lg = g_.log();
+    const unsigned long ep = g_.log_epoch();
+    if (cols < 4) cols = 4;
+    if (log_lines_w_ == cols && log_lines_ep_ == ep && log_lines_src_ == lg.size())
+        return log_lines_;
+
+    // Ширина сменилась, или у журнала срезали начало (предел записей, новая
+    // партия, загрузка) — раскладывать заново. Одной длины для этого мало:
+    // после срезания журнал дорастает до прежней длины другими записями,
+    // поэтому спрашивается счётчик срезаний. В обычном же случае журнал
+    // только дописывается, и трогать разложенное незачем.
+    if (log_lines_w_ != cols || log_lines_ep_ != ep || log_lines_src_ > lg.size()) {
+        log_lines_.clear();
+        log_lines_src_ = 0;
+        log_lines_w_ = cols;
+        log_lines_ep_ = ep;
+    }
+    for (std::size_t i = log_lines_src_; i < lg.size(); ++i) {
+        const std::vector<std::string> part = wrap(lg[i], static_cast<std::size_t>(cols));
+        for (std::size_t k = 0; k < part.size(); ++k) log_lines_.push_back(part[k]);
+    }
+    log_lines_src_ = lg.size();
+    return log_lines_;
+}
 
 // ------------------------------------------------------------------- запуск
 
@@ -252,8 +279,7 @@ void App::on_tap(int x, int y, unsigned press) {
 void App::scroll_modal(Modal& m, int rows) {
     // Текстовые окна листаются своим счётчиком строк, списки — своим.
     // Крутить оба сразу — путаница: видно одно, а едет другое.
-    if (m.kind == Modal::Message || m.kind == Modal::Help ||
-        m.kind == Modal::Character || m.kind == Modal::Book || m.kind == Modal::Ending) {
+    if (is_text_modal(m.kind)) {
         m.scroll += rows;
         if (m.scroll < 0) m.scroll = 0;
         return;
@@ -328,13 +354,13 @@ void App::world_tap(int x, int y) {
     const Location* loc = g_.here();
     if (!loc) return;
 
-    // Тап по себе или в стену — меню, но только если герой стоит. На ходу
-    // то же касание просто останавливает его: меню, выскочившее посреди
-    // дороги от промаха по стене, — последнее, что нужно бегущему.
+    // Тап по себе или в стену только останавливает ход. Меню открывается
+    // кнопкой внизу окна — она всегда на месте, а окно, выскакивающее от
+    // промаха по стене, мешало: целишься в проход, попадаешь в угол дома,
+    // и вместо шага получаешь меню.
     const bool on_self = (cell.x == g_.player().pos.x && cell.y == g_.player().pos.y);
     if (on_self || !reachable_cell(*loc, cell)) {
-        if (walk_.active()) { walk_.stop(); return; }
-        push(Modal::GameMenu);
+        walk_.stop();
         return;
     }
     // По остальному тап задаёт цель и отпускает: короткое касание отправляет
@@ -432,9 +458,9 @@ void App::on_key(int key) {
         case 'i': case 'I': push(Modal::Inventory);  return;
         case 'q': case 'Q': push(Modal::Quests);     return;
         case 'k': case 'K': push(Modal::Skills);     return;
-        case 'f': case 'F': push(Modal::Effects);    return;
         case 'p': case 'P': push(Modal::Portals);    return;
         case 'b': case 'B': push(Modal::Library);    return;
+        case 'l': case 'L': push(Modal::Log);        return;
         case '?':           push(Modal::Help);       return;
         case 'm': case 'M':
         case platform::KEY_ESC: push(Modal::GameMenu); return;

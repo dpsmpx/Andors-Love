@@ -196,17 +196,20 @@ void ListView::draw(Canvas& c, const Rect& r, const std::vector<Row>& rows) cons
     }
     c.clip_off();
 
-    // Полоса прокрутки: без неё непонятно, что список длиннее экрана.
-    if (n > vis && vis > 0) {
-        const int track_h = r.h;
-        int bar_h = track_h * vis / n;
-        if (bar_h < c.cell_h()) bar_h = c.cell_h();
-        const int max_scroll = n - vis;
-        const int off = max_scroll > 0 ? (track_h - bar_h) * scroll / max_scroll : 0;
-        const int bw = c.cell_w() / 2 + 2;
-        c.fill(Rect(r.x + r.w - bw, r.y, bw, track_h), Color(0, 0, 0, 90));
-        c.fill(Rect(r.x + r.w - bw, r.y + off, bw, bar_h), th.border);
-    }
+    scrollbar(c, r, n, vis, scroll);
+}
+
+void scrollbar(Canvas& c, const Rect& r, int total, int visible, int scroll) {
+    if (total <= visible || visible <= 0) return;
+    const Theme& th = theme();
+    const int track_h = r.h;
+    int bar_h = track_h * visible / total;
+    if (bar_h < c.cell_h()) bar_h = c.cell_h();
+    const int max_scroll = total - visible;
+    const int off = max_scroll > 0 ? (track_h - bar_h) * scroll / max_scroll : 0;
+    const int bw = c.cell_w() / 2 + 2;
+    c.fill(Rect(r.x + r.w - bw, r.y, bw, track_h), Color(0, 0, 0, 90));
+    c.fill(Rect(r.x + r.w - bw, r.y + off, bw, bar_h), th.border);
 }
 
 // ------------------------------------------------------------------- текст
@@ -227,7 +230,11 @@ int text_block_rows(const Canvas& c, const Rect& r, const std::string& s) {
 
 int text_block(Canvas& c, const Rect& r, const std::string& s, Color col,
                int scroll_rows) {
-    const std::vector<std::string> lines = lay_out(c, r, s);
+    return text_lines(c, r, lay_out(c, r, s), col, scroll_rows);
+}
+
+int text_lines(Canvas& c, const Rect& r, const std::vector<std::string>& lines,
+               Color col, int scroll_rows) {
     const int ch = c.cell_h();
     const int vis = ch > 0 ? r.h / ch : 0;
 

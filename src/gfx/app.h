@@ -19,14 +19,13 @@ namespace gfx {
 // ряд кнопок», поэтому это одна структура с меткой, а не иерархия классов.
 struct Modal {
     enum Kind {
-        GameMenu,     // меню по тапу в пустоту
-        Pause,        // сохранить / загрузить / выйти
+        GameMenu,     // меню по кнопке внизу окна
+        Log,          // весь журнал партии, листается до начала
         Character,
         Inventory,
         ItemMenu,     // что сделать с выбранной вещью
         Quests,
         Skills,
-        Effects,
         Portals,
         Library,
         Book,
@@ -60,6 +59,10 @@ struct Modal {
     Modal() : kind(GameMenu), born_press(0), scroll(0), selling(false), index(-1), max_len(0) {}
     explicit Modal(Kind k) : kind(k), born_press(0), scroll(0), selling(false), index(-1), max_len(0) {}
 };
+
+// Текстовые окна — это абзац, а не список: у них своя прокрутка и одна
+// кнопка. Список видов один на всю оболочку (см. modals.cpp).
+bool is_text_modal(Modal::Kind k);
 
 class App {
 public:
@@ -155,6 +158,11 @@ private:
                        Rect* body) const;
     void hud_buttons(std::vector<Rect>* out) const;
     void draw_log();
+    // Журнал, уже разложенный по ширине окна. За партию его набирается под
+    // тысячу записей, и переносить их заново на каждом кадре — работа
+    // на пустом месте. Журнал только дописывается, поэтому при неизменной
+    // ширине раскладываются лишь новые записи, а не весь список.
+    const std::vector<std::string>& log_lines(int cols) const;
     void activate_row(Modal& m, int index);
     void save_game();
     void load_game();
@@ -176,6 +184,11 @@ private:
     // Клетка карты под точкой экрана; возвращает false, если мимо карты.
     bool cell_at(int x, int y, Vec2* out) const;
     void camera(int* cx, int* cy, int* cols, int* rows) const;
+
+    mutable std::vector<std::string> log_lines_;
+    mutable std::size_t              log_lines_src_;
+    mutable int                      log_lines_w_;
+    mutable unsigned long            log_lines_ep_;
 
     Canvas   c_;
     Pointer  ptr_;

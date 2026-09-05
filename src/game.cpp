@@ -8,11 +8,16 @@ int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
 } // namespace
 
-Game::Game(const std::string& data_root) : world_(data_root) {}
+Game::Game(const std::string& data_root) : world_(data_root), log_epoch_(0) {}
 
 void Game::msg(const std::string& m) {
     log_.push_back(m);
-    if (log_.size() > 200) log_.erase(log_.begin());
+    if (log_.size() > LOG_MAX) {
+        // Срезается сразу тысяча записей, а не одна на сообщение: иначе
+        // каждая новая строка двигала бы весь журнал целиком.
+        log_.erase(log_.begin(), log_.begin() + static_cast<std::ptrdiff_t>(LOG_TRIM));
+        ++log_epoch_;
+    }
 }
 
 // ------------------------------------------------------------- новая партия
@@ -66,6 +71,7 @@ void Game::new_game(const std::string& name, const std::string& race,
     respawn_left_ = RESPAWN_TURNS;
     cb_ = Combat();
     log_.clear();
+    ++log_epoch_;
     rng_.set_seed(0x5EEDC0DEULL);
 
     if (const Location* l = here()) spawn_initial(*l);

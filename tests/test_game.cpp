@@ -113,6 +113,54 @@ void test_wrap() {
     check(ind.size() >= 2 && ind[1].substr(0, 4) == "    ", "отступ переносится на следующую строку");
 }
 
+void test_log_history() {
+    section("журнал партии");
+
+    Game g;
+    g.new_game("Тест", "human", "swordsman");
+    g.clear_log();
+
+    // История хранится целиком: журнал листают до начала партии, а прежний
+    // предел в двести записей выбрасывал большую её часть — полное
+    // прохождение набирает под восемьсот.
+    for (int i = 0; i < 900; ++i) g.msg("запись " + to_str(i));
+    eq(static_cast<int>(g.log().size()), 900, "девятьсот записей не обрезаны");
+    eqs(g.log().front(), "запись 0", "самая первая на месте");
+    eqs(g.log().back(), "запись 899", "и самая последняя тоже");
+
+    // Предел всё же есть, чтобы очень долгая партия не съела память.
+    // Режется пачкой, а не по записи: сдвигать весь вектор на каждое
+    // сообщение — работа, растущая вместе с журналом.
+    g.clear_log();
+    for (std::size_t i = 0; i < LOG_MAX + LOG_TRIM / 2; ++i) g.msg("з" + to_str(static_cast<int>(i)));
+    check(g.log().size() <= LOG_MAX, "выше предела журнал не растёт");
+    check(g.log().size() > LOG_MAX - LOG_TRIM, "но и не срезается до нуля");
+    eqs(g.log().back(), "з" + to_str(static_cast<int>(LOG_MAX + LOG_TRIM / 2) - 1),
+        "последнее сообщение всегда сохраняется");
+    check(g.log().front() != "з0", "а самое старое вытеснено");
+
+    // Счётчик срезаний. Кэш переноса строк в графической оболочке хранит
+    // разложенный журнал и дописывает к нему новые записи; понять, что
+    // начало срезали, по одной длине нельзя — журнал дорастает до прежней
+    // длины другими записями. Здесь ровно этот случай: длина та же,
+    // содержимое другое, и отличает их только счётчик.
+    g.clear_log();
+    const unsigned long ep0 = g.log_epoch();
+    for (std::size_t i = 0; i < LOG_MAX; ++i) g.msg("a" + to_str(static_cast<int>(i)));
+    eq(static_cast<int>(g.log_epoch() - ep0), 0, "до предела счётчик стоит");
+    const std::size_t before = g.log().size();
+    // Ровно LOG_TRIM записей: первая срезает начало (5000 -> 4001),
+    // остальные добирают длину обратно до 5000.
+    for (std::size_t i = 0; i < LOG_TRIM; ++i) g.msg("b" + to_str(static_cast<int>(i)));
+    eq(static_cast<int>(g.log().size()), static_cast<int>(before), "длина вернулась к прежней");
+    check(g.log_epoch() != ep0, "но счётчик срезаний это заметил");
+
+    // Очистка журнала — тоже смена содержимого при возможной прежней длине.
+    const unsigned long ep1 = g.log_epoch();
+    g.clear_log();
+    check(g.log_epoch() != ep1, "очистка журнала считается сменой");
+}
+
 void test_reflow() {
     section("переливка абзацев");
 
@@ -3878,6 +3926,7 @@ void test_playthrough() {
     std::cout << "  (итог: уровень " << g.player().level
               << ", золота " << g.player().gold
               << ", квестов пройдено " << (sizeof(all_quests) / sizeof(all_quests[0]))
+              << ", записей журнала " << g.log().size()
               << ")\n";
 }
 
@@ -3887,6 +3936,7 @@ int main() {
     std::cout << "Тесты «Любви Эндора»\n";
     test_text_helpers();
     test_wrap();
+    test_log_history();
     test_reflow();
     test_log_tail();
     test_glyphs();

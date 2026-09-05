@@ -5,18 +5,26 @@
 
 namespace gfx {
 
+// Текстовые окна — это абзац, а не список: у них своя прокрутка и одна
+// кнопка. Определено снаружи анонимного пространства имён: тот же список
+// нужен прокрутке в app.cpp, а вторая его копия однажды разошлась бы
+// с первой.
+bool is_text_modal(Modal::Kind k) {
+    return k == Modal::Message || k == Modal::Help || k == Modal::Character ||
+           k == Modal::Book || k == Modal::Ending || k == Modal::Log;
+}
+
 namespace {
 
 const char* kind_caption(Modal::Kind k) {
     switch (k) {
         case Modal::GameMenu:    return "Меню";
-        case Modal::Pause:       return "Пауза";
+        case Modal::Log:         return "Журнал";
         case Modal::Character:   return "Герой";
         case Modal::Inventory:   return "Сумка";
         case Modal::ItemMenu:    return "Предмет";
         case Modal::Quests:      return "Задания";
         case Modal::Skills:      return "Навыки";
-        case Modal::Effects:     return "Что действует";
         case Modal::Portals:     return "Порталы";
         case Modal::Library:     return "Библиотека";
         case Modal::Book:        return "Книга";
@@ -27,12 +35,6 @@ const char* kind_caption(Modal::Kind k) {
         case Modal::TextInput:   return "";
         default:                 return "";
     }
-}
-
-// Текстовые окна — это абзац, а не список: у них своя прокрутка и одна кнопка.
-bool is_text_modal(Modal::Kind k) {
-    return k == Modal::Message || k == Modal::Help ||
-           k == Modal::Character || k == Modal::Book || k == Modal::Ending;
 }
 
 std::string item_desc(const ItemDef* d) {
@@ -68,20 +70,15 @@ void App::collect_rows(const Modal& m, std::vector<Row>* rows,
 
     switch (m.kind) {
         case Modal::GameMenu:
-            rows->push_back(Row("Герой"));       ids->push_back("character");
-            rows->push_back(Row("Сумка"));       ids->push_back("inventory");
-            rows->push_back(Row("Задания"));     ids->push_back("quests");
-            rows->push_back(Row("Навыки"));      ids->push_back("skills");
-            rows->push_back(Row("Что действует")); ids->push_back("effects");
+            // Героя, сумки, заданий и навыков здесь нет: они кнопками внизу
+            // окна, и второй путь к ним только удлинял дорогу.
+            // Сохранение и выход стоят прямо тут, а не за отдельной паузой:
+            // лишнее нажатие ради списка из трёх пунктов ничего не давало.
             if (p.portal_master) { rows->push_back(Row("Порталы")); ids->push_back("portals"); }
             rows->push_back(Row("Книги и записки")); ids->push_back("library");
+            rows->push_back(Row("Журнал"));      ids->push_back("log");
             rows->push_back(Row("Управление"));  ids->push_back("help");
-            rows->push_back(Row("Пауза"));       ids->push_back("pause");
-            break;
-
-        case Modal::Pause:
-            rows->push_back(Row("Вернуться в игру")); ids->push_back("back");
-            rows->push_back(Row("Сохранить игру"));   ids->push_back("save");
+            rows->push_back(Row("Сохранить игру"));       ids->push_back("save");
             rows->push_back(Row("Загрузить сохранение")); ids->push_back("load");
             rows->push_back(Row("Выйти в главное меню")); ids->push_back("quit");
             break;
@@ -140,18 +137,6 @@ void App::collect_rows(const Modal& m, std::vector<Row>* rows,
                                     "  — " + s.desc, can ? th.text : th.faint));
                 ids->push_back(s.id);
             }
-            break;
-        }
-
-        case Modal::Effects: {
-            for (const ActiveEffect& e : p.effects) {
-                const EffectDef* d = c.effect(e.id);
-                rows->push_back(Row(std::string(d ? d->name : e.id) + "  сила " + to_str(e.power) +
-                                    ", ходов " + to_str(e.turns),
-                                    d && d->harmful ? th.warn : th.good));
-                ids->push_back(e.id);
-            }
-            if (rows->empty()) { rows->push_back(Row("Ничего не действует", th.faint)); ids->push_back(""); }
             break;
         }
 
@@ -317,6 +302,20 @@ Rect App::modal_body(const Modal& m, Rect* frame_out, std::vector<Rect>* buttons
     if (m.kind == Modal::TextInput) {
         want_w = 40 * cw;
         want_h = c_.touch_unit() + ch * 3;
+    } else if (m.kind == Modal::Log) {
+        // Журнал ужимается под себя, как всякое другое окно: в начале партии
+        // записей десяток, и растягивать окно на весь экран ради них незачем.
+        // Ширина панели от высоты не зависит (см. panel_rect_px), поэтому её
+        // можно узнать заранее и разложить журнал ровно по той ширине, по
+        // какой он потом и рисуется, — высота тогда считается по настоящему
+        // числу строк, а не на глаз.
+        const Rect probe = panel_rect_px(c_, !modal_title(m).empty(), want_w, ch, 0);
+        const int rows = static_cast<int>(log_lines(probe.w / cw).size());
+        int need = (rows + 1) * ch;
+        const int cap = c_.height() - ch * 8;
+        if (need > cap) need = cap;
+        if (need < ch * 4) need = ch * 4;
+        want_h = need;
     } else if (is_text_modal(m.kind) && !m.body.empty()) {
         // Текст, известный заранее, задаёт окну высоту сам — так же, как
         // список задаёт её числом пунктов. Иначе окно фиксированной высоты
@@ -424,7 +423,19 @@ void App::draw_modal(Modal& m) {
         return;
     }
 
-    if (is_text_modal(m.kind)) {
+    if (m.kind == Modal::Log) {
+        // Журнал разложен заранее и лежит готовым, поэтому строки рисуются
+        // как есть. Полоса справа показывает, где ты в истории партии:
+        // без неё непонятно, сколько ещё осталось до начала.
+        const std::vector<std::string>& ls = log_lines(area.w / c_.cell_w());
+        const int lch = c_.cell_h();
+        const int vis = lch > 0 ? area.h / lch : 0;
+        int maxs = static_cast<int>(ls.size()) - vis;
+        if (maxs < 0) maxs = 0;
+        if (m.scroll > maxs) m.scroll = maxs;
+        text_lines(c_, area, ls, th.text, m.scroll);
+        scrollbar(c_, area, static_cast<int>(ls.size()), vis, m.scroll);
+    } else if (is_text_modal(m.kind)) {
         std::string body = m.body;
         if (m.kind == Modal::Character) {
             const Player& p = g_.player();
@@ -445,6 +456,18 @@ void App::draw_modal(Modal& m) {
             body += std::string(stance_hint(p.stance)) + "\n";
             body += "Без стойки: мет " + to_str(nb.attack) + "%, блок " +
                     to_str(nb.block) + "%, броня " + to_str(nb.armor) + "\n\n";
+            // Действующие эффекты стоят здесь же, а не отдельным окном:
+            // они меняют те самые числа, что написаны выше, и смотреть их
+            // порознь значило бы гадать, откуда взялась разница.
+            body += "Что действует:\n";
+            if (p.effects.empty()) body += "  ничего\n";
+            for (const ActiveEffect& e : p.effects) {
+                const EffectDef* ed = Content::get().effect(e.id);
+                body += "  " + std::string(ed ? ed->name : e.id) +
+                        " — сила " + to_str(e.power) +
+                        ", ходов " + to_str(e.turns) + "\n";
+            }
+            body += "\n";
             body += "Навыки:\n";
             bool any = false;
             for (const auto& kv : p.skills) {
@@ -599,24 +622,15 @@ void App::activate_row(Modal& m, int index) {
     switch (m.kind) {
         case Modal::GameMenu: {
             pop();
-            if (id == "character") push(Modal::Character);
-            else if (id == "inventory") push(Modal::Inventory);
-            else if (id == "quests")    push(Modal::Quests);
-            else if (id == "skills")    push(Modal::Skills);
-            else if (id == "effects")   push(Modal::Effects);
-            else if (id == "portals")   push(Modal::Portals);
+            if (id == "portals")        push(Modal::Portals);
             else if (id == "library")   push(Modal::Library);
+            else if (id == "log")       push(Modal::Log);
             else if (id == "help")      push(Modal::Help);
-            else if (id == "pause")     push(Modal::Pause);
+            else if (id == "save")      { save_game(); pop(); }
+            else if (id == "load")      { load_game(); }
+            else if (id == "quit")      { close_all(); mode_ = MODE_MENU; menu_list_ = ListView(); }
             return;
         }
-
-        case Modal::Pause:
-            if (id == "back") pop();
-            else if (id == "save") { save_game(); pop(); }
-            else if (id == "load") { load_game(); }
-            else if (id == "quit") { close_all(); mode_ = MODE_MENU; menu_list_ = ListView(); }
-            return;
 
         case Modal::Inventory: {
             if (id.empty()) return;

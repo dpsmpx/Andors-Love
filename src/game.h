@@ -79,6 +79,15 @@ struct Combat {
 
 constexpr int MOMENTUM_MAX  = 5;
 constexpr int MOMENTUM_COST = 3;      // цена мощного удара
+
+// Журнал листается до начала партии, поэтому хранится целиком. Предел нужен
+// не для экономии, а чтобы очень долгая игра не съедала память без счёта:
+// полное прохождение со всеми пятьюдесятью четырьмя квестами набирает около
+// семисот записей, так что до пяти тысяч обычная партия не доходит.
+constexpr std::size_t LOG_MAX  = 5000;
+// Режется сразу пачкой. Убирать по одной записи с начала — это сдвиг всего
+// вектора на каждое сообщение, работа, растущая вместе с журналом.
+constexpr std::size_t LOG_TRIM = 1000;
 constexpr int AP_ITEM_COST  = 3;
 constexpr int RESPAWN_TURNS = 40;
 
@@ -250,7 +259,11 @@ public:
     // --- сообщения ---
     void  msg(const std::string& m);
     const std::vector<std::string>& log() const { return log_; }
-    void  clear_log() { log_.clear(); }
+    void  clear_log() { log_.clear(); ++log_epoch_; }
+    // Счётчик срезаний начала журнала. По одной длине кэш переноса строк
+    // отличить срезание не может: журнал успевает дорасти до прежней длины
+    // другими записями. Счётчик отличает его точно и стоит одно сравнение.
+    unsigned long log_epoch() const { return log_epoch_; }
 
     const std::string& error() const { return err_; }
 
@@ -290,6 +303,7 @@ private:
     std::set<std::string>    notes_;      // "локация:индекс" подобранных записок
     std::set<std::string>    visited_;    // локации, где уже расставлены мобы
     std::vector<std::string> log_;
+    unsigned long log_epoch_;
     mutable std::string      err_;
 
     friend class SaveIO;
