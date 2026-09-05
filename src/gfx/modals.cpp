@@ -317,6 +317,19 @@ Rect App::modal_body(const Modal& m, Rect* frame_out, std::vector<Rect>* buttons
     if (m.kind == Modal::TextInput) {
         want_w = 40 * cw;
         want_h = c_.touch_unit() + ch * 3;
+    } else if (is_text_modal(m.kind) && !m.body.empty()) {
+        // Текст, известный заранее, задаёт окну высоту сам — так же, как
+        // список задаёт её числом пунктов. Иначе окно фиксированной высоты
+        // молча обрезает хвост, и до последних строк надо докручивать,
+        // не зная, что они там есть. Экран ограничивает panel_rect_px.
+        int lines = 1;
+        for (std::size_t i = 0; i < m.body.size(); ++i)
+            if (m.body[i] == '\n') ++lines;
+        int need = (lines + 1) * ch;
+        const int cap = c_.height() - ch * 8;
+        if (need > cap) need = cap;
+        if (need < ch * 4) need = ch * 4;
+        want_h = need;
     } else if (!is_text_modal(m.kind) && m.kind != Modal::Dialogue) {
         std::vector<Row> rows;
         std::vector<std::string> ids;
