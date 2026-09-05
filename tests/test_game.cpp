@@ -14,6 +14,7 @@
 
 #include <cstdio>
 #include <fstream>
+#include <set>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -1852,6 +1853,75 @@ void test_tiles() {
         eq(gfx::load_slot_files("build/test-tiles-empty", &none, &err3), 0,
            "из пустого каталога не читается ничего");
         check(err3.empty(), "и это не повод ругаться");
+    }
+
+    // Тайлы существ: по картинке на жителя и на врага.
+    {
+        eqs(gfx::creature_tile_name("npc", "elder"), "npc_elder",
+           "имя тайла жителя");
+        eqs(gfx::creature_tile_name("mob", "rat"), "mob_rat",
+           "имя тайла врага");
+        check(gfx::creature_tile_name("", "elder").empty(), "без вида имени нет");
+        check(gfx::creature_tile_name("npc", "").empty(), "без id — тоже");
+
+        // Ни одно имя существа не должно совпасть с именем слота: иначе
+        // тайл жителя и тайл стены спорили бы за один файл.
+        const Content& c = Content::get();
+        std::set<std::string> names;
+        int clash_slot = 0, clash_name = 0;
+        for (std::map<std::string, NpcDef>::const_iterator it = c.npcs().begin();
+             it != c.npcs().end(); ++it) {
+            const std::string n = gfx::creature_tile_name("npc", it->first);
+            if (!names.insert(n).second) ++clash_name;
+            for (int s = 0; s < gfx::TJTM_SLOTS; ++s)
+                if (gfx::slot_file(s) && n == gfx::slot_file(s)) ++clash_slot;
+        }
+        for (std::map<std::string, EnemyDef>::const_iterator it = c.enemies().begin();
+             it != c.enemies().end(); ++it) {
+            const std::string n = gfx::creature_tile_name("mob", it->first);
+            if (!names.insert(n).second) ++clash_name;
+            for (int s = 0; s < gfx::TJTM_SLOTS; ++s)
+                if (gfx::slot_file(s) && n == gfx::slot_file(s)) ++clash_slot;
+        }
+        eq(static_cast<int>(names.size()),
+           static_cast<int>(c.npcs().size() + c.enemies().size()),
+           "у каждого существа своё имя тайла");
+        eq(clash_name, 0, "и ни одно не повторяется");
+        eq(clash_slot, 0, "и ни одно не спорит с именем слота");
+
+        // Чтение по именам: что есть — читается, чего нет — остаётся пустым.
+        const std::string dir = "build/test-tiles-named";
+        std::string err;
+        check(platform::make_dir(dir), "каталог для именованных тайлов создан");
+        // Ниже один файл нарочно портится. Он не должен пережить прогон и
+        // подменить собой отсутствие файла в следующем: иначе тест начал бы
+        // проверять не то, что написано, а осадок от прошлого раза.
+        std::remove((dir + "/npc_elder.png").c_str());
+        std::remove((dir + "/npc_smith.png").c_str());
+        gfx::Image art(16, 16);
+        art.clear(7, 8, 9, 255);
+        check(gfx::png_write(dir + "/npc_elder.png", art, &err), "тайл старейшины записан");
+
+        std::vector<std::string> want;
+        want.push_back("npc_elder");
+        want.push_back("npc_smith");
+        std::vector<gfx::Image> got;
+        eq(gfx::load_named_files(dir, want, &got, &err), 1, "прочитан ровно один");
+        eq(static_cast<int>(got.size()), 2, "а мест столько же, сколько имён");
+        eq(got[0].w, 16, "нарисованный житель прочитан");
+        check(got[1].empty(), "а ненарисованный остался пустым");
+        check(err.empty(), "и отсутствие файла — не жалоба");
+
+        // Испорченный файл называет себя и не отменяет остальных.
+        {
+            std::ofstream junk((dir + "/npc_smith.png").c_str(), std::ios::binary);
+            junk << "не png";
+        }
+        std::vector<gfx::Image> got2;
+        std::string err4;
+        eq(gfx::load_named_files(dir, want, &got2, &err4), 1, "целый тайл всё равно прочитан");
+        check(err4.find("npc_smith.png") != std::string::npos,
+              "а про испорченный сказано, какой именно");
     }
 
     // Лист по умолчанию: то, что игра отдаёт по --export-sheet.

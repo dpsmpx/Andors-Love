@@ -238,6 +238,37 @@ int load_slot_files(const std::string& dir, std::vector<Image>* tiles, std::stri
     return loaded;
 }
 
+std::string creature_tile_name(const std::string& kind, const std::string& id) {
+    if (kind.empty() || id.empty()) return std::string();
+    return kind + "_" + id;
+}
+
+int load_named_files(const std::string& dir, const std::vector<std::string>& names,
+                     std::vector<Image>* out, std::string* err) {
+    if (!out) return 0;
+    out->assign(names.size(), Image());
+    if (dir.empty()) return 0;
+
+    int loaded = 0;
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        if (names[i].empty()) continue;
+        const std::string path = dir + "/" + names[i] + ".png";
+        if (!paths::file_exists(path)) continue;
+
+        Image img;
+        std::string one;
+        if (!png_read(path, &img, &one)) {
+            // Как и со слотами: про нечитаемый файл надо сказать, но
+            // остальных существ это не отменяет.
+            if (err && err->empty()) *err = path + ": " + one;
+            continue;
+        }
+        (*out)[i] = img;
+        ++loaded;
+    }
+    return loaded;
+}
+
 bool save_slot_files(const std::string& dir, int size, std::string* err) {
     if (dir.empty()) { fail(err, "не задан каталог"); return false; }
     if (!platform::make_dir(dir)) { fail(err, "не создать каталог " + dir); return false; }
