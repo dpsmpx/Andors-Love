@@ -21,16 +21,16 @@ void App::push(Modal::Kind k) {
             "  держать палец — идти, пока держишь\n"
             "  держать дольше — перейти на бег\n"
             "  вести пальцем — цель едет за ним\n"
-            "  тап на ходу в стену — остановиться\n"
-            "  стоя тап по себе или в стену — меню\n"
+            "  тап по себе или в стену — остановиться\n"
             "  тап по пункту — выбрать его\n"
+            "  держать на строке продажи — продать пачкой\n"
             "  свайп в окне — прокрутка\n"
             "  тап мимо окна — закрыть окно\n"
             "\n"
             "Клавиатура\n"
             "  WASD или стрелки — шаг\n"
             "  C герой   I сумка   Q задания   K навыки\n"
-            "  F эффекты  P порталы  B книги   M меню\n"
+            "  P порталы  B книги   L журнал   M меню\n"
             "  1 2 3 — стойка, Enter — удар в бою\n"
             "\n"
             "Знаки карты\n"
@@ -41,6 +41,13 @@ void App::push(Modal::Kind k) {
             "Благодарности\n"
             "  Группе vk.com/programmer_ne_lamer\n"
             "  за сообщество и поддержку.";
+    }
+    if (k == Modal::Log) {
+        // Открывается на последних записях: журнал читают с конца, как ленту,
+        // а к началу листают, когда ищут, где что случилось. Предел зависит
+        // от ширины окна и станет известен только при отрисовке — она и
+        // подрежет это число до настоящего.
+        m.scroll = 1 << 28;
     }
     push_modal(m);
 }
@@ -53,16 +60,25 @@ void App::push_text_input(const std::string& title, const std::string& book_id,
     m.index   = index;
     m.buffer  = initial;
     m.max_len = max_len;
-    push_modal(m);
-    SDL_StartTextInput();          // на Android поднимает экранную клавиатуру
+    push_modal(m);   // клавиатуру поднимет он же: см. takes_text
+}
+
+// Подтверждение. Число в поле уже обрезано — его обрезали на каждом нажатии,
+// — поэтому здесь остаётся только перечитать пустое поле как единицу и продать.
+void App::commit_amount(Modal& m) {
+    amount_from_text(m);
+    clamp_amount(m);
+
+    const ShopDef* sh = Content::get().shop(m.arg);
+    if (sh) g_.sell(*sh, m.item, m.amount);
+    pop();
 }
 
 void App::commit_text_input(Modal& m) {
     const std::string book_id = m.arg;
     const int index = m.index;
     const std::string text = m.buffer;
-    SDL_StopTextInput();
-    pop();
+    pop();           // клавиатуру погасит он же
 
     if (index < 0 && index != BOOK_APPEND) { g_.book_set_title(book_id, text); return; }
     if (index == BOOK_APPEND) {
@@ -80,13 +96,28 @@ void App::push_message(const std::string& title, const std::string& body) {
     push_modal(m);
 }
 
+// Окна, в которых что-то набирают. На Android им нужна экранная клавиатура,
+// и поднимается она вместе с окном, а опускается вместе с ним — каким бы
+// путём оно ни закрылось.
+static bool takes_text(Modal::Kind k) {
+    return k == Modal::TextInput || k == Modal::Amount;
+}
+
 void App::push_modal(const Modal& m) {
     Modal copy = m;
     copy.born_press = ptr_.press_id();
     stack_.push_back(copy);
+    if (takes_text(copy.kind)) SDL_StartTextInput();
 }
 
-void App::pop() { if (!stack_.empty()) stack_.pop_back(); }
+void App::pop() {
+    if (stack_.empty()) return;
+    // Клавиатура гасится здесь, а не на каждом выходе порознь: выходов у окна
+    // четыре — кнопка, Escape, тап мимо и подтверждение, — и «Отмена» раньше
+    // оставляла её поднятой, потому что о ней там никто не вспомнил.
+    if (takes_text(stack_.back().kind)) SDL_StopTextInput();
+    stack_.pop_back();
+}
 
 void App::close_top() {
     if (stack_.empty()) return;
@@ -145,6 +176,53 @@ void App::hud_buttons(std::vector<Rect>* out) const {
            5, 6, out);
 }
 
+// Журнал занимает то, что осталось над картой. Место там всё равно
+// пустует, а видеть последние строки полезнее, чем чёрный фон.
+//
+// Раньше журнал был между картой и панелью, а карта — сверху. Теперь
+// наоборот: по карте тыкают, и она внизу, под большим пальцем, а журнал
+// читают — ему верх.
+Color App::tone_color(unsigned char tone) const {
+    // Одно место, где важность превращается в цвет: и лента внизу, и окно
+    // журнала спрашивают здесь, поэтому одно и то же событие в них не может
+    // оказаться разного цвета.
+    const Theme& th = theme();
+    switch (static_cast<MsgTone>(tone)) {
+        case MsgTone::Good: return th.good;
+        case MsgTone::Bad:  return th.warn;
+        case MsgTone::Loud: return th.accent;
+        default:            return th.faint;
+    }
+}
+
+void App::draw_log() {
+    const Rect lr = log_area();
+    const int ch = c_.cell_h();
+    if (lr.h <= ch) return;
+
+    const int lines = (lr.h - ch / 2) / ch;
+    if (lines < 1) return;
+    const std::size_t fit = static_cast<std::size_t>((lr.w - 12) / c_.cell_w());
+    std::vector<std::size_t> src;
+    const std::vector<std::string> tail = log_tail(g_.log(), fit, lines, &src);
+    const std::vector<unsigned char>& tones = g_.log_tones();
+
+    // Строки прижаты книзу, к самой карте. Пока журнал не заполнил отведённое,
+    // свежее сообщение всё равно оказывается рядом с картой, а не в другом
+    // конце экрана, и пустое место собирается сверху, где оно читается полем,
+    // а не дырой посреди.
+    int ly = lr.y + lr.h - static_cast<int>(tail.size()) * ch - ch / 2;
+    if (ly < lr.y) ly = lr.y;
+    for (std::size_t i = 0; i < tail.size(); ++i) {
+        // Обычные сообщения остаются приглушёнными: лента под картой — это
+        // фон, и если выделить всё, не выделено ничего.
+        unsigned char tone = 0;
+        if (i < src.size() && src[i] < tones.size()) tone = tones[src[i]];
+        c_.text(lr.x + 6, ly, tail[i], tone_color(tone), c_.scale());
+        ly += ch;
+    }
+}
+
 void App::draw_hud() {
     const Theme& th = theme();
     const Rect hud = hud_area();
@@ -177,24 +255,22 @@ void App::draw_hud() {
     c_.text(10, y - 1, to_str(p.ap) + "/" + to_str(t.max_ap) + " AP", th.text, sc > 1 ? sc - 1 : 1);
     y += bh + 3;
 
-    if (!status_.empty())
-        c_.text(6, y, trunc(status_, static_cast<std::size_t>((hud.w - 12) / c_.cell_w())),
-                th.faint, sc);
-
-    // Журнал в промежутке между картой и панелью: место всё равно пустует,
-    // а видеть последние строки полезнее, чем чёрный фон.
-    const int gap_top = map_bottom();
-    const int gap_h = hud.y - gap_top;
-    if (gap_h > ch * 2) {
-        const std::vector<std::string>& lg = g_.log();
-        const int lines = (gap_h - ch / 2) / ch;
-        int from = static_cast<int>(lg.size()) - lines;
-        if (from < 0) from = 0;
-        int ly = gap_top + ch / 2;
-        const std::size_t fit = static_cast<std::size_t>((c_.width() - 12) / c_.cell_w());
-        for (int i = from; i < static_cast<int>(lg.size()); ++i) {
-            c_.text(6, ly, trunc(lg[static_cast<std::size_t>(i)], fit), th.faint, sc);
-            ly += ch;
+    // Последнее сообщение целиком, с переносом по словам. Раньше хвост
+    // отрезался, а прочитать его было негде: журнал показывал ту же строку
+    // и так же обрезанной.
+    if (!status_.empty()) {
+        const int room = (hud.y + hud.h - c_.touch_unit() - 8) - y;
+        // Одна строка была здесь и раньше, впритык к кнопкам; больше —
+        // только если панель выросла и место действительно есть.
+        int rows = room > 0 ? room / ch : 0;
+        if (rows < 1) rows = 1;
+        const std::size_t cols = static_cast<std::size_t>((hud.w - 12) / c_.cell_w());
+        const std::vector<std::string> ls = wrap(status_, cols);
+        // Здесь берётся начало, а не конец: у одного сообщения важнее его
+        // начало, тогда как у журнала важнее последнее сообщение.
+        for (int i = 0; i < rows && i < static_cast<int>(ls.size()); ++i) {
+            c_.text(6, y, ls[static_cast<std::size_t>(i)], th.faint, sc);
+            y += ch;
         }
     }
 
@@ -449,14 +525,11 @@ void App::draw_combat() {
     // Журнал боя: последние строки, больше на экране и не нужно.
     std::vector<Rect> r1, r2;
     combat_layout(&r1, &r2, 0);
-    const std::vector<std::string>& lg = cb.log;
     const int log_h = r1[0].y - 6 - y;
     const int lines = log_h > 0 ? log_h / ch : 0;
-    int from = static_cast<int>(lg.size()) - lines;
-    if (from < 0) from = 0;
-    for (int i = from; i < static_cast<int>(lg.size()); ++i) {
-        c_.text(area.x, y, trunc(lg[static_cast<std::size_t>(i)],
-                                 static_cast<std::size_t>(bw / c_.cell_w())), th.faint, sc);
+    const std::size_t cols = static_cast<std::size_t>(bw / c_.cell_w());
+    for (const std::string& s : log_tail(cb.log, cols, lines)) {
+        c_.text(area.x, y, s, th.faint, sc);
         y += ch;
     }
 

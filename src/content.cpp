@@ -6387,3 +6387,60 @@ std::string Content::quest_stage_text(const std::string& quest_id, int stage) co
         if (s.stage == stage) return s.text;
     return "";
 }
+
+// ------------------------------------------------------- предмет словами
+
+std::string item_desc(const ItemDef& d, const std::string& indent) {
+    const Stats& b = d.bonus;
+    const std::string& i = indent;
+    std::string s = i + d.name + " (" + kind_name(d.kind) + ")\n" +
+                    i + d.desc + "\n\n" +
+                    i + "Цена: " + to_str(d.price) + "\n";
+    if (b.max_hp)  s += i + "+" + to_str(b.max_hp) + " к здоровью\n";
+    if (b.max_ap)  s += i + "+" + to_str(b.max_ap) + " к очкам действия\n";
+    if (b.attack)  s += i + to_str(b.attack) + "% к меткости\n";
+    if (b.dmg_min || b.dmg_max)
+        s += i + "урон +" + to_str(b.dmg_min) + "/" + to_str(b.dmg_max) + "\n";
+    if (b.block)   s += i + to_str(b.block) + "% к блоку\n";
+    if (b.armor)   s += i + to_str(b.armor) + " к броне\n";
+    if (b.crit)    s += i + to_str(b.crit) + "% к криту\n";
+    if (b.ap_atk)  s += i + to_str(b.ap_atk) + " AP к стоимости атаки\n";
+    if (d.heal_hp) s += i + "восстанавливает " + to_str(d.heal_hp) + " HP\n";
+    if (d.heal_ap) s += i + "восстанавливает " + to_str(d.heal_ap) + " AP\n";
+    return s;
+}
+
+namespace {
+
+// Одна строка сравнения: «броня 2 -> 4  (+2)». Пишется только когда числа
+// разошлись: одинаковые строки читателю ничего не говорят и лишь прячут
+// среди себя ту единственную, ради которой он сюда смотрит.
+void cmp_line(std::string* out, const char* what, int now, int then) {
+    if (now == then) return;
+    const int d = then - now;
+    *out += std::string("  ") + what + " " + to_str(now) + " -> " + to_str(then) +
+            "  (" + (d > 0 ? "+" : "") + to_str(d) + ")\n";
+}
+
+} // namespace
+
+std::string compare_worn(const ItemDef& fresh, const ItemDef* worn) {
+    if (slot_for(fresh.kind) == Slot::Count) return "";
+    if (!worn) return "\nГнездо пустое — надеть будет во что.\n";
+    if (worn->id == fresh.id) return "\nТакое уже надето.\n";
+
+    std::string s = "\nСейчас надето: " + worn->name + "\n";
+    const Stats& a = worn->bonus;
+    const Stats& b = fresh.bonus;
+    cmp_line(&s, "урон снизу", a.dmg_min, b.dmg_min);
+    cmp_line(&s, "урон сверху", a.dmg_max, b.dmg_max);
+    cmp_line(&s, "меткость", a.attack, b.attack);
+    cmp_line(&s, "блок", a.block, b.block);
+    cmp_line(&s, "броня", a.armor, b.armor);
+    cmp_line(&s, "крит", a.crit, b.crit);
+    cmp_line(&s, "здоровье", a.max_hp, b.max_hp);
+    cmp_line(&s, "очки действия", a.max_ap, b.max_ap);
+    cmp_line(&s, "цена атаки", a.ap_atk, b.ap_atk);
+    if (s.find("->") == std::string::npos) s += "  всё то же самое\n";
+    return s;
+}

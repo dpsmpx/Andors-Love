@@ -113,6 +113,269 @@ void test_wrap() {
     check(ind.size() >= 2 && ind[1].substr(0, 4) == "    ", "отступ переносится на следующую строку");
 }
 
+void test_log_history() {
+    section("журнал партии");
+
+    Game g;
+    g.new_game("Тест", "human", "swordsman");
+    g.clear_log();
+
+    // История хранится целиком: журнал листают до начала партии, а прежний
+    // предел в двести записей выбрасывал большую её часть — полное
+    // прохождение набирает под восемьсот.
+    for (int i = 0; i < 900; ++i) g.msg("запись " + to_str(i));
+    eq(static_cast<int>(g.log().size()), 900, "девятьсот записей не обрезаны");
+    eqs(g.log().front(), "запись 0", "самая первая на месте");
+    eqs(g.log().back(), "запись 899", "и самая последняя тоже");
+
+    // Предел всё же есть, чтобы очень долгая партия не съела память.
+    // Режется пачкой, а не по записи: сдвигать весь вектор на каждое
+    // сообщение — работа, растущая вместе с журналом.
+    g.clear_log();
+    for (std::size_t i = 0; i < LOG_MAX + LOG_TRIM / 2; ++i) g.msg("з" + to_str(static_cast<int>(i)));
+    check(g.log().size() <= LOG_MAX, "выше предела журнал не растёт");
+    check(g.log().size() > LOG_MAX - LOG_TRIM, "но и не срезается до нуля");
+    eqs(g.log().back(), "з" + to_str(static_cast<int>(LOG_MAX + LOG_TRIM / 2) - 1),
+        "последнее сообщение всегда сохраняется");
+    check(g.log().front() != "з0", "а самое старое вытеснено");
+
+    // Счётчик срезаний. Кэш переноса строк в графической оболочке хранит
+    // разложенный журнал и дописывает к нему новые записи; понять, что
+    // начало срезали, по одной длине нельзя — журнал дорастает до прежней
+    // длины другими записями. Здесь ровно этот случай: длина та же,
+    // содержимое другое, и отличает их только счётчик.
+    g.clear_log();
+    const unsigned long ep0 = g.log_epoch();
+    for (std::size_t i = 0; i < LOG_MAX; ++i) g.msg("a" + to_str(static_cast<int>(i)));
+    eq(static_cast<int>(g.log_epoch() - ep0), 0, "до предела счётчик стоит");
+    const std::size_t before = g.log().size();
+    // Ровно LOG_TRIM записей: первая срезает начало (5000 -> 4001),
+    // остальные добирают длину обратно до 5000.
+    for (std::size_t i = 0; i < LOG_TRIM; ++i) g.msg("b" + to_str(static_cast<int>(i)));
+    eq(static_cast<int>(g.log().size()), static_cast<int>(before), "длина вернулась к прежней");
+    check(g.log_epoch() != ep0, "но счётчик срезаний это заметил");
+
+    // Очистка журнала — тоже смена содержимого при возможной прежней длине.
+    const unsigned long ep1 = g.log_epoch();
+    g.clear_log();
+    check(g.log_epoch() != ep1, "очистка журнала считается сменой");
+
+    // --- важность сообщений ---
+    // Важности идут строка в строку с журналом. Разойдись длины — и красить
+    // начнёт не те строки, причём молча.
+    {
+        Game t;
+        t.new_game("Заметный");
+        t.clear_log();
+        t.msg("обычное");
+        t.msg("хорошее", MsgTone::Good);
+        t.msg("плохое", MsgTone::Bad);
+        t.msg("веха", MsgTone::Loud);
+        eq(static_cast<int>(t.log().size()), 4, "четыре записи");
+        eq(static_cast<int>(t.log_tones().size()), 4, "и ровно четыре важности");
+        eq(static_cast<int>(t.log_tones()[0]), static_cast<int>(MsgTone::Plain),
+           "по умолчанию — обычное");
+        eq(static_cast<int>(t.log_tones()[1]), static_cast<int>(MsgTone::Good), "хорошее");
+        eq(static_cast<int>(t.log_tones()[2]), static_cast<int>(MsgTone::Bad), "плохое");
+        eq(static_cast<int>(t.log_tones()[3]), static_cast<int>(MsgTone::Loud), "веха");
+
+        // Срезание начала режет важности тем же куском.
+        for (std::size_t i = 0; i < LOG_MAX + 5; ++i) t.msg("шум");
+        eq(static_cast<int>(t.log_tones().size()), static_cast<int>(t.log().size()),
+           "после срезания длины по-прежнему совпадают");
+
+        // Очистка и загрузка обнуляют оба списка разом.
+        t.clear_log();
+        eq(static_cast<int>(t.log_tones().size()), 0, "очистка убирает и важности");
+    }
+
+    // Настоящие события размечены, а не оставлены серыми: ради них подсветка
+    // и делалась. Проверяем на подъёме уровня — самой заметной вехе.
+    {
+        Game t;
+        t.new_game("Растущий");
+        t.clear_log();
+        t.grant_exp(t.exp_to_next());
+        bool loud = false, good = false;
+        for (std::size_t i = 0; i < t.log_tones().size(); ++i) {
+            if (t.log_tones()[i] == static_cast<unsigned char>(MsgTone::Loud)) loud = true;
+            if (t.log_tones()[i] == static_cast<unsigned char>(MsgTone::Good)) good = true;
+        }
+        check(loud, "подъём уровня помечен как веха");
+        check(good, "а полученный опыт — как хорошее");
+    }
+}
+
+void test_log_tail_source() {
+    section("журнал: строка знает свою запись");
+
+    // После переноса строка теряет связь с записью, а красить надо по записи:
+    // у длинного сообщения обе половины одного цвета.
+    std::vector<std::string> lines;
+    lines.push_back("короткая");
+    lines.push_back("очень длинная запись, которая точно не влезет в одну строку окна");
+    lines.push_back("хвост");
+
+    std::vector<std::size_t> src;
+    const std::vector<std::string> tail = log_tail(lines, 20, 10, &src);
+    eq(static_cast<int>(src.size()), static_cast<int>(tail.size()),
+       "номер записи есть у каждой выданной строки");
+    check(tail.size() > lines.size(), "длинная запись действительно распалась");
+
+    // Номера идут по возрастанию и не выходят за границы журнала.
+    bool ordered = true, in_range = true;
+    for (std::size_t i = 0; i < src.size(); ++i) {
+        if (src[i] >= lines.size()) in_range = false;
+        if (i && src[i] < src[i - 1]) ordered = false;
+    }
+    check(in_range, "номера указывают на существующие записи");
+    check(ordered, "и идут в том же порядке, что строки");
+    eqs(lines[src.front()], "короткая", "первая строка — из первой записи");
+    eqs(lines[src.back()], "хвост", "последняя — из последней");
+
+    // Обе половины длинной записи ссылаются на неё же.
+    int mid = 0;
+    for (std::size_t i = 0; i < src.size(); ++i) if (src[i] == 1) ++mid;
+    check(mid >= 2, "распавшаяся запись дала больше одной строки с одним номером");
+
+    // Обрезание сверху не сбивает соответствие.
+    std::vector<std::size_t> src2;
+    const std::vector<std::string> two = log_tail(lines, 20, 2, &src2);
+    eq(static_cast<int>(two.size()), 2, "выдано ровно две строки");
+    eq(static_cast<int>(src2.size()), 2, "и два номера");
+    eqs(lines[src2.back()], "хвост", "последняя всё та же");
+}
+
+void test_item_text() {
+    section("предмет словами");
+    const Content& c = Content::get();
+
+    const ItemDef* sword = c.item("short_sword");
+    const ItemDef* axe   = c.item("axe");
+    check(sword != nullptr && axe != nullptr, "меч и топор есть в содержимом");
+    if (!sword || !axe) return;
+
+    // Описание: название, вид, цена и только ненулевые бонусы. Нулевые
+    // строки — шум: в списке из десяти «+0 к тому-то» не видно главного.
+    const std::string d = item_desc(*sword);
+    check(d.find(sword->name) != std::string::npos, "в описании есть название");
+    check(d.find("Цена:") != std::string::npos, "и цена");
+    check(d.find("+0 ") == std::string::npos, "а нулевых бонусов нет");
+
+    // Отступ приписывается к каждой строке, а не только к первой: в
+    // терминале блок стоит с отступом целиком.
+    const std::string ind = item_desc(*sword, "  ");
+    check(ind.substr(0, 2) == "  ", "первая строка с отступом");
+    std::size_t nl = ind.find('\n');
+    check(nl != std::string::npos && ind.compare(nl + 1, 2, "  ") == 0,
+          "и вторая тоже");
+
+    // Пустое гнездо и уже надетое — разные ответы, и оба без чисел:
+    // сравнивать не с чем.
+    eqs(compare_worn(*sword, 0), "\nГнездо пустое — надеть будет во что.\n",
+        "пустому гнезду так и сказано");
+    check(compare_worn(*sword, sword).find("Такое уже надето") != std::string::npos,
+          "своё же оружие узнаётся");
+
+    // А вот сравнение двух разных: строка пишется только для разошедшихся
+    // чисел, со стрелкой и знаковой разницей.
+    const std::string cmp = compare_worn(*axe, sword);
+    check(cmp.find("Сейчас надето: " + sword->name) != std::string::npos,
+          "названо, что надето сейчас");
+    check(cmp.find("->") != std::string::npos, "есть хотя бы одна строка сравнения");
+    {
+        // Проверяем ровно ту пару чисел, что у этих двух вещей разошлась.
+        const int a = sword->bonus.dmg_max, b = axe->bonus.dmg_max;
+        if (a != b) {
+            const int diff = b - a;
+            const std::string want = "урон сверху " + to_str(a) + " -> " + to_str(b) +
+                                     "  (" + (diff > 0 ? "+" : "") + to_str(diff) + ")";
+            check(cmp.find(want) != std::string::npos, "разница по урону сверху точна");
+        }
+        // А совпавшие числа строки не порождают.
+        if (sword->bonus.armor == axe->bonus.armor)
+            check(cmp.find("броня") == std::string::npos,
+                  "совпавшая броня строки не занимает");
+    }
+
+    // Расходник ни в какое гнездо не идёт, и сравнивать его не с чем.
+    if (const ItemDef* bread = c.item("bread"))
+        eqs(compare_worn(*bread, sword), "", "у расходника сравнения нет");
+}
+
+void test_reflow() {
+    section("переливка абзацев");
+
+    // Проза в исходнике разбита под одну ширину, а окно бывает другим.
+    // После переливки строка должна дотягиваться до края, а не обрываться
+    // посреди фразы коротким хвостом.
+    const std::string src = "Кольцо возьми. Оно тут с того дня лежит,\n"
+                            "и я не смел его тронуть,\n"
+                            "пока протокол был открыт.";
+    // Заполнена ли раскладка: в каждую строку, кроме последней, следующее
+    // слово уже не влезало. Незаполненная строка — это и есть обрыв
+    // посреди фразы, ради которого всё затевалось.
+    struct Packed {
+        static bool of(const std::vector<std::string>& ls, std::size_t w) {
+            for (std::size_t i = 0; i + 1 < ls.size(); ++i) {
+                const std::vector<std::string> next = split_ws(ls[i + 1]);
+                if (next.empty()) continue;
+                if (utf8_len(ls[i]) + 1 + utf8_len(next[0]) <= w) return false;
+            }
+            return true;
+        }
+    };
+    const std::vector<std::string> raw = wrap(src, 44);
+    const std::vector<std::string> flow = wrap(reflow(src), 44);
+    check(!Packed::of(raw, 44), "исходная разбивка оставляла место в строке");
+    check(Packed::of(flow, 44), "после переливки каждая строка заполнена");
+    check(reflow(src).find("пока протокол был открыт.") != std::string::npos,
+          "и текст при этом цел");
+
+    // Пустая строка — граница абзаца, её нельзя терять.
+    const std::vector<std::string> par = wrap(reflow(std::string("первый\n\nвторой")), 40);
+    eq(static_cast<int>(par.size()), 3, "пустая строка разделяет абзацы");
+    eqs(par[1], "", "и остаётся пустой");
+
+    // Реплики разных говорящих не должны оказаться в одной строке.
+    const std::string talk = "— Здравствуй.\n— И тебе.";
+    const std::vector<std::string> two = wrap(reflow(talk), 60);
+    eq(static_cast<int>(two.size()), 2, "две реплики — две строки");
+
+    // Строка с отступом значит сама себя: так набирают списки и таблицы.
+    const std::string list = "Заголовок\n  первый пункт\n  второй пункт";
+    const std::vector<std::string> keep = wrap(reflow(list), 60);
+    eq(static_cast<int>(keep.size()), 3, "пункты списка не сливаются");
+}
+
+void test_log_tail() {
+    section("хвост журнала");
+
+    std::vector<std::string> lg;
+    lg.push_back("короткая");
+    lg.push_back("Ольховка встречает тебя запахом дыма и мокрой соломы.");
+
+    // Раньше длинная строка обрезалась и хвост терялся совсем. Теперь она
+    // переносится и занимает столько строк, сколько ей нужно.
+    const std::vector<std::string> t = log_tail(lg, 30, 5);
+    bool fits = true;
+    for (const std::string& l : t) if (utf8_len(l) > 30) fits = false;
+    check(fits, "ни одна строка не шире отведённого");
+    std::string joined;
+    for (const std::string& l : t) joined += l + " ";
+    check(joined.find("соломы") != std::string::npos, "хвост сообщения не потерян");
+
+    // В тесное место попадает конец журнала: позднее важнее раннего.
+    const std::vector<std::string> tight = log_tail(lg, 30, 2);
+    eq(static_cast<int>(tight.size()), 2, "берётся ровно столько строк, сколько дали");
+    check(tight[1].find("соломы") != std::string::npos, "и это конец последнего сообщения");
+
+    // Пустой журнал и нулевое место не должны ничего ломать.
+    eq(static_cast<int>(log_tail(std::vector<std::string>(), 30, 3).size()), 0,
+       "пустой журнал даёт пусто");
+    eq(static_cast<int>(log_tail(lg, 30, 0).size()), 0, "нулевое место даёт пусто");
+}
+
 void test_glyphs() {
     section("символы карты");
 
@@ -383,16 +646,39 @@ void test_level_up() {
     g.grant_exp(need);
     eq(g.player().level, 2, "уровень вырос");
     eq(g.player().skill_points, pts_before + 1, "выдано очко навыка");
-    check(g.total().max_hp > hp_before, "здоровье выросло");
+    // Здоровье само не растёт: уровень даёт балл, а куда его вложить —
+    // решает игрок. Иначе «Крепость» была бы добавкой к тому, что и так
+    // капает, и выбор терял бы половину смысла.
+    eq(g.total().max_hp, hp_before, "здоровье само не выросло");
 
     int hp2 = g.total().max_hp;
     check(g.learn_skill("vigor"), "навык «Крепость» изучается");
-    eq(g.total().max_hp, hp2 + 7, "навык прибавил здоровья");
+    eq(g.total().max_hp, hp2 + 7, "здоровье растёт только навыком");
     eq(g.player().skill_points, pts_before, "очко потрачено");
 
     // Без очков навык не растёт.
     g.player().skill_points = 0;
     check(!g.learn_skill("vigor"), "без очков навык не повышается");
+
+    // А вот потолка у ранга нет: единственное, что ограничивает вложения, —
+    // сколько баллов на руках. Прежний предел в пять рангов упирался как раз
+    // к концу игры, и последние баллы девать было некуда.
+    {
+        Game u;
+        u.new_game("Упорный");
+        const int dmg0 = u.total().dmg_min;
+        u.player().skill_points = 20;
+        bool all_ok = true;
+        for (int i = 0; i < 20; ++i)
+            if (!u.learn_skill("might")) all_ok = false;
+        check(all_ok, "двадцать вложений подряд проходят");
+        eq(u.player().skills["might"], 20, "ранг дорос до двадцати");
+        eq(u.player().skill_points, 0, "все баллы потрачены");
+        check(!u.learn_skill("might"), "а без баллов дальше некуда");
+        // Бонус складывается каждый раз, а не упирается: «Мощь» даёт +1 к
+        // нижнему урону за ранг, и двадцать рангов дают ровно двадцать.
+        eq(u.total().dmg_min, dmg0 + 20, "двадцать рангов дали двадцать к урону");
+    }
 
     // Большая выдача опыта должна поднять сразу несколько уровней.
     g.grant_exp(10000);
@@ -422,6 +708,57 @@ void test_shop() {
 
     check(g.sell(*s, "bread"), "продажа проходит");
     eq(g.player().gold, gold0 - 6 + 2, "золото начислено");
+
+    // --- продажа пачкой ---
+    // Просят больше, чем есть, — продаётся всё, что есть, и ни штукой
+    // больше. Обрезание живёт в самой продаже, а не в окне: набрать
+    // двадцать хвостов, имея три, нельзя никаким путём.
+    {
+        Game b;
+        b.new_game("Купец");
+        const int one = b.sell_price(*s, *bread);
+        b.add_item("bread", 5);
+        const int have = b.count_item("bread");
+        const int gold_before = b.player().gold;
+        check(b.sell(*s, "bread", 999), "просьба продать больше, чем есть, проходит");
+        eq(b.count_item("bread"), 0, "но продалось ровно всё, что было");
+        eq(b.player().gold, gold_before + one * have, "и заплачено за столько же");
+    }
+    // Ноль и отрицательное — это одна штука, а не ноль штук и не подарок
+    // лавочнику: окно даёт выбрать от единицы, и логика держит ту же границу.
+    {
+        Game b;
+        b.new_game("Купец");
+        b.add_item("bread", 4);
+        // Считаем от того, что есть на самом деле: герой начинает игру не с
+        // пустой сумкой, и жёсткое число здесь ловило бы стартовый набор,
+        // а не обрезание.
+        const int have = b.count_item("bread");
+        const int gold_before = b.player().gold;
+        const int one = b.sell_price(*s, *bread);
+        check(b.sell(*s, "bread", 0), "ноль штук — это одна");
+        eq(b.count_item("bread"), have - 1, "ушла ровно одна");
+        check(b.sell(*s, "bread", -7), "отрицательное — тоже одна");
+        eq(b.count_item("bread"), have - 2, "и снова одна");
+        eq(b.player().gold, gold_before + one * 2, "заплачено за две");
+    }
+    // Чего нет — того не продать, сколько ни проси.
+    {
+        Game b;
+        b.new_game("Купец");
+        check(!b.sell(*s, "ring_hp", 3), "несуществующий в сумке товар не продаётся");
+        check(!b.sell(*s, "ring_hp", 1), "и по одной тоже");
+    }
+    // Ровно столько, сколько есть, — обычный случай, и он не должен
+    // спотыкаться на границе.
+    {
+        Game b;
+        b.new_game("Купец");
+        b.add_item("herb_potion", 3);
+        const int n = b.count_item("herb_potion");
+        check(b.sell(*s, "herb_potion", n), "продажа ровно всего запаса проходит");
+        eq(b.count_item("herb_potion"), 0, "запас кончился");
+    }
 
     // Нельзя купить дороже, чем есть денег.
     g.player().gold = 0;
@@ -1475,6 +1812,48 @@ void test_font() {
     check(missing.empty(), "весь текст игры покрыт шрифтом; нет глифов:" + report);
 }
 
+void test_long_press() {
+    section("касания: удержание");
+
+    gfx::Pointer p;
+    p.configure(20, 500);
+    gfx::Gesture g;
+
+    // Удержание выдаётся, пока палец ещё на экране: окно должно всплыть
+    // под пальцем, а не после того, как его убрали.
+    p.down(1, 100, 100, 0);
+    p.tick(200);
+    check(!p.poll(&g), "до порога удержания ничего нет");
+    p.tick(500);
+    check(p.poll(&g), "на пороге удержание выдано");
+    eq(static_cast<int>(g.kind), static_cast<int>(gfx::G_LONG), "именно удержание");
+    eq(g.x, 100, "в точке касания");
+    p.tick(900);
+    check(!p.poll(&g), "и выдано ровно один раз");
+
+    // После удержания отпускание не тапает: одно касание — одно действие,
+    // иначе всплывшее окно тут же получало бы тап по себе.
+    p.up(1, 100, 100, 1000);
+    check(!p.poll(&g), "отпускание после удержания тапом не считается");
+
+    // Уехавший палец удержанием не становится: это прокрутка.
+    p.clear();
+    p.down(2, 100, 100, 0);
+    p.move(2, 100, 160, 100);
+    while (p.poll(&g)) {}          // свайпы разобрали
+    p.tick(2000);
+    check(!p.poll(&g), "после свайпа удержания нет");
+
+    // Быстрый тап удержанием тоже не становится.
+    p.clear();
+    p.down(3, 10, 10, 0);
+    p.tick(100);
+    p.up(3, 10, 10, 200);
+    check(p.poll(&g), "жест есть");
+    eq(static_cast<int>(g.kind), static_cast<int>(gfx::G_TAP), "и это обычный тап");
+    check(!p.poll(&g), "больше ничего");
+}
+
 void test_gestures() {
     section("касания: тап, состояние пальца, свайп");
 
@@ -2218,7 +2597,7 @@ void test_balance() {
     }
 
     // Кривая растёт быстрее прямой: иначе поздние уровни стоят столько же,
-    // сколько ранние, и всё содержимое игры выводит героя за предел навыков.
+    // сколько ранние, и всё содержимое игры сыплет баллы навыка пачками.
     {
         Game g;
         g.new_game("Проба", "human", "swordsman");
@@ -2229,7 +2608,9 @@ void test_balance() {
         check(at10 > at5, "следующий уровень дороже предыдущего");
         check(at30 > 3 * at10, "и дорожает быстрее, чем просто вдвое-втрое");
 
-        // Всех очков навыка в игре не должно хватать на все семь до предела.
+        // Опыта всего мира хватает примерно на двадцать шесть уровней, то есть
+        // на два с половиной десятка баллов на семь навыков: развить всё
+        // одинаково не выйдет, и выбирать приходится до самого конца.
         long need = 0;
         for (int l = 1; l < 27; ++l) { p.level = l; need += g.exp_to_next(); }
         p.level = 1;
@@ -2727,6 +3108,230 @@ void test_no_escape_needed() {
           "конец ввода не совпадает со стрелками");
 }
 
+// Честный поединок: без лечения, настоящим боевым кодом. Возвращает исход
+// и остаток здоровья. Противника берём с карты — мобы появляются только в
+// своих зонах, и поставить кого угодно перед героем нельзя ни одним
+// открытым вызовом. Это и к лучшему: дерёмся с тем, что игра правда даёт.
+struct DuelResult {
+    bool met;        // противник вообще нашёлся
+    bool won;
+    int  hp_left;
+    int  hp_max;
+    int  rounds;
+    DuelResult() : met(false), won(false), hp_left(0), hp_max(0), rounds(0) {}
+};
+
+DuelResult duel_here(Game& g, const std::string& enemy_id) {
+    DuelResult r;
+    int uid = -1;
+    for (std::size_t i = 0; i < g.mobs().size(); ++i)
+        if (g.mobs()[i].enemy_id == enemy_id && g.mobs()[i].loc == g.player().loc) {
+            uid = g.mobs()[i].uid; break;
+        }
+    if (uid < 0) return r;
+    r.met = true;
+    r.hp_max = g.total().max_hp;
+
+    g.start_combat(uid);
+    for (int turn = 0; turn < 400 && g.combat().active; ++turn) {
+        ++r.rounds;
+        // Ход героя: бьём, пока хватает очков действия, потом передаём ход.
+        // Ни здоровья, ни очков даром — только то, что даёт сама игра.
+        if (g.player().ap >= g.attack_cost()) g.combat_attack(false);
+        else                                  g.combat_end_turn();
+        if (g.player_dead()) break;
+    }
+    r.won = (g.mob_by_uid(uid) == 0) && !g.player_dead();
+    r.hp_left = g.player().hp;
+    return r;
+}
+
+// Довести героя до нужного уровня и вложить баллы. Опыт выдаётся настоящим
+// grant_exp, баллы тратятся настоящим learn_skill: никаких прямых записей
+// в характеристики, иначе мерился бы не тот герой, которого получит игрок.
+void build_hero(Game& g, int level, const std::string& skill) {
+    while (g.player().level < level) g.grant_exp(g.exp_to_next());
+    if (!skill.empty())
+        while (g.player().skill_points > 0)
+            if (!g.learn_skill(skill)) break;
+}
+
+// Перейти в соседнюю локацию настоящим шагом через выход.
+bool walk_to(Game& g, const std::string& target) {
+    const Location* loc = g.here();
+    if (!loc) return false;
+    for (std::size_t i = 0; i < loc->exits.size(); ++i) {
+        if (loc->exits[i].target != target) continue;
+        const int dx[] = {1, -1, 0, 0}, dy[] = {0, 0, 1, -1};
+        for (int k = 0; k < 4; ++k) {
+            Vec2 from(loc->exits[i].pos.x - dx[k], loc->exits[i].pos.y - dy[k]);
+            if (!loc->walkable(from) && !loc->exit_at(from)) continue;
+            g.player().pos = from;
+            if (g.try_move(dx[k], dy[k]) == Bump::Exit) return true;
+        }
+    }
+    return false;
+}
+
+void test_difficulty() {
+    section("сложность: нужна ли прокачка");
+
+    // --- новичок против волка ---
+    // Волк живёт в лесу, сразу за деревней: это первое, во что упирается
+    // игрок, вышедший за ворота. Он и должен показать, что дальше без
+    // прокачки не пройти.
+    {
+        Game g;
+        g.new_game("Новичок", "human", "swordsman");
+        check(walk_to(g, "forest"), "из деревни есть выход в лес");
+        DuelResult d = duel_here(g, "wolf");
+        check(d.met, "волк в лесу нашёлся");
+        if (d.met) {
+            std::cout << "  новичок 1 ур. против волка: "
+                      << (d.won ? "победа" : "поражение")
+                      << ", здоровья " << d.hp_left << " из " << d.hp_max
+                      << ", раундов " << d.rounds << "\n";
+        }
+    }
+
+    // --- тот же волк, но герой вложился в «Крепость» ---
+    {
+        Game g;
+        g.new_game("Вложился", "human", "swordsman");
+        build_hero(g, 4, "vigor");
+        check(g.total().max_hp > Game().total().max_hp, "«Крепость» подняла запас");
+        check(walk_to(g, "forest"), "выход в лес на месте");
+        DuelResult d = duel_here(g, "wolf");
+        if (d.met) {
+            std::cout << "  4 ур. с «Крепостью» против волка: "
+                      << (d.won ? "победа" : "поражение")
+                      << ", здоровья " << d.hp_left << " из " << d.hp_max
+                      << ", раундов " << d.rounds << "\n";
+        }
+    }
+
+    // --- вожак: то, что должно быть не по зубам новичку ---
+    {
+        Game g;
+        g.new_game("Новичок", "human", "swordsman");
+        walk_to(g, "forest");
+        DuelResult d = duel_here(g, "wolf_alpha");
+        check(d.met, "вожак в лесу нашёлся");
+        if (d.met) {
+            check(!d.won, "новичок вожака не одолевает");
+            std::cout << "  новичок 1 ур. против вожака: "
+                      << (d.won ? "победа" : "поражение")
+                      << ", здоровья " << d.hp_left << " из " << d.hp_max
+                      << ", раундов " << d.rounds << "\n";
+        }
+    }
+
+    // --- уровень сам по себе не даёт ничего ---
+    // Это главное следствие того, что характеристики больше не растут сами.
+    // Двадцать уровней без единого вложения — тот же герой, что и в начале:
+    // сила приходит только из решений игрока, а не из счётчика опыта.
+    {
+        Game a; a.new_game("Первый", "human", "swordsman");
+        Game b; b.new_game("Двадцатый", "human", "swordsman");
+        build_hero(b, 20, "");
+        eq(b.player().level, 20, "уровень действительно вырос");
+        // Девятнадцать подъёмов плюс балл, который герой получает на старте.
+        eq(b.player().skill_points, a.player().skill_points + 19,
+           "и баллы накопились нетронутыми");
+        const Stats sa = a.total(), sb = b.total();
+        eq(sb.max_hp, sa.max_hp, "здоровье без вложений то же");
+        eq(sb.attack, sa.attack, "меткость та же");
+        eq(sb.max_ap, sa.max_ap, "очки действия те же");
+        eq(sb.dmg_max, sa.dmg_max, "урон тот же");
+
+        // И такой герой по-прежнему проигрывает тому же вожаку.
+        walk_to(b, "forest");
+        DuelResult d = duel_here(b, "wolf_alpha");
+        if (d.met) {
+            check(!d.won, "двадцатый уровень без вложений вожака тоже не берёт");
+            std::cout << "  20 ур. без вложений против вожака: "
+                      << (d.won ? "победа" : "поражение")
+                      << ", здоровья " << d.hp_left << " из " << d.hp_max << "\n";
+        }
+    }
+
+    // --- лестница: цена победы над каждым доступным врагом ---
+    // Считаем, со скольких вложенных баллов герой начинает выигрывать
+    // поединок. Одно число ничего не доказывает, лестница — доказывает:
+    // она показывает, растёт ли требование вместе с содержимым или всё
+    // берётся с нуля.
+    {
+        struct Rung { const char* enemy; const char* where; const char* name; };
+        // Всё это доступно без квестовых ворот: лес и погост — соседи деревни.
+        const Rung ladder[] = {
+            { "rat",          "village",   "амбарная крыса" },
+            { "wolf",         "forest",    "волк" },
+            { "bandit",       "forest",    "разбойник" },
+            { "barrow_shade", "graveyard", "тень с погоста" },
+            { "wolf_alpha",   "forest",    "вожак" },
+        };
+        int prev = 0;
+        bool grows = true;
+        for (std::size_t r = 0; r < sizeof(ladder) / sizeof(ladder[0]); ++r) {
+            // Бой случаен, и одна схватка ничего не говорит: у тени с погоста
+            // характеристики выше, чем у разбойника, а по единственной выборке
+            // она выходила легче. Поэтому каждый расклад гоняется на TRIALS
+            // разных зёрен, и решают доля побед и средний остаток здоровья.
+            const int TRIALS = 24;
+            int need = -1;
+            int win_pct = 0, left_pct = 0;
+            for (int ranks = 0; ranks <= 20 && need < 0; ++ranks) {
+                int wins = 0, left_sum = 0, cap_sum = 0, met = 0;
+                for (int t = 0; t < TRIALS; ++t) {
+                    Game g;
+                    g.new_game("Упорный", "human", "swordsman");
+                    g.rng().set_seed(0xA11CE + static_cast<unsigned long long>(t) * 7919ULL);
+                    if (ranks > 0) {
+                        while (g.player().level < ranks + 1) g.grant_exp(g.exp_to_next());
+                        // Вкладываем вперемешку: запас здоровья и урон. Одну
+                        // ветку качать выгоднее, но так мерится обычный игрок,
+                        // а не выжимка из механики.
+                        for (int k = 0; k < ranks; ++k)
+                            g.learn_skill(k % 2 == 0 ? "vigor" : "might");
+                    }
+                    if (std::string(ladder[r].where) != "village" &&
+                        !walk_to(g, ladder[r].where)) break;
+                    DuelResult d = duel_here(g, ladder[r].enemy);
+                    if (!d.met) break;
+                    ++met;
+                    if (d.won) ++wins;
+                    left_sum += d.hp_left;
+                    cap_sum += d.hp_max;
+                }
+                if (met == 0) { need = -2; break; }
+                // Ступень считается взятой, когда она берётся уверенно, а не
+                // изредка: победа в трети схваток — это ещё стена.
+                if (wins * 4 >= met * 3) {
+                    need = ranks;
+                    win_pct = wins * 100 / met;
+                    left_pct = cap_sum > 0 ? left_sum * 100 / cap_sum : 0;
+                }
+            }
+            // Запас после победы важнее самого факта: выигрыш на последних
+            // очках здоровья — это бой, выигрыш почти без потерь — прогулка.
+            std::cout << "  " << ladder[r].name << ": уверенная победа с "
+                      << (need < 0 ? std::string("(не найден)") : to_str(need))
+                      << " баллами, побед " << win_pct
+                      << "%, остаётся здоровья " << left_pct << "%\n";
+            if (need >= 0) {
+                if (need < prev) grows = false;
+                prev = need;
+            }
+        }
+        // Лестница меряет голую прокачку: снаряжения герой не покупает, а
+        // игрок покупает. Поэтому это нижняя граница требований, и судить по
+        // ней надо об отношении ступеней, а не об абсолютных числах.
+        check(grows, "требование не падает по мере усиления врагов");
+        check(prev > 1, "последняя ступень не берётся с одного балла");
+        check(prev > 0 && prev <= 20, "и всё же берётся одной прокачкой");
+    }
+}
+
 void test_playthrough() {
     section("сквозное прохождение: все квесты");
     Game g;
@@ -2770,13 +3375,49 @@ void test_playthrough() {
     // определяется по исчезнувшему врагу, а не по «бой больше не идёт»:
     // отличать одно от другого обязательно, иначе непроходимый противник
     // тихо считается убитым.
+    // Замер сложности. Тест лечит героя каждый ход, иначе он проверял бы
+    // выживание вместо проходимости, — но само это лечение и есть мера
+    // сложности: сколько урона содержимое игры вернуло герою в лицо.
+    // Складывается он честно, по разнице до и после каждого хода врага.
+    long dmg_total = 0;        // весь принятый урон за прохождение
+    int  dmg_worst = 0;        // худший бой: сколько в нём принято
+    int  fights_done = 0;
+    int  fights_over_half = 0; // боёв, где принято больше половины запаса
+    int  fights_lethal = 0;    // боёв, где принято больше полного запаса
+    int  hp_at_worst = 0;      // каков был запас в тот момент
+
+    // Баллы навыка тратятся так, как их тратил бы игрок: сперва запас
+    // здоровья, пока он отстаёт от уровня, потом урон. Без этого прогон мерил
+    // бы героя, который двадцать шесть уровней не открывал окно навыков, —
+    // а это не «трудно», это «не играл».
+    auto spend_points = [&]() {
+        while (g.player().skill_points > 0) {
+            const bool need_hp = g.total().max_hp < 40 + g.player().level * 3;
+            if (!g.learn_skill(need_hp ? "vigor" : "might")) break;
+        }
+    };
+
     auto fight = [&](int uid) {
+        spend_points();
         g.start_combat(uid);
+        ++fights_done;
+        int taken_here = 0;
         for (int turns = 0; turns < 600 && g.combat().active; ++turns) {
-            g.player().hp = g.total().max_hp;
+            const int cap = g.total().max_hp;
+            const int missing = cap - g.player().hp;
+            if (missing > 0) { taken_here += missing; dmg_total += missing; }
+            g.player().hp = cap;
             if (g.player().ap < g.attack_cost()) g.player().ap = g.total().max_ap;
             g.combat_attack(false);
             if (g.player_dead()) g.player().hp = g.total().max_hp;
+        }
+        {
+            const int cap = g.total().max_hp;
+            const int missing = cap - g.player().hp;
+            if (missing > 0) { taken_here += missing; dmg_total += missing; }
+            if (taken_here > dmg_worst) { dmg_worst = taken_here; hp_at_worst = cap; }
+            if (cap > 0 && taken_here * 2 > cap) ++fights_over_half;
+            if (cap > 0 && taken_here > cap) ++fights_lethal;
         }
         g.player().effects.clear();      // тест не про выживание под ядом
         if (g.player().hp <= 0) g.player().hp = g.total().max_hp;
@@ -3805,6 +4446,13 @@ void test_playthrough() {
     std::cout << "  (итог: уровень " << g.player().level
               << ", золота " << g.player().gold
               << ", квестов пройдено " << (sizeof(all_quests) / sizeof(all_quests[0]))
+              << ", записей журнала " << g.log().size()
+              << ")\n";
+    std::cout << "  (сложность: боёв " << fights_done
+              << ", принято урона " << dmg_total
+              << ", худший бой " << dmg_worst << " при запасе " << hp_at_worst
+              << ", боёв тяжелее половины запаса " << fights_over_half
+              << ", смертельных без лечения " << fights_lethal
               << ")\n";
 }
 
@@ -3814,6 +4462,11 @@ int main() {
     std::cout << "Тесты «Любви Эндора»\n";
     test_text_helpers();
     test_wrap();
+    test_log_history();
+    test_item_text();
+    test_reflow();
+    test_log_tail();
+    test_log_tail_source();
     test_glyphs();
     test_maps();
     test_embedded_maps();
@@ -3840,12 +4493,14 @@ int main() {
     test_content_integrity();
     test_font();
     test_gestures();
+    test_long_press();
     test_walk();
     test_png();
     test_tiles();
     test_dark();
     test_balance();
     test_finale();
+    test_difficulty();
     test_playthrough();
 
     std::cout << "\n----------------------------------------\n";

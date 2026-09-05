@@ -1,5 +1,6 @@
 #include "types.h"
 
+#include <algorithm>
 #include <sstream>
 
 char tile_glyph(Tile t) {
@@ -186,6 +187,71 @@ std::vector<std::string> wrap(const std::string& text, std::size_t width) {
         if (nl == std::string::npos) break;
         start = nl + 1;
     }
+    return out;
+}
+
+std::string reflow(const std::vector<std::string>& lines) {
+    std::vector<std::string> out;
+    std::string para;
+    for (std::size_t i = 0; i < lines.size(); ++i) {
+        const std::string& l = lines[i];
+        const bool blank = l.find_first_not_of(" \t") == std::string::npos;
+        const bool literal = !blank && (l[0] == ' ' || l[0] == '\t');
+        // Тире в начале строки — это новая реплика. Приклеив её к предыдущей,
+        // мы свели бы двух говорящих в одну строку.
+        const bool speech = l.compare(0, 3, "\xE2\x80\x94") == 0;
+        if (blank || literal) {
+            if (!para.empty()) { out.push_back(para); para.clear(); }
+            out.push_back(blank ? std::string() : l);
+            continue;
+        }
+        if (speech && !para.empty()) { out.push_back(para); para.clear(); }
+        if (!para.empty()) para += ' ';
+        para += l;
+    }
+    if (!para.empty()) out.push_back(para);
+
+    std::string s;
+    for (std::size_t i = 0; i < out.size(); ++i) {
+        if (i) s += '\n';
+        s += out[i];
+    }
+    return s;
+}
+
+std::string reflow(const std::string& text) {
+    std::vector<std::string> lines;
+    std::size_t start = 0;
+    while (true) {
+        const std::size_t nl = text.find('\n', start);
+        lines.push_back(text.substr(start,
+                        nl == std::string::npos ? std::string::npos : nl - start));
+        if (nl == std::string::npos) break;
+        start = nl + 1;
+    }
+    return reflow(lines);
+}
+
+std::vector<std::string> log_tail(const std::vector<std::string>& lines,
+                                  std::size_t width, int rows,
+                                  std::vector<std::size_t>* src) {
+    std::vector<std::string> out;
+    if (src) src->clear();
+    if (rows <= 0) return out;
+
+    // Идём с конца: разворачивать весь журнал ради нескольких последних
+    // строк незачем, а обрывать надо именно сверху.
+    for (std::size_t k = lines.size(); k-- > 0; ) {
+        const std::vector<std::string> part = wrap(lines[k], width);
+        for (std::size_t i = part.size(); i-- > 0; ) {
+            out.push_back(part[i]);
+            if (src) src->push_back(k);
+            if (static_cast<int>(out.size()) >= rows) break;
+        }
+        if (static_cast<int>(out.size()) >= rows) break;
+    }
+    std::reverse(out.begin(), out.end());
+    if (src) std::reverse(src->begin(), src->end());
     return out;
 }
 

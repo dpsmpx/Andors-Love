@@ -21,7 +21,8 @@ namespace gfx {
 enum GestureKind {
     G_NONE = 0,
     G_TAP,          // коснулся и отпустил, не сдвинувшись
-    G_SWIPE         // сдвинул дальше порога: прокрутка (dx, dy — один из четырёх)
+    G_SWIPE,        // сдвинул дальше порога: прокрутка (dx, dy — один из четырёх)
+    G_LONG          // держит на месте дольше порога: второе действие над строкой
 };
 
 struct Gesture {
@@ -40,7 +41,13 @@ public:
     Pointer();
 
     // Порог свайпа в пикселях: короче него движение считается дрожанием руки.
-    void configure(int swipe_px);
+    // long_ms — сколько держать на месте, чтобы вышло удержание.
+    void configure(int swipe_px, unsigned long_ms = 500);
+
+    // Ход часов. Удержание — единственный жест, который случается, пока палец
+    // ещё на экране, поэтому его не выдать ни на down, ни на up: о том, что
+    // время вышло, кто-то должен спросить. Спрашивает игровой цикл, раз в кадр.
+    void tick(unsigned now_ms);
 
     void down(int id, int x, int y, unsigned now_ms);
     void move(int id, int x, int y, unsigned now_ms);
@@ -72,8 +79,10 @@ private:
         unsigned down_ms;
         unsigned serial;         // номер этого касания
         bool swiped;             // касание уже ушло в свайпы
+        bool longed;             // удержание уже выдано: второй раз не надо
         Touch() : id(-1), active(false), start_x(0), start_y(0),
-                  cur_x(0), cur_y(0), down_ms(0), serial(0), swiped(false) {}
+                  cur_x(0), cur_y(0), down_ms(0), serial(0), swiped(false),
+                  longed(false) {}
     };
 
     Touch* find(int id);
@@ -82,7 +91,8 @@ private:
     static const int MAX_TOUCHES = 10;
     Touch touches_[MAX_TOUCHES];
     std::vector<Gesture> queue_;
-    int  swipe_px_;
+    int      swipe_px_;
+    unsigned long_ms_;
 
     int      lead_;              // id ведущего пальца, -1 — ни одного
     int      press_x_, press_y_;

@@ -19,14 +19,15 @@ namespace gfx {
 // ряд кнопок», поэтому это одна структура с меткой, а не иерархия классов.
 struct Modal {
     enum Kind {
-        GameMenu,     // меню по тапу в пустоту
-        Pause,        // сохранить / загрузить / выйти
+        GameMenu,     // меню по кнопке внизу окна
+        Log,          // весь журнал партии, листается до начала
         Character,
         Inventory,
-        ItemMenu,     // что сделать с выбранной вещью
+        ItemMenu,     // характеристики вещи и что с ней сделать
+        ShopItem,     // витрина: характеристики товара и цена до покупки
+        Amount,       // сколько штук продать: ползунок и поле ввода
         Quests,
         Skills,
-        Effects,
         Portals,
         Library,
         Book,
@@ -51,15 +52,30 @@ struct Modal {
     std::string body;
     std::string arg;           // npc_id / shop_id / book_id / item_id / ending_id
     std::string node;          // текущий узел диалога
+    // Когда arg занят лавкой, товар лежит здесь: у витрины и у окна продажи
+    // пачкой есть и лавка, и предмет, и одного поля на двоих не хватает.
+    std::string item;
+    // Из какого гнезда снимать надетую вещь. -1 — вещь лежит в сумке.
+    int         slot;
+    // Сколько штук продаём. Держится в границах [1, сколько есть] в одном
+    // месте — clamp_amount, — чтобы ползунок и набор с клавиатуры не могли
+    // разойтись в том, что считают допустимым.
+    int         amount;
     bool        selling;       // вкладка магазина: покупка или продажа
     // Для TextInput: что правим и чем ограничены. index < 0 — название книги.
     std::string buffer;
     int         index;
     std::size_t max_len;
 
-    Modal() : kind(GameMenu), born_press(0), scroll(0), selling(false), index(-1), max_len(0) {}
-    explicit Modal(Kind k) : kind(k), born_press(0), scroll(0), selling(false), index(-1), max_len(0) {}
+    Modal() : kind(GameMenu), born_press(0), scroll(0), slot(-1), amount(1),
+              selling(false), index(-1), max_len(0) {}
+    explicit Modal(Kind k) : kind(k), born_press(0), scroll(0), slot(-1), amount(1),
+                             selling(false), index(-1), max_len(0) {}
 };
+
+// Текстовые окна — это абзац, а не список: у них своя прокрутка и одна
+// кнопка. Список видов один на всю оболочку (см. modals.cpp).
+bool is_text_modal(Modal::Kind k);
 
 class App {
 public:
@@ -94,6 +110,12 @@ private:
     void on_tap(int x, int y, unsigned press);
     void on_key(int key);
     void on_swipe(int dx, int dy);
+    void on_long(int x, int y, unsigned press);
+    void modal_long(Modal& m, int x, int y);
+    void clamp_amount(Modal& m);
+    void amount_from_text(Modal& m);
+    void drag_amount(Modal& m);
+    Rect amount_track(const Rect& area) const;
     // Ходьба по удерживаемому пальцу: цель — клетка под пальцем, темп —
     // шаг или бег, смотря сколько палец уже держится.
     void follow_finger();
@@ -120,6 +142,7 @@ private:
     void push_text_input(const std::string& title, const std::string& book_id,
                          int index, const std::string& initial, std::size_t max_len);
     void commit_text_input(Modal& m);
+    void commit_amount(Modal& m);
     static const int BOOK_APPEND = -2;
     void pop();
     // Закрыть верхнее окно с учётом того, что за ним стоит: после экрана
@@ -144,8 +167,13 @@ private:
     // Раскладки считаются в одном месте и на неё смотрят и рисование, и
     // попадание пальца. Дублировать расчёт нельзя: разъедется — и кнопка
     // окажется не там, где её видно.
+    // Геометрия окна. Возвращает область содержимого; head_out, если он задан,
+    // получает верхнюю часть под заголовочный текст (характеристики вещи над
+    // списком действий), и из возвращаемой области она уже вычтена. Считается
+    // это одним куском нарочно: и рисование, и попадание пальцем ходят через
+    // эту функцию, поэтому разъехаться им негде.
     Rect modal_body(const Modal& m, Rect* frame_out, std::vector<Rect>* buttons,
-                    std::vector<std::string>* labels) const;
+                    std::vector<std::string>* labels, Rect* head_out = 0) const;
     std::string modal_title(const Modal& m) const;
     void dialogue_layout(const Modal& m, const Rect& area, int n,
                          std::vector<Rect>* out) const;
@@ -154,6 +182,15 @@ private:
     void combat_layout(std::vector<Rect>* top_row, std::vector<Rect>* bottom_row,
                        Rect* body) const;
     void hud_buttons(std::vector<Rect>* out) const;
+    void draw_log();
+    // Важность события -> цвет строки. Одна на ленту внизу и на окно журнала.
+    Color tone_color(unsigned char tone) const;
+    // Журнал, уже разложенный по ширине окна. За партию его набирается под
+    // тысячу записей, и переносить их заново на каждом кадре — работа
+    // на пустом месте. Журнал только дописывается, поэтому при неизменной
+    // ширине раскладываются лишь новые записи, а не весь список.
+    const std::vector<std::string>& log_lines(int cols) const;
+    const std::vector<unsigned char>& log_line_tones() const { return log_tones_; }
     void activate_row(Modal& m, int index);
     void save_game();
     void load_game();
@@ -164,13 +201,24 @@ private:
     // столько, сколько имеет смысл разглядывать с телефона в руке.
     int  map_scale() const;
     int  map_cell() const;
-    // Нижняя граница нарисованной карты: под ней остаётся место, и оно
-    // отдано журналу — иначе на телефоне полэкрана пустует.
-    int  map_bottom() const;
+    // Прямоугольник, который занимает сама карта. Считается один раз и здесь:
+    // отрисовка и попадание пальцем обязаны брать его из одного места, иначе
+    // тап уходит не в ту клетку, и понять это по картинке нельзя.
+    Rect map_block() const;
+    // Остаток области сверху отдан журналу: иначе на телефоне полэкрана
+    // пустует.
+    Rect log_area() const;
     Rect hud_area() const;
     // Клетка карты под точкой экрана; возвращает false, если мимо карты.
     bool cell_at(int x, int y, Vec2* out) const;
     void camera(int* cx, int* cy, int* cols, int* rows) const;
+
+    mutable std::vector<std::string> log_lines_;
+    // Важность каждой разложенной строки: длина совпадает с log_lines_.
+    mutable std::vector<unsigned char> log_tones_;
+    mutable std::size_t              log_lines_src_;
+    mutable int                      log_lines_w_;
+    mutable unsigned long            log_lines_ep_;
 
     Canvas   c_;
     Pointer  ptr_;

@@ -282,6 +282,8 @@ bool Game::load_from(const std::string& path) {
     next_uid_     = next_uid > 0 ? next_uid : 1;
     cb_           = Combat();
     log_.clear();
+    log_tone_.clear();
+    ++log_epoch_;
     if (seed) rng_.set_seed(seed);
 
     // Клампим текущие HP/AP: снаряжение могло измениться между версиями.

@@ -41,9 +41,45 @@ Color object_color(unsigned cp) { return rgba_to_color(default_object_color(cp))
 } // namespace
 
 App::App()
-    : mode_(MODE_MENU), quit_(false), has_save_(false),
+    : log_lines_src_(0), log_lines_w_(0), log_lines_ep_(0),
+      mode_(MODE_MENU), quit_(false), has_save_(false),
       create_step_(0), new_race_("human"), new_spec_("swordsman"),
       now_ms_(0), died_(false) {}
+
+const std::vector<std::string>& App::log_lines(int cols) const {
+    const std::vector<std::string>& lg = g_.log();
+    const unsigned long ep = g_.log_epoch();
+    if (cols < 4) cols = 4;
+    if (log_lines_w_ == cols && log_lines_ep_ == ep && log_lines_src_ == lg.size())
+        return log_lines_;
+
+    // Ширина сменилась, или у журнала срезали начало (предел записей, новая
+    // партия, загрузка) — раскладывать заново. Одной длины для этого мало:
+    // после срезания журнал дорастает до прежней длины другими записями,
+    // поэтому спрашивается счётчик срезаний. В обычном же случае журнал
+    // только дописывается, и трогать разложенное незачем.
+    if (log_lines_w_ != cols || log_lines_ep_ != ep || log_lines_src_ > lg.size()) {
+        log_lines_.clear();
+        log_tones_.clear();
+        log_lines_src_ = 0;
+        log_lines_w_ = cols;
+        log_lines_ep_ = ep;
+    }
+    const std::vector<unsigned char>& tones = g_.log_tones();
+    for (std::size_t i = log_lines_src_; i < lg.size(); ++i) {
+        const std::vector<std::string> part = wrap(lg[i], static_cast<std::size_t>(cols));
+        // Важность запоминается вместе со строками: у длинной записи обе
+        // половины одного цвета, а искать её потом по номеру было бы нечем —
+        // после переноса связь строки с записью теряется.
+        const unsigned char t = i < tones.size() ? tones[i] : 0;
+        for (std::size_t k = 0; k < part.size(); ++k) {
+            log_lines_.push_back(part[k]);
+            log_tones_.push_back(t);
+        }
+    }
+    log_lines_src_ = lg.size();
+    return log_lines_;
+}
 
 // ------------------------------------------------------------------- запуск
 
@@ -94,10 +130,15 @@ int App::run(int argc, char** argv) {
 void App::step(unsigned now_ms) {
     now_ms_ = now_ms;
 
+    // Часы распознавателя идут до разбора очереди: удержание должно попасть
+    // в ту же порцию событий, что и всё остальное этого кадра.
+    ptr_.tick(now_ms_);
+
     Gesture gs;
     while (ptr_.poll(&gs)) {
         if (gs.kind == G_TAP) on_tap(gs.x, gs.y, gs.press);
         else if (gs.kind == G_SWIPE) on_swipe(gs.dx, gs.dy);
+        else if (gs.kind == G_LONG) on_long(gs.x, gs.y, gs.press);
     }
 
     // Палец на карте — герой идёт к нему. Это состояние, а не событие:
@@ -135,6 +176,7 @@ void App::draw() {
     if (mode_ == MODE_MENU)        draw_main_menu();
     else if (mode_ == MODE_CREATE) draw_create_hero();
     else {
+        draw_log();
         draw_world();
         draw_hud();
         if (g_.combat().active) draw_combat();
@@ -248,11 +290,18 @@ void App::on_tap(int x, int y, unsigned press) {
     world_tap(x, y);
 }
 
+// Удержание — второе действие над строкой списка. В мире его нет: там палец
+// на месте и так значит «иди сюда», и всплывать поверх ходьбы нечему.
+void App::on_long(int x, int y, unsigned press) {
+    Modal* m = top();
+    if (!m || m->born_press == press) return;
+    modal_long(*m, x, y);
+}
+
 void App::scroll_modal(Modal& m, int rows) {
     // Текстовые окна листаются своим счётчиком строк, списки — своим.
     // Крутить оба сразу — путаница: видно одно, а едет другое.
-    if (m.kind == Modal::Message || m.kind == Modal::Help ||
-        m.kind == Modal::Character || m.kind == Modal::Book || m.kind == Modal::Ending) {
+    if (is_text_modal(m.kind)) {
         m.scroll += rows;
         if (m.scroll < 0) m.scroll = 0;
         return;
@@ -266,6 +315,14 @@ void App::on_text(const char* utf8) {
     if (Modal* m = top()) {
         if (m->kind == Modal::TextInput && utf8_len(m->buffer) < m->max_len)
             m->buffer += utf8;
+        // В окне количества набирается число, поэтому буквы туда не попадают
+        // вовсе: проверять ввод после того, как он уже набран, значит спорить
+        // с игроком о том, что он только что видел на экране.
+        if (m->kind == Modal::Amount) {
+            for (const char* p = utf8; *p; ++p)
+                if (*p >= '0' && *p <= '9' && m->buffer.size() < 9) m->buffer += *p;
+            amount_from_text(*m);
+        }
         return;
     }
     if (mode_ == MODE_CREATE && create_step_ == 0 && utf8_len(new_name_) < 16)
@@ -282,6 +339,14 @@ bool App::reachable_cell(const Location& loc, Vec2 cell) {
 }
 
 void App::follow_finger() {
+    // Ползунок количества ведут пальцем так же, как цель на карте: это тоже
+    // состояние пальца, а не событие. Опрашивается тем же кадром и тем же
+    // способом, иначе ползунок дёргался бы по щелчкам вместо того, чтобы
+    // ехать за пальцем.
+    if (Modal* m = top()) {
+        if (m->kind == Modal::Amount && ptr_.pressed()) drag_amount(*m);
+        return;
+    }
     if (mode_ != MODE_PLAY || modal_open() || g_.combat().active) return;
     if (!ptr_.pressed()) return;
 
@@ -327,13 +392,13 @@ void App::world_tap(int x, int y) {
     const Location* loc = g_.here();
     if (!loc) return;
 
-    // Тап по себе или в стену — меню, но только если герой стоит. На ходу
-    // то же касание просто останавливает его: меню, выскочившее посреди
-    // дороги от промаха по стене, — последнее, что нужно бегущему.
+    // Тап по себе или в стену только останавливает ход. Меню открывается
+    // кнопкой внизу окна — она всегда на месте, а окно, выскакивающее от
+    // промаха по стене, мешало: целишься в проход, попадаешь в угол дома,
+    // и вместо шага получаешь меню.
     const bool on_self = (cell.x == g_.player().pos.x && cell.y == g_.player().pos.y);
     if (on_self || !reachable_cell(*loc, cell)) {
-        if (walk_.active()) { walk_.stop(); return; }
-        push(Modal::GameMenu);
+        walk_.stop();
         return;
     }
     // По остальному тап задаёт цель и отпускает: короткое касание отправляет
@@ -353,7 +418,19 @@ void App::on_key(int key) {
                 return;
             }
             if (key == '\r') { commit_text_input(*m); return; }
-            if (key == platform::KEY_ESC) { SDL_StopTextInput(); pop(); return; }
+            if (key == platform::KEY_ESC) { pop(); return; }   // клавиатуру гасит pop
+            return;
+        }
+        if (m->kind == Modal::Amount) {
+            if (key == 8) {
+                if (!m->buffer.empty()) m->buffer.erase(m->buffer.size() - 1);
+                amount_from_text(*m);
+                return;
+            }
+            if (key == '\r') { commit_amount(*m); return; }
+            if (key == platform::KEY_ESC) { pop(); return; }
+            if (key == platform::KEY_UP)   { ++m->amount; clamp_amount(*m); m->buffer = to_str(m->amount); return; }
+            if (key == platform::KEY_DOWN) { --m->amount; clamp_amount(*m); m->buffer = to_str(m->amount); return; }
             return;
         }
         const int n = 1 << 20;
@@ -431,9 +508,9 @@ void App::on_key(int key) {
         case 'i': case 'I': push(Modal::Inventory);  return;
         case 'q': case 'Q': push(Modal::Quests);     return;
         case 'k': case 'K': push(Modal::Skills);     return;
-        case 'f': case 'F': push(Modal::Effects);    return;
         case 'p': case 'P': push(Modal::Portals);    return;
         case 'b': case 'B': push(Modal::Library);    return;
+        case 'l': case 'L': push(Modal::Log);        return;
         case '?':           push(Modal::Help);       return;
         case 'm': case 'M':
         case platform::KEY_ESC: push(Modal::GameMenu); return;
@@ -528,10 +605,22 @@ int App::map_scale() const {
 
 int App::map_cell() const { return FONT_H * map_scale(); }
 
-int App::map_bottom() const {
+Rect App::map_block() const {
+    const Rect area = map_area();
     int ox, oy, cols, rows;
     camera(&ox, &oy, &cols, &rows);
-    return map_area().y + rows * map_cell();
+    const int cw = map_cell(), chh = map_cell();
+    const int w = cols * cw, h = rows * chh;
+    // Карта прижата книзу, вплотную к панели. На телефоне в вертикальном
+    // режиме по ней и тыкают чаще всего, а большой палец достаёт снизу;
+    // журнал же читают, но не трогают, и ему место наверху.
+    return Rect(area.x + (area.w - w) / 2, area.y + area.h - h, w, h);
+}
+
+Rect App::log_area() const {
+    const Rect area = map_area();
+    const Rect blk = map_block();
+    return Rect(area.x, area.y, area.w, blk.y - area.y);
 }
 
 void App::camera(int* cx, int* cy, int* cols, int* rows) const {
@@ -553,22 +642,18 @@ void App::camera(int* cx, int* cy, int* cols, int* rows) const {
 }
 
 bool App::cell_at(int x, int y, Vec2* out) const {
-    const Rect area = map_area();
-    if (!area.contains(x, y)) return false;
+    const Rect blk = map_block();
+    if (!blk.contains(x, y)) return false;
     int ox, oy, cols, rows;
     camera(&ox, &oy, &cols, &rows);
-    const int cw = map_cell(), chh = map_cell();
-    const int left = area.x + (area.w - cols * cw) / 2;
-    const int top  = area.y;
-    const int gx = (x - left) / cw, gy = (y - top) / chh;
-    if (x < left || y < top || gx >= cols || gy >= rows) return false;
+    const int gx = (x - blk.x) / map_cell(), gy = (y - blk.y) / map_cell();
+    if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) return false;
     if (out) *out = Vec2(ox + gx, oy + gy);
     return true;
 }
 
 void App::draw_world() {
     const Location* loc = g_.here();
-    const Rect area = map_area();
     if (!loc) {
         c_.text(c_.cell_w(), c_.cell_h(), "Локация не загружена", theme().warn, c_.scale());
         return;
@@ -578,8 +663,9 @@ void App::draw_world() {
     camera(&ox, &oy, &cols, &rows);
     const int sc = map_scale();
     const int cw = map_cell(), chh = map_cell();
-    const int left = area.x + (area.w - cols * cw) / 2;
-    const int top  = area.y;
+    const Rect blk = map_block();
+    const int left = blk.x;
+    const int top  = blk.y;
     // Глиф уже клетки: центрируем, иначе знаки липнут к левому краю.
     const int gpad = (cw - FONT_W * sc) / 2;
 

@@ -155,7 +155,7 @@ python3 tools/make_creature_tiles.py
 После правки карт:
 
 ```bash
-python3 tools/gen_maps.py && make embed && make
+python3 tools/check_maps.py && make embed && make
 ```
 
 ## Почему свой PNG, а не SDL_image

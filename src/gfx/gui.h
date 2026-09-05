@@ -99,4 +99,19 @@ int text_block(Canvas& c, const Rect& r, const std::string& s, Color col,
 // Сколько строк займёт текст в этой области.
 int text_block_rows(const Canvas& c, const Rect& r, const std::string& s);
 
+// То же, что text_block, но по уже разложенным строкам. Нужно там, где
+// раскладка стоит дорого и её держат готовой: журнал за партию набирает
+// под тысячу записей, и переносить их заново на каждом кадре незачем.
+int text_lines(Canvas& c, const Rect& r, const std::vector<std::string>& lines,
+               Color col, int scroll_rows);
+
+// То же, но каждая строка своего цвета: длина colors совпадает с lines. Нужно
+// журналу, где важное выделено, а обычное приглушено.
+int text_lines(Canvas& c, const Rect& r, const std::vector<std::string>& lines,
+               const std::vector<Color>& colors, int scroll_rows);
+
+// Полоса прокрутки у правого края области. Без неё непонятно, что содержимое
+// длиннее окна и в каком месте ты сейчас находишься.
+void scrollbar(Canvas& c, const Rect& r, int total, int visible, int scroll);
+
 } // namespace gfx

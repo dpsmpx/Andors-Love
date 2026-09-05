@@ -186,12 +186,14 @@ void draw_world(Game& g) {
                   static_cast<std::size_t>(L.cols)));
     }
 
-    const std::vector<std::string>& lg = g.log();
-    const std::size_t show = L.side ? 4 : 3;
-    std::size_t from = lg.size() > show ? lg.size() - show : 0;
-    for (std::size_t i = from; i < lg.size(); ++i)
-        out("  " + trunc(lg[i], static_cast<std::size_t>(L.cols) - 2));
-    for (std::size_t i = lg.size() - from; i < show; ++i) out("");
+    // Журнал переносится по словам: обрезанный хвост терялся совсем, а
+    // высота панели здесь постоянная, поэтому длинное сообщение вытесняет
+    // старые, а не показывается половиной.
+    const int show = L.side ? 4 : 3;
+    const std::vector<std::string> tail =
+        log_tail(g.log(), static_cast<std::size_t>(L.cols) - 2, show);
+    for (const std::string& s : tail) out("  " + s);
+    for (std::size_t i = tail.size(); i < static_cast<std::size_t>(show); ++i) out("");
     std::cout.flush();
 }
 
@@ -385,7 +387,11 @@ void screen_character(Game& g) {
     Stats nb = g.total_no_stance();
 
     std::string s;
+    const RaceDef* race_def = Content::get().race(p.race);
+    const SpecDef* spec_def = Content::get().spec(p.spec);
     s += "  " + p.name + ", уровень " + to_str(p.level) + "\n";
+    s += "  " + std::string(race_def ? race_def->name : p.race) + ", " +
+         std::string(spec_def ? spec_def->name : p.spec) + "\n";
     s += "  Опыт: " + to_str(p.exp) + " / " + to_str(g.exp_to_next()) + "\n";
     s += "  Золото: " + to_str(p.gold) + "\n\n";
     s += "  Здоровье      " + to_str(p.hp) + " / " + to_str(t.max_hp) + "\n";
@@ -461,21 +467,9 @@ void screen_inventory(Game& g) {
             case 0: g.use_item(key); break;
             case 1: g.equip(key); break;
             case 2: {
-                Stats b = d->bonus;
-                std::string s = "  " + d->name + " (" + kind_name(d->kind) + ")\n  " +
-                                d->desc + "\n\n  Цена: " + to_str(d->price) + "\n";
-                if (b.max_hp)  s += "  +" + to_str(b.max_hp)  + " к здоровью\n";
-                if (b.max_ap)  s += "  +" + to_str(b.max_ap)  + " к очкам действия\n";
-                if (b.attack)  s += "  " + to_str(b.attack)   + "% к меткости\n";
-                if (b.dmg_min || b.dmg_max)
-                    s += "  урон +" + to_str(b.dmg_min) + "/" + to_str(b.dmg_max) + "\n";
-                if (b.block)   s += "  " + to_str(b.block)    + "% к блоку\n";
-                if (b.armor)   s += "  " + to_str(b.armor)    + " к броне\n";
-                if (b.crit)    s += "  " + to_str(b.crit)     + "% к криту\n";
-                if (b.ap_atk)  s += "  " + to_str(b.ap_atk)   + " AP к стоимости атаки\n";
-                if (d->heal_hp) s += "  восстанавливает " + to_str(d->heal_hp) + " HP\n";
-                if (d->heal_ap) s += "  восстанавливает " + to_str(d->heal_ap) + " AP\n";
-                message_box("Предмет", s);
+                // Тот же текст, что видит графическая оболочка: описание вещи
+                // одно на обе, иначе они снова разойдутся в мелочах.
+                message_box("Предмет", item_desc(*d, "  "));
                 break;
             }
             case 3: g.drop_item(key); break;
@@ -526,7 +520,7 @@ void screen_skills(Game& g) {
         for (const SkillDef& s : c.skills()) {
             auto it = g.player().skills.find(s.id);
             int rank = (it == g.player().skills.end()) ? 0 : it->second;
-            std::string row = pad(s.name, 10) + to_str(rank) + "/" + to_str(s.max_rank);
+            std::string row = pad(s.name, 10) + "ранг " + to_str(rank);
             if (L.side) row += "  " + s.desc;
             rows.push_back(row);
             ids.push_back(s.id);
@@ -656,13 +650,20 @@ void screen_book(Game& g, const std::string& book_id) {
         const Layout L = layout();
 
         std::vector<std::string> rows;
-        for (std::size_t i = 0; i < b->lines.size(); ++i) {
-            std::string num = to_str(static_cast<int>(i) + 1);
-            while (num.size() < 2) num = " " + num;
-            const std::string& text = b->lines[i];
-            rows.push_back(num + " " + (text.empty() ? "·" : text));
+        if (b->readonly) {
+            // Найденная записка читается прозой: править её нельзя, номера
+            // строк не нужны, а текст должен занимать всю ширину экрана.
+            rows = wrap(reflow(b->lines), static_cast<std::size_t>(L.cols) - 4);
+        } else {
+            // Своя книга правится построчно, поэтому строки нумерованы.
+            for (std::size_t i = 0; i < b->lines.size(); ++i) {
+                std::string num = to_str(static_cast<int>(i) + 1);
+                while (num.size() < 2) num = " " + num;
+                const std::string& text = b->lines[i];
+                rows.push_back(num + " " + (text.empty() ? "·" : text));
+            }
         }
-        if (rows.empty()) rows.push_back(" 1 ·");
+        if (rows.empty()) rows.push_back(b->readonly ? " " : " 1 ·");
 
         const std::string title = "«" + b->title + "»" +
                                   (b->readonly ? "  (только чтение)" : "") +
@@ -809,9 +810,8 @@ void run_shop(Game& g, const std::string& shop_id) {
 void screen_ending(Game& g, const std::string& ending_id) {
     const EndingDef* e = Content::get().ending(ending_id);
     if (!e) return;
-    std::string body;
-    for (const std::string& l : e->lines) body += "  " + l + "\n";
-    body += "\n  " + g.player().name + ", уровень " + to_str(g.player().level) + ".";
+    std::string body = reflow(e->lines);
+    body += "\n\n" + g.player().name + ", уровень " + to_str(g.player().level) + ".";
     message_box("РАЗВЯЗКА: " + e->name, body);
 }
 
@@ -834,7 +834,7 @@ void run_dialogue(Game& g, const std::string& npc_id) {
         }
         if (rows.empty()) return;
 
-        int sel = choose(npc->name + "\n\n" + node->text + "\n", rows,
+        int sel = choose(npc->name + "\n\n" + reflow(node->text) + "\n", rows,
                          "  ^v выбор · Enter сказать · Esc уйти");
         if (sel < 0) return;
 
@@ -905,12 +905,11 @@ void run_combat(Game& g) {
         }
         rule(L.rule);
 
-        const std::vector<std::string>& lg = g.combat().log;
-        const std::size_t show = L.side ? 8 : 5;
-        std::size_t from = lg.size() > show ? lg.size() - show : 0;
-        for (std::size_t i = from; i < lg.size(); ++i)
-            out("  " + trunc(lg[i], static_cast<std::size_t>(L.cols) - 2));
-        for (std::size_t i = lg.size() - from; i < show; ++i) out("");
+        const int show = L.side ? 8 : 5;
+        const std::vector<std::string> tail =
+            log_tail(g.combat().log, static_cast<std::size_t>(L.cols) - 2, show);
+        for (const std::string& s : tail) out("  " + s);
+        for (std::size_t i = tail.size(); i < static_cast<std::size_t>(show); ++i) out("");
 
         out("");
         if (L.side) {
