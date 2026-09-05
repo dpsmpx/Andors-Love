@@ -186,12 +186,14 @@ void draw_world(Game& g) {
                   static_cast<std::size_t>(L.cols)));
     }
 
-    const std::vector<std::string>& lg = g.log();
-    const std::size_t show = L.side ? 4 : 3;
-    std::size_t from = lg.size() > show ? lg.size() - show : 0;
-    for (std::size_t i = from; i < lg.size(); ++i)
-        out("  " + trunc(lg[i], static_cast<std::size_t>(L.cols) - 2));
-    for (std::size_t i = lg.size() - from; i < show; ++i) out("");
+    // Журнал переносится по словам: обрезанный хвост терялся совсем, а
+    // высота панели здесь постоянная, поэтому длинное сообщение вытесняет
+    // старые, а не показывается половиной.
+    const int show = L.side ? 4 : 3;
+    const std::vector<std::string> tail =
+        log_tail(g.log(), static_cast<std::size_t>(L.cols) - 2, show);
+    for (const std::string& s : tail) out("  " + s);
+    for (std::size_t i = tail.size(); i < static_cast<std::size_t>(show); ++i) out("");
     std::cout.flush();
 }
 
@@ -656,13 +658,20 @@ void screen_book(Game& g, const std::string& book_id) {
         const Layout L = layout();
 
         std::vector<std::string> rows;
-        for (std::size_t i = 0; i < b->lines.size(); ++i) {
-            std::string num = to_str(static_cast<int>(i) + 1);
-            while (num.size() < 2) num = " " + num;
-            const std::string& text = b->lines[i];
-            rows.push_back(num + " " + (text.empty() ? "·" : text));
+        if (b->readonly) {
+            // Найденная записка читается прозой: править её нельзя, номера
+            // строк не нужны, а текст должен занимать всю ширину экрана.
+            rows = wrap(reflow(b->lines), static_cast<std::size_t>(L.cols) - 4);
+        } else {
+            // Своя книга правится построчно, поэтому строки нумерованы.
+            for (std::size_t i = 0; i < b->lines.size(); ++i) {
+                std::string num = to_str(static_cast<int>(i) + 1);
+                while (num.size() < 2) num = " " + num;
+                const std::string& text = b->lines[i];
+                rows.push_back(num + " " + (text.empty() ? "·" : text));
+            }
         }
-        if (rows.empty()) rows.push_back(" 1 ·");
+        if (rows.empty()) rows.push_back(b->readonly ? " " : " 1 ·");
 
         const std::string title = "«" + b->title + "»" +
                                   (b->readonly ? "  (только чтение)" : "") +
@@ -809,9 +818,8 @@ void run_shop(Game& g, const std::string& shop_id) {
 void screen_ending(Game& g, const std::string& ending_id) {
     const EndingDef* e = Content::get().ending(ending_id);
     if (!e) return;
-    std::string body;
-    for (const std::string& l : e->lines) body += "  " + l + "\n";
-    body += "\n  " + g.player().name + ", уровень " + to_str(g.player().level) + ".";
+    std::string body = reflow(e->lines);
+    body += "\n\n" + g.player().name + ", уровень " + to_str(g.player().level) + ".";
     message_box("РАЗВЯЗКА: " + e->name, body);
 }
 
@@ -834,7 +842,7 @@ void run_dialogue(Game& g, const std::string& npc_id) {
         }
         if (rows.empty()) return;
 
-        int sel = choose(npc->name + "\n\n" + node->text + "\n", rows,
+        int sel = choose(npc->name + "\n\n" + reflow(node->text) + "\n", rows,
                          "  ^v выбор · Enter сказать · Esc уйти");
         if (sel < 0) return;
 
@@ -905,12 +913,11 @@ void run_combat(Game& g) {
         }
         rule(L.rule);
 
-        const std::vector<std::string>& lg = g.combat().log;
-        const std::size_t show = L.side ? 8 : 5;
-        std::size_t from = lg.size() > show ? lg.size() - show : 0;
-        for (std::size_t i = from; i < lg.size(); ++i)
-            out("  " + trunc(lg[i], static_cast<std::size_t>(L.cols) - 2));
-        for (std::size_t i = lg.size() - from; i < show; ++i) out("");
+        const int show = L.side ? 8 : 5;
+        const std::vector<std::string> tail =
+            log_tail(g.combat().log, static_cast<std::size_t>(L.cols) - 2, show);
+        for (const std::string& s : tail) out("  " + s);
+        for (std::size_t i = tail.size(); i < static_cast<std::size_t>(show); ++i) out("");
 
         out("");
         if (L.side) {

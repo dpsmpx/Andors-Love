@@ -392,7 +392,11 @@ void App::draw_modal(Modal& m) {
         dialogue_layout(m, area, static_cast<int>(rows.size()), &opt);
         const int need = static_cast<int>(rows.size()) * (c_.touch_unit() + 6);
         const int text_h = area.h - need > c_.cell_h() * 3 ? area.h - need : c_.cell_h() * 3;
-        text_block(c_, Rect(area.x, area.y, area.w, text_h), n->text, th.text, m.scroll);
+        // Проза переливается под ширину окна: в исходнике она разбита на
+        // строки под какую-то одну ширину, и без этого фраза обрывалась бы
+        // посреди, не дотянув до края.
+        text_block(c_, Rect(area.x, area.y, area.w, text_h), reflow(n->text),
+                   th.text, m.scroll);
         for (std::size_t i = 0; i < rows.size(); ++i)
             button(c_, opt[i], rows[i].text, true, false);
         return;
@@ -454,13 +458,20 @@ void App::draw_modal(Modal& m) {
         } else if (m.kind == Modal::Book) {
             const Book* b = g_.book(m.arg);
             body.clear();
-            if (b)
+            if (b && b->readonly) {
+                // Найденная записка — это проза, и номера строк ей ни к чему:
+                // править её нельзя, а читается она сплошным текстом.
+                body = reflow(b->lines);
+            } else if (b) {
+                // Своя книга правится построчно, поэтому строки нумерованы
+                // и остаются такими, как их набрали.
                 for (std::size_t i = 0; i < b->lines.size(); ++i) {
                     std::string num = to_str(static_cast<int>(i) + 1);
                     while (num.size() < 2) num = " " + num;
                     body += num + " " +
                             (b->lines[i].empty() ? std::string("·") : b->lines[i]) + "\n";
                 }
+            }
             if (body.empty()) body = "(пусто)";
         }
         text_block(c_, area, body, th.text, m.scroll);
@@ -554,7 +565,7 @@ void App::apply_dialogue_option(const DlgOption& o) {
         const EndingDef* e = Content::get().ending(ending);
         if (e) {
             std::string body;
-            for (const std::string& l : e->lines) body += l + "\n";
+            body = reflow(e->lines);
             Modal em(Modal::Ending);
             em.title = "РАЗВЯЗКА: " + e->name;
             em.body = body;

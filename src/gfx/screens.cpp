@@ -177,23 +177,35 @@ void App::draw_hud() {
     c_.text(10, y - 1, to_str(p.ap) + "/" + to_str(t.max_ap) + " AP", th.text, sc > 1 ? sc - 1 : 1);
     y += bh + 3;
 
-    if (!status_.empty())
-        c_.text(6, y, trunc(status_, static_cast<std::size_t>((hud.w - 12) / c_.cell_w())),
-                th.faint, sc);
+    // Последнее сообщение целиком, с переносом по словам. Раньше хвост
+    // отрезался, а прочитать его было негде: журнал показывал ту же строку
+    // и так же обрезанной.
+    if (!status_.empty()) {
+        const int room = (hud.y + hud.h - c_.touch_unit() - 8) - y;
+        // Одна строка была здесь и раньше, впритык к кнопкам; больше —
+        // только если панель выросла и место действительно есть.
+        int rows = room > 0 ? room / ch : 0;
+        if (rows < 1) rows = 1;
+        const std::size_t cols = static_cast<std::size_t>((hud.w - 12) / c_.cell_w());
+        const std::vector<std::string> ls = wrap(status_, cols);
+        // Здесь берётся начало, а не конец: у одного сообщения важнее его
+        // начало, тогда как у журнала важнее последнее сообщение.
+        for (int i = 0; i < rows && i < static_cast<int>(ls.size()); ++i) {
+            c_.text(6, y, ls[static_cast<std::size_t>(i)], th.faint, sc);
+            y += ch;
+        }
+    }
 
     // Журнал в промежутке между картой и панелью: место всё равно пустует,
     // а видеть последние строки полезнее, чем чёрный фон.
     const int gap_top = map_bottom();
     const int gap_h = hud.y - gap_top;
     if (gap_h > ch * 2) {
-        const std::vector<std::string>& lg = g_.log();
         const int lines = (gap_h - ch / 2) / ch;
-        int from = static_cast<int>(lg.size()) - lines;
-        if (from < 0) from = 0;
-        int ly = gap_top + ch / 2;
         const std::size_t fit = static_cast<std::size_t>((c_.width() - 12) / c_.cell_w());
-        for (int i = from; i < static_cast<int>(lg.size()); ++i) {
-            c_.text(6, ly, trunc(lg[static_cast<std::size_t>(i)], fit), th.faint, sc);
+        int ly = gap_top + ch / 2;
+        for (const std::string& s : log_tail(g_.log(), fit, lines)) {
+            c_.text(6, ly, s, th.faint, sc);
             ly += ch;
         }
     }
@@ -449,14 +461,11 @@ void App::draw_combat() {
     // Журнал боя: последние строки, больше на экране и не нужно.
     std::vector<Rect> r1, r2;
     combat_layout(&r1, &r2, 0);
-    const std::vector<std::string>& lg = cb.log;
     const int log_h = r1[0].y - 6 - y;
     const int lines = log_h > 0 ? log_h / ch : 0;
-    int from = static_cast<int>(lg.size()) - lines;
-    if (from < 0) from = 0;
-    for (int i = from; i < static_cast<int>(lg.size()); ++i) {
-        c_.text(area.x, y, trunc(lg[static_cast<std::size_t>(i)],
-                                 static_cast<std::size_t>(bw / c_.cell_w())), th.faint, sc);
+    const std::size_t cols = static_cast<std::size_t>(bw / c_.cell_w());
+    for (const std::string& s : log_tail(cb.log, cols, lines)) {
+        c_.text(area.x, y, s, th.faint, sc);
         y += ch;
     }
 

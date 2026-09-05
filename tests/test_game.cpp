@@ -113,6 +113,79 @@ void test_wrap() {
     check(ind.size() >= 2 && ind[1].substr(0, 4) == "    ", "отступ переносится на следующую строку");
 }
 
+void test_reflow() {
+    section("переливка абзацев");
+
+    // Проза в исходнике разбита под одну ширину, а окно бывает другим.
+    // После переливки строка должна дотягиваться до края, а не обрываться
+    // посреди фразы коротким хвостом.
+    const std::string src = "Кольцо возьми. Оно тут с того дня лежит,\n"
+                            "и я не смел его тронуть,\n"
+                            "пока протокол был открыт.";
+    // Заполнена ли раскладка: в каждую строку, кроме последней, следующее
+    // слово уже не влезало. Незаполненная строка — это и есть обрыв
+    // посреди фразы, ради которого всё затевалось.
+    struct Packed {
+        static bool of(const std::vector<std::string>& ls, std::size_t w) {
+            for (std::size_t i = 0; i + 1 < ls.size(); ++i) {
+                const std::vector<std::string> next = split_ws(ls[i + 1]);
+                if (next.empty()) continue;
+                if (utf8_len(ls[i]) + 1 + utf8_len(next[0]) <= w) return false;
+            }
+            return true;
+        }
+    };
+    const std::vector<std::string> raw = wrap(src, 44);
+    const std::vector<std::string> flow = wrap(reflow(src), 44);
+    check(!Packed::of(raw, 44), "исходная разбивка оставляла место в строке");
+    check(Packed::of(flow, 44), "после переливки каждая строка заполнена");
+    check(reflow(src).find("пока протокол был открыт.") != std::string::npos,
+          "и текст при этом цел");
+
+    // Пустая строка — граница абзаца, её нельзя терять.
+    const std::vector<std::string> par = wrap(reflow(std::string("первый\n\nвторой")), 40);
+    eq(static_cast<int>(par.size()), 3, "пустая строка разделяет абзацы");
+    eqs(par[1], "", "и остаётся пустой");
+
+    // Реплики разных говорящих не должны оказаться в одной строке.
+    const std::string talk = "— Здравствуй.\n— И тебе.";
+    const std::vector<std::string> two = wrap(reflow(talk), 60);
+    eq(static_cast<int>(two.size()), 2, "две реплики — две строки");
+
+    // Строка с отступом значит сама себя: так набирают списки и таблицы.
+    const std::string list = "Заголовок\n  первый пункт\n  второй пункт";
+    const std::vector<std::string> keep = wrap(reflow(list), 60);
+    eq(static_cast<int>(keep.size()), 3, "пункты списка не сливаются");
+}
+
+void test_log_tail() {
+    section("хвост журнала");
+
+    std::vector<std::string> lg;
+    lg.push_back("короткая");
+    lg.push_back("Ольховка встречает тебя запахом дыма и мокрой соломы.");
+
+    // Раньше длинная строка обрезалась и хвост терялся совсем. Теперь она
+    // переносится и занимает столько строк, сколько ей нужно.
+    const std::vector<std::string> t = log_tail(lg, 30, 5);
+    bool fits = true;
+    for (const std::string& l : t) if (utf8_len(l) > 30) fits = false;
+    check(fits, "ни одна строка не шире отведённого");
+    std::string joined;
+    for (const std::string& l : t) joined += l + " ";
+    check(joined.find("соломы") != std::string::npos, "хвост сообщения не потерян");
+
+    // В тесное место попадает конец журнала: позднее важнее раннего.
+    const std::vector<std::string> tight = log_tail(lg, 30, 2);
+    eq(static_cast<int>(tight.size()), 2, "берётся ровно столько строк, сколько дали");
+    check(tight[1].find("соломы") != std::string::npos, "и это конец последнего сообщения");
+
+    // Пустой журнал и нулевое место не должны ничего ломать.
+    eq(static_cast<int>(log_tail(std::vector<std::string>(), 30, 3).size()), 0,
+       "пустой журнал даёт пусто");
+    eq(static_cast<int>(log_tail(lg, 30, 0).size()), 0, "нулевое место даёт пусто");
+}
+
 void test_glyphs() {
     section("символы карты");
 
@@ -3814,6 +3887,8 @@ int main() {
     std::cout << "Тесты «Любви Эндора»\n";
     test_text_helpers();
     test_wrap();
+    test_reflow();
+    test_log_tail();
     test_glyphs();
     test_maps();
     test_embedded_maps();
