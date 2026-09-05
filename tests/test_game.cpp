@@ -3108,6 +3108,230 @@ void test_no_escape_needed() {
           "конец ввода не совпадает со стрелками");
 }
 
+// Честный поединок: без лечения, настоящим боевым кодом. Возвращает исход
+// и остаток здоровья. Противника берём с карты — мобы появляются только в
+// своих зонах, и поставить кого угодно перед героем нельзя ни одним
+// открытым вызовом. Это и к лучшему: дерёмся с тем, что игра правда даёт.
+struct DuelResult {
+    bool met;        // противник вообще нашёлся
+    bool won;
+    int  hp_left;
+    int  hp_max;
+    int  rounds;
+    DuelResult() : met(false), won(false), hp_left(0), hp_max(0), rounds(0) {}
+};
+
+DuelResult duel_here(Game& g, const std::string& enemy_id) {
+    DuelResult r;
+    int uid = -1;
+    for (std::size_t i = 0; i < g.mobs().size(); ++i)
+        if (g.mobs()[i].enemy_id == enemy_id && g.mobs()[i].loc == g.player().loc) {
+            uid = g.mobs()[i].uid; break;
+        }
+    if (uid < 0) return r;
+    r.met = true;
+    r.hp_max = g.total().max_hp;
+
+    g.start_combat(uid);
+    for (int turn = 0; turn < 400 && g.combat().active; ++turn) {
+        ++r.rounds;
+        // Ход героя: бьём, пока хватает очков действия, потом передаём ход.
+        // Ни здоровья, ни очков даром — только то, что даёт сама игра.
+        if (g.player().ap >= g.attack_cost()) g.combat_attack(false);
+        else                                  g.combat_end_turn();
+        if (g.player_dead()) break;
+    }
+    r.won = (g.mob_by_uid(uid) == 0) && !g.player_dead();
+    r.hp_left = g.player().hp;
+    return r;
+}
+
+// Довести героя до нужного уровня и вложить баллы. Опыт выдаётся настоящим
+// grant_exp, баллы тратятся настоящим learn_skill: никаких прямых записей
+// в характеристики, иначе мерился бы не тот герой, которого получит игрок.
+void build_hero(Game& g, int level, const std::string& skill) {
+    while (g.player().level < level) g.grant_exp(g.exp_to_next());
+    if (!skill.empty())
+        while (g.player().skill_points > 0)
+            if (!g.learn_skill(skill)) break;
+}
+
+// Перейти в соседнюю локацию настоящим шагом через выход.
+bool walk_to(Game& g, const std::string& target) {
+    const Location* loc = g.here();
+    if (!loc) return false;
+    for (std::size_t i = 0; i < loc->exits.size(); ++i) {
+        if (loc->exits[i].target != target) continue;
+        const int dx[] = {1, -1, 0, 0}, dy[] = {0, 0, 1, -1};
+        for (int k = 0; k < 4; ++k) {
+            Vec2 from(loc->exits[i].pos.x - dx[k], loc->exits[i].pos.y - dy[k]);
+            if (!loc->walkable(from) && !loc->exit_at(from)) continue;
+            g.player().pos = from;
+            if (g.try_move(dx[k], dy[k]) == Bump::Exit) return true;
+        }
+    }
+    return false;
+}
+
+void test_difficulty() {
+    section("сложность: нужна ли прокачка");
+
+    // --- новичок против волка ---
+    // Волк живёт в лесу, сразу за деревней: это первое, во что упирается
+    // игрок, вышедший за ворота. Он и должен показать, что дальше без
+    // прокачки не пройти.
+    {
+        Game g;
+        g.new_game("Новичок", "human", "swordsman");
+        check(walk_to(g, "forest"), "из деревни есть выход в лес");
+        DuelResult d = duel_here(g, "wolf");
+        check(d.met, "волк в лесу нашёлся");
+        if (d.met) {
+            std::cout << "  новичок 1 ур. против волка: "
+                      << (d.won ? "победа" : "поражение")
+                      << ", здоровья " << d.hp_left << " из " << d.hp_max
+                      << ", раундов " << d.rounds << "\n";
+        }
+    }
+
+    // --- тот же волк, но герой вложился в «Крепость» ---
+    {
+        Game g;
+        g.new_game("Вложился", "human", "swordsman");
+        build_hero(g, 4, "vigor");
+        check(g.total().max_hp > Game().total().max_hp, "«Крепость» подняла запас");
+        check(walk_to(g, "forest"), "выход в лес на месте");
+        DuelResult d = duel_here(g, "wolf");
+        if (d.met) {
+            std::cout << "  4 ур. с «Крепостью» против волка: "
+                      << (d.won ? "победа" : "поражение")
+                      << ", здоровья " << d.hp_left << " из " << d.hp_max
+                      << ", раундов " << d.rounds << "\n";
+        }
+    }
+
+    // --- вожак: то, что должно быть не по зубам новичку ---
+    {
+        Game g;
+        g.new_game("Новичок", "human", "swordsman");
+        walk_to(g, "forest");
+        DuelResult d = duel_here(g, "wolf_alpha");
+        check(d.met, "вожак в лесу нашёлся");
+        if (d.met) {
+            check(!d.won, "новичок вожака не одолевает");
+            std::cout << "  новичок 1 ур. против вожака: "
+                      << (d.won ? "победа" : "поражение")
+                      << ", здоровья " << d.hp_left << " из " << d.hp_max
+                      << ", раундов " << d.rounds << "\n";
+        }
+    }
+
+    // --- уровень сам по себе не даёт ничего ---
+    // Это главное следствие того, что характеристики больше не растут сами.
+    // Двадцать уровней без единого вложения — тот же герой, что и в начале:
+    // сила приходит только из решений игрока, а не из счётчика опыта.
+    {
+        Game a; a.new_game("Первый", "human", "swordsman");
+        Game b; b.new_game("Двадцатый", "human", "swordsman");
+        build_hero(b, 20, "");
+        eq(b.player().level, 20, "уровень действительно вырос");
+        // Девятнадцать подъёмов плюс балл, который герой получает на старте.
+        eq(b.player().skill_points, a.player().skill_points + 19,
+           "и баллы накопились нетронутыми");
+        const Stats sa = a.total(), sb = b.total();
+        eq(sb.max_hp, sa.max_hp, "здоровье без вложений то же");
+        eq(sb.attack, sa.attack, "меткость та же");
+        eq(sb.max_ap, sa.max_ap, "очки действия те же");
+        eq(sb.dmg_max, sa.dmg_max, "урон тот же");
+
+        // И такой герой по-прежнему проигрывает тому же вожаку.
+        walk_to(b, "forest");
+        DuelResult d = duel_here(b, "wolf_alpha");
+        if (d.met) {
+            check(!d.won, "двадцатый уровень без вложений вожака тоже не берёт");
+            std::cout << "  20 ур. без вложений против вожака: "
+                      << (d.won ? "победа" : "поражение")
+                      << ", здоровья " << d.hp_left << " из " << d.hp_max << "\n";
+        }
+    }
+
+    // --- лестница: цена победы над каждым доступным врагом ---
+    // Считаем, со скольких вложенных баллов герой начинает выигрывать
+    // поединок. Одно число ничего не доказывает, лестница — доказывает:
+    // она показывает, растёт ли требование вместе с содержимым или всё
+    // берётся с нуля.
+    {
+        struct Rung { const char* enemy; const char* where; const char* name; };
+        // Всё это доступно без квестовых ворот: лес и погост — соседи деревни.
+        const Rung ladder[] = {
+            { "rat",          "village",   "амбарная крыса" },
+            { "wolf",         "forest",    "волк" },
+            { "bandit",       "forest",    "разбойник" },
+            { "barrow_shade", "graveyard", "тень с погоста" },
+            { "wolf_alpha",   "forest",    "вожак" },
+        };
+        int prev = 0;
+        bool grows = true;
+        for (std::size_t r = 0; r < sizeof(ladder) / sizeof(ladder[0]); ++r) {
+            // Бой случаен, и одна схватка ничего не говорит: у тени с погоста
+            // характеристики выше, чем у разбойника, а по единственной выборке
+            // она выходила легче. Поэтому каждый расклад гоняется на TRIALS
+            // разных зёрен, и решают доля побед и средний остаток здоровья.
+            const int TRIALS = 24;
+            int need = -1;
+            int win_pct = 0, left_pct = 0;
+            for (int ranks = 0; ranks <= 20 && need < 0; ++ranks) {
+                int wins = 0, left_sum = 0, cap_sum = 0, met = 0;
+                for (int t = 0; t < TRIALS; ++t) {
+                    Game g;
+                    g.new_game("Упорный", "human", "swordsman");
+                    g.rng().set_seed(0xA11CE + static_cast<unsigned long long>(t) * 7919ULL);
+                    if (ranks > 0) {
+                        while (g.player().level < ranks + 1) g.grant_exp(g.exp_to_next());
+                        // Вкладываем вперемешку: запас здоровья и урон. Одну
+                        // ветку качать выгоднее, но так мерится обычный игрок,
+                        // а не выжимка из механики.
+                        for (int k = 0; k < ranks; ++k)
+                            g.learn_skill(k % 2 == 0 ? "vigor" : "might");
+                    }
+                    if (std::string(ladder[r].where) != "village" &&
+                        !walk_to(g, ladder[r].where)) break;
+                    DuelResult d = duel_here(g, ladder[r].enemy);
+                    if (!d.met) break;
+                    ++met;
+                    if (d.won) ++wins;
+                    left_sum += d.hp_left;
+                    cap_sum += d.hp_max;
+                }
+                if (met == 0) { need = -2; break; }
+                // Ступень считается взятой, когда она берётся уверенно, а не
+                // изредка: победа в трети схваток — это ещё стена.
+                if (wins * 4 >= met * 3) {
+                    need = ranks;
+                    win_pct = wins * 100 / met;
+                    left_pct = cap_sum > 0 ? left_sum * 100 / cap_sum : 0;
+                }
+            }
+            // Запас после победы важнее самого факта: выигрыш на последних
+            // очках здоровья — это бой, выигрыш почти без потерь — прогулка.
+            std::cout << "  " << ladder[r].name << ": уверенная победа с "
+                      << (need < 0 ? std::string("(не найден)") : to_str(need))
+                      << " баллами, побед " << win_pct
+                      << "%, остаётся здоровья " << left_pct << "%\n";
+            if (need >= 0) {
+                if (need < prev) grows = false;
+                prev = need;
+            }
+        }
+        // Лестница меряет голую прокачку: снаряжения герой не покупает, а
+        // игрок покупает. Поэтому это нижняя граница требований, и судить по
+        // ней надо об отношении ступеней, а не об абсолютных числах.
+        check(grows, "требование не падает по мере усиления врагов");
+        check(prev > 1, "последняя ступень не берётся с одного балла");
+        check(prev > 0 && prev <= 20, "и всё же берётся одной прокачкой");
+    }
+}
+
 void test_playthrough() {
     section("сквозное прохождение: все квесты");
     Game g;
@@ -3151,13 +3375,49 @@ void test_playthrough() {
     // определяется по исчезнувшему врагу, а не по «бой больше не идёт»:
     // отличать одно от другого обязательно, иначе непроходимый противник
     // тихо считается убитым.
+    // Замер сложности. Тест лечит героя каждый ход, иначе он проверял бы
+    // выживание вместо проходимости, — но само это лечение и есть мера
+    // сложности: сколько урона содержимое игры вернуло герою в лицо.
+    // Складывается он честно, по разнице до и после каждого хода врага.
+    long dmg_total = 0;        // весь принятый урон за прохождение
+    int  dmg_worst = 0;        // худший бой: сколько в нём принято
+    int  fights_done = 0;
+    int  fights_over_half = 0; // боёв, где принято больше половины запаса
+    int  fights_lethal = 0;    // боёв, где принято больше полного запаса
+    int  hp_at_worst = 0;      // каков был запас в тот момент
+
+    // Баллы навыка тратятся так, как их тратил бы игрок: сперва запас
+    // здоровья, пока он отстаёт от уровня, потом урон. Без этого прогон мерил
+    // бы героя, который двадцать шесть уровней не открывал окно навыков, —
+    // а это не «трудно», это «не играл».
+    auto spend_points = [&]() {
+        while (g.player().skill_points > 0) {
+            const bool need_hp = g.total().max_hp < 40 + g.player().level * 3;
+            if (!g.learn_skill(need_hp ? "vigor" : "might")) break;
+        }
+    };
+
     auto fight = [&](int uid) {
+        spend_points();
         g.start_combat(uid);
+        ++fights_done;
+        int taken_here = 0;
         for (int turns = 0; turns < 600 && g.combat().active; ++turns) {
-            g.player().hp = g.total().max_hp;
+            const int cap = g.total().max_hp;
+            const int missing = cap - g.player().hp;
+            if (missing > 0) { taken_here += missing; dmg_total += missing; }
+            g.player().hp = cap;
             if (g.player().ap < g.attack_cost()) g.player().ap = g.total().max_ap;
             g.combat_attack(false);
             if (g.player_dead()) g.player().hp = g.total().max_hp;
+        }
+        {
+            const int cap = g.total().max_hp;
+            const int missing = cap - g.player().hp;
+            if (missing > 0) { taken_here += missing; dmg_total += missing; }
+            if (taken_here > dmg_worst) { dmg_worst = taken_here; hp_at_worst = cap; }
+            if (cap > 0 && taken_here * 2 > cap) ++fights_over_half;
+            if (cap > 0 && taken_here > cap) ++fights_lethal;
         }
         g.player().effects.clear();      // тест не про выживание под ядом
         if (g.player().hp <= 0) g.player().hp = g.total().max_hp;
@@ -4188,6 +4448,12 @@ void test_playthrough() {
               << ", квестов пройдено " << (sizeof(all_quests) / sizeof(all_quests[0]))
               << ", записей журнала " << g.log().size()
               << ")\n";
+    std::cout << "  (сложность: боёв " << fights_done
+              << ", принято урона " << dmg_total
+              << ", худший бой " << dmg_worst << " при запасе " << hp_at_worst
+              << ", боёв тяжелее половины запаса " << fights_over_half
+              << ", смертельных без лечения " << fights_lethal
+              << ")\n";
 }
 
 } // namespace
@@ -4234,6 +4500,7 @@ int main() {
     test_dark();
     test_balance();
     test_finale();
+    test_difficulty();
     test_playthrough();
 
     std::cout << "\n----------------------------------------\n";
