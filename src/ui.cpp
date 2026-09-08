@@ -856,7 +856,8 @@ void run_dialogue(Game& g, const std::string& npc_id) {
 void run_combat(Game& g) {
     while (g.combat().active) {
         const Layout L = layout();
-        const Mob* m = g.mob_by_uid(g.combat().mob_uid);
+        const Combat& cb = g.combat();
+        const Mob* m = g.mob_by_uid(cb.target);
         const EnemyDef* e = m ? Content::get().enemy(m->enemy_id) : nullptr;
         if (!e) break;
 
@@ -866,15 +867,35 @@ void run_combat(Game& g) {
 
         platform::clear_screen();
         out("=== БОЙ ===");
+        if (cb.foes.size() > 1)
+            out("  Противников: " + to_str(static_cast<int>(cb.foes.size())) +
+                "   [T] сменить цель");
+        out("");
+        // Все, кто дерётся. Цель помечена стрелкой: по ней идёт удар.
+        for (std::size_t fi = 0; fi < cb.foes.size(); ++fi) {
+            const Mob* fm = g.mob_by_uid(cb.foes[fi]);
+            if (!fm) continue;
+            const EnemyDef* fe = Content::get().enemy(fm->enemy_id);
+            if (!fe) continue;
+            const std::string mark = (cb.foes[fi] == cb.target) ? "> " : "  ";
+            if (L.side) {
+                out(mark + pad(to_str(static_cast<int>(fi) + 1) + ". " + fe->name, 24) + "HP " +
+                    pad(to_str(fm->hp) + "/" + to_str(fe->stats.max_hp), 10) +
+                    bar(fm->hp, fe->stats.max_hp, hb));
+                out("    " + pad("меткость " + to_str(fe->stats.attack) + "%", 22) +
+                    "блок " + to_str(fe->stats.block) + "%  броня " + to_str(fe->stats.armor));
+                if (!fm->effects.empty())
+                    out("    " + trunc(Game::effects_line(fm->effects), 46));
+            } else {
+                out(mark + trunc(to_str(static_cast<int>(fi) + 1) + "." + fe->name,
+                                 static_cast<std::size_t>(L.cols) - 2));
+                out("  HP " + pad(to_str(fm->hp) + "/" + to_str(fe->stats.max_hp), 8) +
+                    bar(fm->hp, fe->stats.max_hp, hb));
+            }
+        }
+        out("");
+        rule(L.rule);
         if (L.side) {
-            out("");
-            out("  " + pad(e->name, 24) + "HP " +
-                pad(to_str(g.combat().enemy_hp) + "/" + to_str(e->stats.max_hp), 10) +
-                bar(g.combat().enemy_hp, e->stats.max_hp, hb));
-            out("  " + pad("меткость " + to_str(e->stats.attack) + "%", 24) +
-                "блок " + to_str(e->stats.block) + "%  броня " + to_str(e->stats.armor));
-            out("");
-            rule(L.rule);
             out("  " + pad(p.name, 24) + "HP " +
                 pad(to_str(p.hp) + "/" + to_str(t.max_hp), 10) + bar(p.hp, t.max_hp, hb));
             out("  " + pad("AP " + to_str(p.ap) + "/" + to_str(t.max_ap), 24) +
@@ -884,15 +905,7 @@ void run_combat(Game& g) {
                 stance_hint(p.stance));
             if (!p.effects.empty())
                 out("  " + pad("На тебе:", 24) + trunc(Game::effects_line(p.effects), 36));
-            if (m && !m->effects.empty())
-                out("  " + pad("На противнике:", 24) + trunc(Game::effects_line(m->effects), 36));
         } else {
-            out(trunc(e->name, static_cast<std::size_t>(L.cols)));
-            out("HP " + pad(to_str(g.combat().enemy_hp) + "/" + to_str(e->stats.max_hp), 8) +
-                bar(g.combat().enemy_hp, e->stats.max_hp, hb));
-            out("мет " + to_str(e->stats.attack) + "% бл " + to_str(e->stats.block) +
-                "% бр " + to_str(e->stats.armor));
-            rule(L.rule);
             out(trunc(p.name, static_cast<std::size_t>(L.cols)));
             out("HP " + pad(to_str(p.hp) + "/" + to_str(t.max_hp), 8) + bar(p.hp, t.max_hp, hb));
             out("AP " + to_str(p.ap) + "/" + to_str(t.max_ap) +
@@ -900,8 +913,6 @@ void run_combat(Game& g) {
             out("Стойка: " + std::string(stance_name(p.stance)));
             if (!p.effects.empty())
                 out(trunc("Ты: " + Game::effects_line(p.effects), static_cast<std::size_t>(L.cols)));
-            if (m && !m->effects.empty())
-                out(trunc("Враг: " + Game::effects_line(m->effects), static_cast<std::size_t>(L.cols)));
         }
         rule(L.rule);
 
@@ -915,10 +926,10 @@ void run_combat(Game& g) {
         if (L.side) {
             out("  [A] атака (" + to_str(g.attack_cost()) + " AP)   [P] мощный удар (кураж " +
                 to_str(MOMENTUM_COST) + ")   [U] предмет (" + to_str(AP_ITEM_COST) + " AP)");
-            out("  [1/2/3] стойка   [E] закончить ход   [F] бежать");
+            out("  [1/2/3] стойка   [T] цель   [E] закончить ход   [F] бежать");
         } else {
             out("[A]атака " + to_str(g.attack_cost()) + "AP  [P]мощный " + to_str(MOMENTUM_COST));
-            out("[U]предмет [E]ход [F]бежать [1/2/3]стойка");
+            out("[U]предмет [T]цель [E]ход [F]бежать [1/2/3]стойка");
         }
         std::cout.flush();
 
@@ -928,6 +939,17 @@ void run_combat(Game& g) {
             case 'p': case 'P': g.combat_attack(true);  break;
             case 'e': case 'E': g.combat_end_turn();    break;
             case 'f': case 'F': g.combat_flee();        break;
+            case 't': case 'T': {
+                // Цель переключается по кругу: список короткий, отдельное меню
+                // ради восьми строк было бы дольше, чем нажать T дважды.
+                const Combat& c2 = g.combat();
+                if (c2.foes.size() < 2) break;
+                std::size_t at = 0;
+                for (std::size_t z = 0; z < c2.foes.size(); ++z)
+                    if (c2.foes[z] == c2.target) { at = z; break; }
+                g.combat_set_target(c2.foes[(at + 1) % c2.foes.size()]);
+                break;
+            }
             case '1': g.combat_set_stance(Stance::Cautious); break;
             case '2': g.combat_set_stance(Stance::Balanced); break;
             case '3': g.combat_set_stance(Stance::Fierce);   break;

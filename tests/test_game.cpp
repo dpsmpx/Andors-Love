@@ -869,11 +869,14 @@ void test_combat() {
     g.combat_attack(false);
     check(g.player().ap < ap0, "атака потратила AP");
 
-    // Мощный удар без куража запрещён.
+    // Мощный удар без куража запрещён. Здоровье противника живёт теперь в
+    // самом мобе, а не в копии внутри боя.
     g.player().momentum = 0;
-    int hp_before = g.combat().enemy_hp;
+    const Mob* tgt = g.mob_by_uid(g.combat().target);
+    int hp_before = tgt ? tgt->hp : 0;
     g.combat_attack(true);
-    check(g.combat().enemy_hp == hp_before || !g.combat().active,
+    tgt = g.mob_by_uid(g.combat().target);
+    check((tgt && tgt->hp == hp_before) || !g.combat().active,
           "мощный удар без куража не проходит");
 
     // С куражом — проходит и тратит его.
@@ -3173,6 +3176,164 @@ bool walk_to(Game& g, const std::string& target) {
     return false;
 }
 
+void test_group_combat() {
+    section("бой с окружением");
+
+    // Расставляем противников вокруг героя сами: полагаться на то, куда их
+    // забросит появление, значит мерить случайность, а не механику.
+    // Годится любая локация с мобами — берём тех, кто уже появился.
+    auto setup = [](Game& g, int want) -> std::vector<int> {
+        std::vector<int> put;
+        const Location* loc = g.here();
+        if (!loc) return put;
+        const Vec2 c = g.player().pos;
+        // Восемь клеток вокруг героя, по порядку.
+        const int dx[] = {1, -1, 0, 0, 1, 1, -1, -1};
+        const int dy[] = {0, 0, 1, -1, 1, -1, 1, -1};
+        std::vector<int> uids;
+        for (std::size_t i = 0; i < g.mobs().size(); ++i)
+            if (g.mobs()[i].loc == g.player().loc) uids.push_back(g.mobs()[i].uid);
+        for (std::size_t k = 0; k < uids.size() && static_cast<int>(put.size()) < want; ++k) {
+            const std::size_t slot = put.size();
+            if (slot >= 8) break;
+            Vec2 at(c.x + dx[slot], c.y + dy[slot]);
+            if (!loc->walkable(at)) continue;
+            Mob* m = g.mob_by_uid(uids[k]);
+            if (!m) continue;
+            m->pos = at;
+            put.push_back(m->uid);
+        }
+        return put;
+    };
+
+    // --- окружившие втягиваются в бой все разом ---
+    {
+        Game g;
+        g.new_game("Окружённый", "human", "swordsman");
+        std::vector<int> around = setup(g, 3);
+        check(around.size() >= 2, "удалось поставить рядом хотя бы двоих");
+        if (around.size() >= 2) {
+            g.start_combat(around[0]);
+            check(g.combat().active, "бой начался");
+            eq(static_cast<int>(g.combat().foes.size()), static_cast<int>(around.size()),
+               "в бой втянулись все, кто стоял вплотную");
+            eq(g.combat().target, around[0], "целью стал тот, на кого налетели");
+        }
+    }
+
+    // --- за раунд бьёт каждый, а не только цель ---
+    {
+        Game g;
+        g.new_game("Битый", "human", "swordsman");
+        std::vector<int> around = setup(g, 3);
+        if (around.size() >= 2) {
+            g.start_combat(around[0]);
+            g.player().hp = g.total().max_hp;
+            const int before = g.player().hp;
+            // Ход героя пропускаем: меряем ровно ответ противников.
+            g.combat_end_turn();
+            const int taken = before - g.player().hp;
+            check(taken > 0, "за раунд герой получил урон");
+            std::cout << "  " << around.size() << " противника за раунд сняли "
+                      << taken << " здоровья из " << before << "\n";
+        }
+    }
+
+    // --- гибель одного не заканчивает бой ---
+    {
+        Game g;
+        g.new_game("Упрямый", "human", "swordsman");
+        std::vector<int> around = setup(g, 3);
+        if (around.size() >= 2) {
+            g.start_combat(around[0]);
+            const int n0 = static_cast<int>(g.combat().foes.size());
+            // Добиваем цель напрямую: механика гибели, а не долгий бой.
+            if (Mob* t = g.mob_by_uid(g.combat().target)) t->hp = 1;
+            g.player().ap = g.total().max_ap;
+            for (int i = 0; i < 40 && g.combat().active &&
+                            static_cast<int>(g.combat().foes.size()) == n0; ++i) {
+                g.player().ap = g.total().max_ap;
+                g.combat_attack(false);
+            }
+            check(g.combat().active, "бой продолжается после гибели одного");
+            eq(static_cast<int>(g.combat().foes.size()), n0 - 1, "выбыл ровно один");
+            check(g.combat().target != -1, "цель перенеслась на следующего");
+            bool alive = false;
+            for (std::size_t i = 0; i < g.combat().foes.size(); ++i)
+                if (g.combat().foes[i] == g.combat().target) alive = true;
+            check(alive, "и новая цель — из числа дерущихся");
+        }
+    }
+
+    // --- подошедший вступает в бой сам ---
+    {
+        Game g;
+        g.new_game("Прирост", "human", "swordsman");
+        std::vector<int> around = setup(g, 1);
+        if (around.size() == 1) {
+            g.start_combat(around[0]);
+            eq(static_cast<int>(g.combat().foes.size()), 1, "начали один на один");
+            // Ставим второго вплотную — как будто он подошёл за этот раунд.
+            const Location* loc = g.here();
+            for (std::size_t i = 0; i < g.mobs().size(); ++i) {
+                const int uid = g.mobs()[i].uid;
+                if (uid == around[0]) continue;
+                if (g.mobs()[i].loc != g.player().loc) continue;
+                Vec2 at(g.player().pos.x - 1, g.player().pos.y);
+                if (!loc || !loc->walkable(at)) break;
+                g.mob_by_uid(uid)->pos = at;
+                break;
+            }
+            g.player().hp = g.total().max_hp;
+            g.combat_end_turn();
+            check(static_cast<int>(g.combat().foes.size()) >= 1, "бой не развалился");
+        }
+    }
+
+    // --- из кольца вырваться труднее ---
+    // Проверяем не удачу отдельного побега, а то, что шанс падает: гоняем
+    // много попыток на одном и том же зерне для одного врага и для троих.
+    {
+        auto flee_rate = [](int want) {
+            int ok = 0, tries = 0;
+            for (int seed = 0; seed < 40; ++seed) {
+                Game g;
+                g.new_game("Беглец", "human", "swordsman");
+                g.rng().set_seed(0xBEE5 + static_cast<unsigned long long>(seed) * 131ULL);
+                const Location* loc = g.here();
+                if (!loc) continue;
+                const Vec2 c = g.player().pos;
+                const int dx[] = {1, -1, 0, 0}, dy[] = {0, 0, 1, -1};
+                std::vector<int> uids;
+                for (std::size_t i = 0; i < g.mobs().size(); ++i)
+                    if (g.mobs()[i].loc == g.player().loc) uids.push_back(g.mobs()[i].uid);
+                int placed = 0;
+                for (std::size_t k = 0; k < uids.size() && placed < want; ++k) {
+                    Vec2 at(c.x + dx[placed], c.y + dy[placed]);
+                    if (!loc->walkable(at)) continue;
+                    g.mob_by_uid(uids[k])->pos = at;
+                    ++placed;
+                }
+                if (placed < want) continue;
+                // Остальных убираем подальше, чтобы в бой втянулись ровно want.
+                for (std::size_t k = static_cast<std::size_t>(placed); k < uids.size(); ++k)
+                    g.mob_by_uid(uids[k])->pos = Vec2(1, 1);
+                g.start_combat(uids[0]);
+                if (static_cast<int>(g.combat().foes.size()) != want) continue;
+                ++tries;
+                g.player().hp = g.total().max_hp * 100;   // побег, а не выживание
+                if (g.combat_flee()) ++ok;
+            }
+            return tries > 0 ? ok * 100 / tries : -1;
+        };
+        const int one = flee_rate(1);
+        const int three = flee_rate(3);
+        std::cout << "  побег от одного: " << one << "%, от троих: " << three << "%\n";
+        if (one >= 0 && three >= 0)
+            check(three < one, "из кольца вырваться труднее, чем от одного");
+    }
+}
+
 void test_difficulty() {
     section("сложность: нужна ли прокачка");
 
@@ -3442,7 +3603,7 @@ void test_playthrough() {
                     g.player().pos = from;
                     Bump b = g.try_move(dx[k], dy[k]);
                     if (b == Bump::Item) { ++got; taken = true; }
-                    else if (b == Bump::Combat) fight(g.combat().mob_uid);
+                    else if (b == Bump::Combat) fight(g.combat().target);
                 }
                 if (!taken) g.world_turn();
             }
@@ -3468,7 +3629,7 @@ void test_playthrough() {
                     g.player().pos = from;
                     Bump b = g.try_move(dx[k], dy[k]);
                     if (b == Bump::Note) return true;
-                    if (b == Bump::Combat) fight(g.combat().mob_uid);
+                    if (b == Bump::Combat) fight(g.combat().target);
                 }
                 g.world_turn();
             }
@@ -4500,6 +4661,7 @@ int main() {
     test_dark();
     test_balance();
     test_finale();
+    test_group_combat();
     test_difficulty();
     test_playthrough();
 

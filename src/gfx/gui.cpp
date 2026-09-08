@@ -56,22 +56,24 @@ Rect panel_rect(const Canvas& c, bool has_title, int want_cols, int want_rows,
                          frame_out);
 }
 
-Rect panel_px(Canvas& c, const std::string& title, int want_w, int want_h,
-              Rect* frame_out) {
+void panel_chrome(Canvas& c, const Rect& f, const std::string& title) {
     const Theme& th = theme();
     const int ch = c.cell_h();
     const int pad = ch / 2 + 2;
-
-    Rect f;
-    const Rect body = panel_rect_px(c, !title.empty(), want_w, want_h, &f);
-    if (frame_out) *frame_out = f;
-
     c.fill(f, th.panel);
     c.frame(f, th.border, 2);
     if (!title.empty()) {
         c.text(f.x + pad, f.y + pad, title, th.accent, c.scale());
         c.fill(Rect(f.x + pad, f.y + pad + ch + ch / 4, f.w - pad * 2, 1), th.border);
     }
+}
+
+Rect panel_px(Canvas& c, const std::string& title, int want_w, int want_h,
+              Rect* frame_out) {
+    Rect f;
+    const Rect body = panel_rect_px(c, !title.empty(), want_w, want_h, &f);
+    if (frame_out) *frame_out = f;
+    panel_chrome(c, f, title);
     return body;
 }
 
@@ -80,17 +82,49 @@ Rect panel(Canvas& c, const std::string& title, int want_cols, int want_rows,
     return panel_px(c, title, want_cols * c.cell_w(), want_rows * c.cell_h(), frame_out);
 }
 
+int row_scale(const Canvas& c, const std::vector<Rect>& rects,
+              const std::vector<std::string>& labels) {
+    int sc = c.scale() + 1;
+    for (std::size_t i = 0; i < rects.size() && i < labels.size(); ++i) {
+        const int room = rects[i].w > 8 ? rects[i].w - 8 : rects[i].w;
+        const int room_h = rects[i].h > 4 ? rects[i].h - 4 : rects[i].h;
+        while (sc > 1 && (c.text_width(labels[i], sc) > room ||
+                          c.cell_h() / c.scale() * sc > room_h)) --sc;
+    }
+    return sc < 1 ? 1 : sc;
+}
+
+void button_scaled(Canvas& c, const Rect& r, const std::string& label,
+                   bool enabled, bool highlighted, int scale) {
+    const Theme& th = theme();
+    c.fill(r, enabled ? (highlighted ? th.btn_hot : th.btn) : th.btn_off);
+    c.frame(r, enabled ? th.border : th.btn_off, 1);
+    const int room = r.w > 8 ? r.w - 8 : r.w;
+    const int glyph_w = c.cell_w() / c.scale() * scale;
+    std::string txt = label;
+    if (glyph_w > 0) {
+        const std::size_t fit = static_cast<std::size_t>(room / glyph_w);
+        if (fit > 0 && utf8_len(txt) > fit) txt = trunc(txt, fit);
+    }
+    c.text_centered(r, txt, enabled ? th.text : th.faint, scale);
+}
+
 void button(Canvas& c, const Rect& r, const std::string& label,
             bool enabled, bool highlighted) {
     const Theme& th = theme();
     c.fill(r, enabled ? (highlighted ? th.btn_hot : th.btn) : th.btn_off);
     c.frame(r, enabled ? th.border : th.btn_off, 1);
 
-    // Подпись ужимается под кнопку, а не вылезает из неё: сперва мельче
-    // шрифтом, а если и это не помогло — обрезкой.
+    // Подпись подбирается под кнопку от крупного к мелкому: сперва пробуем
+    // на ступень крупнее основного текста, потом основным, и только если и
+    // так не влезло — обрезаем. На узком экране основной масштаб равен
+    // единице, то есть глифу в восемь пикселей: подписи вроде «Меню» тонули,
+    // хотя места на кнопке хватало на вдвое больший кегль.
     const int room = r.w > 8 ? r.w - 8 : r.w;
-    int sc = c.scale();
-    while (sc > 1 && c.text_width(label, sc) > room) --sc;
+    const int room_h = r.h > 4 ? r.h - 4 : r.h;
+    int sc = c.scale() + 1;
+    while (sc > 1 && (c.text_width(label, sc) > room ||
+                      c.cell_h() / c.scale() * sc > room_h)) --sc;
 
     const int glyph_w = c.cell_w() / c.scale() * sc;
     std::string txt = label;
@@ -99,6 +133,37 @@ void button(Canvas& c, const Rect& r, const std::string& label,
         if (fit > 0 && utf8_len(txt) > fit) txt = trunc(txt, fit);
     }
     c.text_centered(r, txt, enabled ? th.text : th.faint, sc);
+}
+
+void row_of_weighted(const Rect& area, const std::vector<std::string>& labels,
+                     int gap, std::vector<Rect>* out) {
+    out->clear();
+    const int n = static_cast<int>(labels.size());
+    if (n <= 0) return;
+    const int room = area.w - gap * (n - 1);
+    if (room <= 0) return;
+
+    // Пол в четверть равной доли: даже самая короткая подпись должна остаться
+    // кнопкой, в которую попадают пальцем.
+    const int even = room / n;
+    const int floor_w = even / 4 > 1 ? even / 4 : 1;
+    std::vector<int> want;
+    int total = 0;
+    for (int i = 0; i < n; ++i) {
+        int w = static_cast<int>(utf8_len(labels[static_cast<std::size_t>(i)]));
+        if (w < 1) w = 1;
+        want.push_back(w);
+        total += w;
+    }
+    int used = 0;
+    for (int i = 0; i < n; ++i) {
+        int w = total > 0 ? room * want[static_cast<std::size_t>(i)] / total : even;
+        if (w < floor_w) w = floor_w;
+        if (i == n - 1) w = room - used;      // остаток целиком последнему
+        if (w < 1) w = 1;
+        out->push_back(Rect(area.x + used + i * gap, area.y, w, area.h));
+        used += w;
+    }
 }
 
 void row_of(const Rect& area, int n, int gap, std::vector<Rect>* out) {

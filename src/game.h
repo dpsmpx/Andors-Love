@@ -69,16 +69,26 @@ struct Mob {
 };
 
 // Бой идёт в отдельном режиме: у игрока пул AP на раунд, действия его тратят.
+// Бой идёт сразу со всеми, кто окружил героя: один его ход, потом по ходу
+// каждого противника. Раньше в бою был один враг, а остальные стояли рядом
+// и ждали своей очереди — окружение ничего не стоило, и «отбиться от стаи»
+// значило бить волков по одному, пока они смотрят.
 struct Combat {
-    bool                     active = false;
-    int                      mob_uid = -1;
-    int                      enemy_hp = 0;
+    bool active = false;
+    // Кто дерётся, в порядке вступления. Здоровье живёт в самом Mob, а не в
+    // копии внутри боя: копию приходилось синхронизировать после каждого
+    // удара, и с несколькими врагами таких копий стало бы восемь.
+    std::vector<int>         foes;
+    int                      target = -1;   // по кому бьёт герой
     bool                     stance_used = false;   // смена стойки — раз за раунд
     std::vector<std::string> log;
 };
 
 constexpr int MOMENTUM_MAX  = 5;
 constexpr int MOMENTUM_COST = 3;      // цена мощного удара
+// Сколько противников может держать один бой. Восемь — это все клетки вокруг
+// героя: больше физически не встанет, и ровно столько показывает окно боя.
+constexpr int COMBAT_MAX_FOES = 8;
 
 // Насколько событие заметное. Журнал красит по этому строки: за долгий бой
 // лента набирает три десятка строк, и «УРОВЕНЬ 8!» среди них тонет, если всё
@@ -262,6 +272,11 @@ public:
 
     // --- бой ---
     void  start_combat(int mob_uid);
+    // Сменить цель. Возвращает false, если такого противника в бою нет.
+    bool  combat_set_target(int uid);
+    // Втянуть в бой всех, кто стоит вплотную и ещё не дерётся. Зовётся при
+    // начале боя и в конце каждого раунда: подошедший вступает сам.
+    void  combat_join_adjacent();
     void  combat_attack(bool power);
     void  combat_set_stance(Stance s);
     bool  combat_use_item(const std::string& id);
@@ -306,6 +321,8 @@ private:
                       bool guaranteed, int crit_bonus, std::string* line);
     void  combat_log(const std::string& s);
     void  enemy_turn();
+    // Ход одного противника: бьёт, пока хватает очков действия.
+    void  enemy_strike(Mob& m, const EnemyDef& def);
     void  finish_combat();
 
     World                    world_;
