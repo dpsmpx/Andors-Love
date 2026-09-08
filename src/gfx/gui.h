@@ -47,6 +47,11 @@ Rect panel(Canvas& c, const std::string& title, int want_cols, int want_rows,
 // должно занимать пол-экрана только потому, что панель одна на всех.
 Rect panel_rect_px(const Canvas& c, bool has_title, int want_w, int want_h,
                    Rect* frame_out);
+// Нарисовать подложку, рамку и заголовок по уже посчитанной рамке. Нужно
+// там, где геометрию считают заранее (окно боя считает её вместе с местами
+// под противников), а рисуют потом: иначе рамку пришлось бы считать дважды.
+void panel_chrome(Canvas& c, const Rect& frame, const std::string& title);
+
 Rect panel_px(Canvas& c, const std::string& title, int want_w, int want_h,
               Rect* frame_out);
 
@@ -55,8 +60,25 @@ Rect panel_px(Canvas& c, const std::string& title, int want_w, int want_h,
 void button(Canvas& c, const Rect& r, const std::string& label,
             bool enabled, bool highlighted);
 
+// Наибольший кегль, при котором все подписи ряда влезают в свои кнопки.
+// Считается на ряд, а не на кнопку: подписи разной величины рядом читаются
+// как случайный набор, даже когда каждая по отдельности разборчива.
+int row_scale(const Canvas& c, const std::vector<Rect>& rects,
+              const std::vector<std::string>& labels);
+
+// Кнопка с заданным кеглем — для рядов, где он общий.
+void button_scaled(Canvas& c, const Rect& r, const std::string& label,
+                   bool enabled, bool highlighted, int scale);
+
 // Разложить n кнопок в ряд по ширине области.
 void row_of(const Rect& area, int n, int gap, std::vector<Rect>* out);
+
+// Ряд, где ширина кнопки идёт по длине её подписи. Поровну делить невыгодно:
+// одна длинная подпись роняет кегль всего ряда, тогда как коротким соседям
+// ширина не нужна. Доли считаются по числу знаков, с полом, чтобы кнопка из
+// одного слова не выродилась в полоску.
+void row_of_weighted(const Rect& area, const std::vector<std::string>& labels,
+                     int gap, std::vector<Rect>* out);
 // То же столбцом.
 void column_of(const Rect& area, int n, int gap, std::vector<Rect>* out);
 

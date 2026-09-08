@@ -1200,6 +1200,30 @@ void Game::combat_log(const std::string& s) {
     if (cb_.log.size() > 40) cb_.log.erase(cb_.log.begin());
 }
 
+void Game::combat_join_adjacent() {
+    // Вплотную — это все восемь клеток вокруг, а не четыре стороны: враг
+    // наискосок стоит вплотную и по смыслу окружения дерётся тоже.
+    for (Mob& m : mobs_) {
+        if (static_cast<int>(cb_.foes.size()) >= COMBAT_MAX_FOES) break;
+        if (m.loc != plr_.loc) continue;
+        const int dx = m.pos.x - plr_.pos.x, dy = m.pos.y - plr_.pos.y;
+        if (dx < -1 || dx > 1 || dy < -1 || dy > 1) continue;
+        bool already = false;
+        for (std::size_t i = 0; i < cb_.foes.size(); ++i)
+            if (cb_.foes[i] == m.uid) { already = true; break; }
+        if (already) continue;
+        cb_.foes.push_back(m.uid);
+        if (const EnemyDef* e = Content::get().enemy(m.enemy_id))
+            combat_log(e->name + " вступает в бой!");
+    }
+}
+
+bool Game::combat_set_target(int uid) {
+    for (std::size_t i = 0; i < cb_.foes.size(); ++i)
+        if (cb_.foes[i] == uid) { cb_.target = uid; return true; }
+    return false;
+}
+
 void Game::start_combat(int mob_uid) {
     const Mob* m = mob_by_uid(mob_uid);
     if (!m) return;
@@ -1208,13 +1232,18 @@ void Game::start_combat(int mob_uid) {
 
     cb_ = Combat();
     cb_.active = true;
-    cb_.mob_uid = mob_uid;
-    cb_.enemy_hp = m->hp;
+    // Тот, на кого налетели, вступает первым и становится целью; остальные
+    // окружившие подтягиваются следом.
+    cb_.foes.push_back(mob_uid);
+    cb_.target = mob_uid;
     plr_.ap = total().max_ap;
     plr_.momentum = 0;
     if (!plr_.effects.empty())
         combat_log("На тебе: " + effects_line(plr_.effects) + ".");
     combat_log("— " + e->name + " преграждает путь. —");
+    combat_join_adjacent();
+    if (cb_.foes.size() > 1)
+        combat_log("Тебя окружили: противников " + to_str(static_cast<int>(cb_.foes.size())) + ".");
 }
 
 int Game::resolve_hit(const Stats& atk, const Stats& def, int stance_pct,
@@ -1244,7 +1273,7 @@ int Game::resolve_hit(const Stats& atk, const Stats& def, int stance_pct,
 
 void Game::combat_attack(bool power) {
     if (!cb_.active) return;
-    Mob* m = mob_by_uid(cb_.mob_uid);
+    Mob* m = mob_by_uid(cb_.target);
     if (!m) { finish_combat(); return; }
     const EnemyDef* e = Content::get().enemy(m->enemy_id);
     if (!e) { finish_combat(); return; }
@@ -1280,7 +1309,7 @@ void Game::combat_attack(bool power) {
     }
 
     if (dmg > 0) {
-        cb_.enemy_hp -= dmg;
+        m->hp -= dmg;
         if (!power && plr_.momentum < MOMENTUM_MAX) {
             ++plr_.momentum;
             combat_log("Кураж: " + to_str(plr_.momentum) + "/" + to_str(MOMENTUM_MAX) + ".");
@@ -1300,8 +1329,7 @@ void Game::combat_attack(bool power) {
         }
     }
 
-    if (cb_.enemy_hp <= 0) { kill_mob(*m); return; }
-    m->hp = cb_.enemy_hp;
+    if (m->hp <= 0) { kill_mob(*m); return; }
 
     if (plr_.ap < attack_cost()) {
         combat_log("Силы на исходе — ход переходит противнику.");
@@ -1340,12 +1368,16 @@ void Game::combat_end_turn() {
 bool Game::combat_flee() {
     if (!cb_.active) return false;
     int chance = (plr_.stance == Stance::Cautious) ? 70 : 55;
+    // Из кольца вырваться труднее, чем от одного: каждый сверх первого
+    // отнимает часть шанса. Иначе окружение ничего не стоило бы — от стаи
+    // убегали бы так же легко, как от одинокой крысы.
+    const int extra = static_cast<int>(cb_.foes.size()) - 1;
+    if (extra > 0) chance -= extra * 12;
+    if (chance < 10) chance = 10;
     if (rng_.chance(chance)) {
         combat_log("Ты разрываешь дистанцию.");
         msg("Ты сбежал из боя.", MsgTone::Bad);
-        cb_.active = false;
-        cb_.mob_uid = -1;
-        plr_.momentum = 0;
+        finish_combat();
         return true;
     }
     combat_log("Сбежать не вышло!");
@@ -1353,19 +1385,17 @@ bool Game::combat_flee() {
     return false;
 }
 
-void Game::enemy_turn() {
-    Mob* m = mob_by_uid(cb_.mob_uid);
-    if (!m) { finish_combat(); return; }
-    const EnemyDef* e = Content::get().enemy(m->enemy_id);
-    if (!e) { finish_combat(); return; }
-
+// Ход одного противника: он бьёт, пока хватает очков действия. Вынесено
+// отдельно, потому что таких ходов теперь столько, сколько врагов, и
+// перечисление по ним должно читаться в одну строку.
+void Game::enemy_strike(Mob& m, const EnemyDef& def) {
     const Content& c = Content::get();
-    Stats foe = e->stats;
-    foe += effect_stats(m->effects);
+    Stats foe = def.stats;
+    foe += effect_stats(m.effects);
     Stats me  = total();
     int eap = foe.max_ap;
     if (eap < 1) eap = 1;
-    int atk_cost = foe.ap_atk < 1 ? 1 : foe.ap_atk;
+    const int atk_cost = foe.ap_atk < 1 ? 1 : foe.ap_atk;
 
     while (eap >= atk_cost && plr_.hp > 0) {
         eap -= atk_cost;
@@ -1374,18 +1404,34 @@ void Game::enemy_turn() {
         if (dmg > 0) {
             plr_.hp -= dmg;
             if (plr_.momentum > 0) --plr_.momentum;   // пропущенный удар сбивает кураж
-            combat_log(e->name + ": " + line + ".");
-            if (!e->on_hit_effect.empty() && rng_.chance(e->on_hit_chance)) {
-                apply_effect(plr_.effects, e->on_hit_effect, 5, e->on_hit_power);
-                const EffectDef* fx = c.effect(e->on_hit_effect);
+            combat_log(def.name + ": " + line + ".");
+            if (!def.on_hit_effect.empty() && rng_.chance(def.on_hit_chance)) {
+                apply_effect(plr_.effects, def.on_hit_effect, 5, def.on_hit_power);
+                const EffectDef* fx = c.effect(def.on_hit_effect);
                 if (fx) combat_log("На тебя наложено: «" + fx->name + "».");
             }
         } else {
-            combat_log(e->name + ": промах.");
+            combat_log(def.name + ": промах.");
         }
     }
+}
 
-    // Конец раунда: эффекты тикают у обеих сторон.
+void Game::enemy_turn() {
+    if (!cb_.active) return;
+
+    // Ходят все, кто дерётся, по разу за раунд. Список копируется: гибель
+    // противника меняет cb_.foes прямо во время обхода, и идти по живому
+    // списку значило бы пропускать соседей убитого.
+    const std::vector<int> order = cb_.foes;
+    for (std::size_t i = 0; i < order.size() && plr_.hp > 0; ++i) {
+        Mob* m = mob_by_uid(order[i]);
+        if (!m) continue;                      // успел погибнуть в этом же раунде
+        const EnemyDef* def = Content::get().enemy(m->enemy_id);
+        if (!def) continue;
+        enemy_strike(*m, *def);
+    }
+
+    // Конец раунда: эффекты тикают у героя и у каждого противника.
     int mine = tick_effects(plr_.effects);
     if (mine != 0) {
         plr_.hp += mine;
@@ -1394,13 +1440,18 @@ void Game::enemy_turn() {
         combat_log(mine < 0 ? "Эффекты отнимают " + to_str(-mine) + " здоровья."
                             : "Эффекты возвращают " + to_str(mine) + " здоровья.");
     }
-    int theirs = tick_effects(m->effects);
-    if (theirs != 0) {
-        cb_.enemy_hp += theirs;
-        combat_log(theirs < 0 ? e->name + " теряет " + to_str(-theirs) + " от эффектов."
-                              : e->name + " восстанавливает " + to_str(theirs) + ".");
-        if (cb_.enemy_hp <= 0) { kill_mob(*m); return; }
-        m->hp = cb_.enemy_hp;
+    const std::vector<int> ticking = cb_.foes;
+    for (std::size_t i = 0; i < ticking.size(); ++i) {
+        Mob* m = mob_by_uid(ticking[i]);
+        if (!m) continue;
+        const EnemyDef* def = Content::get().enemy(m->enemy_id);
+        if (!def) continue;
+        const int theirs = tick_effects(m->effects);
+        if (theirs == 0) continue;
+        m->hp += theirs;
+        combat_log(theirs < 0 ? def->name + " теряет " + to_str(-theirs) + " от эффектов."
+                              : def->name + " восстанавливает " + to_str(theirs) + ".");
+        if (m->hp <= 0) kill_mob(*m);
     }
 
     if (plr_.hp <= 0) {
@@ -1409,12 +1460,18 @@ void Game::enemy_turn() {
         cb_.active = false;
         return;
     }
+    if (!cb_.active) return;      // последний противник пал от эффектов
+
+    // Подошедшие за этот раунд вступают в бой: стоять рядом и не драться
+    // больше нельзя.
+    combat_join_adjacent();
 
     // Новый раунд.
     plr_.ap = total().max_ap;
     cb_.stance_used = false;
     combat_log("— Новый раунд. Очки действия восстановлены. —");
 }
+
 
 void Game::kill_mob(Mob& m) {
     const EnemyDef* e = Content::get().enemy(m.enemy_id);
@@ -1440,17 +1497,35 @@ void Game::kill_mob(Mob& m) {
         fire_event(TriggerKind::MobKilled, e->kill_counter);
     }
 
-    int uid = m.uid;
+    const int uid = m.uid;
     for (std::size_t i = 0; i < mobs_.size(); ++i) {
         if (mobs_[i].uid == uid) { mobs_.erase(mobs_.begin() + static_cast<long>(i)); break; }
     }
 
+    // Из боя выбывает только павший. Остальные продолжают: раньше смерть
+    // одного заканчивала бой целиком, и в окружении это значило бы, что
+    // первый же убитый разгоняет всю стаю.
+    for (std::size_t i = 0; i < cb_.foes.size(); ++i)
+        if (cb_.foes[i] == uid) {
+            cb_.foes.erase(cb_.foes.begin() + static_cast<std::ptrdiff_t>(i));
+            break;
+        }
+    if (cb_.target == uid) {
+        // Цель пала — герой переносит удар на следующего, а не стоит без цели.
+        cb_.target = cb_.foes.empty() ? -1 : cb_.foes.front();
+        if (cb_.target != -1)
+            if (const Mob* nx = mob_by_uid(cb_.target))
+                if (const EnemyDef* nd = Content::get().enemy(nx->enemy_id))
+                    combat_log("Теперь перед тобой " + nd->name + ".");
+    }
+
     grant_exp(e->exp);
-    finish_combat();
+    if (cb_.foes.empty()) finish_combat();
 }
 
 void Game::finish_combat() {
     cb_.active = false;
-    cb_.mob_uid = -1;
+    cb_.foes.clear();
+    cb_.target = -1;
     plr_.momentum = 0;
 }

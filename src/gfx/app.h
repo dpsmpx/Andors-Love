@@ -77,6 +77,17 @@ struct Modal {
 // кнопка. Список видов один на всю оболочку (см. modals.cpp).
 bool is_text_modal(Modal::Kind k);
 
+// Разметка окна боя: где какая часть лежит на экране.
+struct CombatLayout {
+    Rect              area;   // всё содержимое окна
+    Rect              frame;  // сама панель с рамкой
+    std::vector<Rect> foes;   // по строке на каждого участника боя
+    Rect              hero;   // блок героя
+    Rect              log;    // журнал боя
+    std::vector<Rect> row1;   // Удар · Мощный · Сумка
+    std::vector<Rect> row2;   // Стойка · Конец хода · Бежать
+};
+
 class App {
 public:
     App();
@@ -179,8 +190,10 @@ private:
                          std::vector<Rect>* out) const;
     void menu_layout(std::vector<std::string>* items, std::vector<Rect>* out) const;
     void create_layout(Rect* list_area, Rect* next_btn) const;
-    void combat_layout(std::vector<Rect>* top_row, std::vector<Rect>* bottom_row,
-                       Rect* body) const;
+    // Разметка окна боя. Считается одним куском: строки противников,
+    // блок героя, журнал и кнопки нужны и рисованию, и попаданию пальцем,
+    // а разъехавшись, они показывали бы одного врага, а били по другому.
+    void combat_layout(CombatLayout* out) const;
     void hud_buttons(std::vector<Rect>* out) const;
     void draw_log();
     // Важность события -> цвет строки. Одна на ленту внизу и на окно журнала.

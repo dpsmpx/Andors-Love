@@ -23,6 +23,7 @@ void App::push(Modal::Kind k) {
             "  вести пальцем — цель едет за ним\n"
             "  тап по себе или в стену — остановиться\n"
             "  тап по пункту — выбрать его\n"
+            "  тап по строке врага в бою — бить по нему\n"
             "  держать на строке продажи — продать пачкой\n"
             "  свайп в окне — прокрутка\n"
             "  тап мимо окна — закрыть окно\n"
@@ -32,6 +33,11 @@ void App::push(Modal::Kind k) {
             "  C герой   I сумка   Q задания   K навыки\n"
             "  P порталы  B книги   L журнал   M меню\n"
             "  1 2 3 — стойка, Enter — удар в бою\n"
+            "\n"
+            "Бой\n"
+            "  дерутся все, кто окружил: твой ход, потом их\n"
+            "  подошедший вступает сам, до восьми разом\n"
+            "  из кольца труднее вырваться, чем от одного\n"
             "\n"
             "Знаки карты\n"
             "  @ ты      N житель    X враг\n"
@@ -277,9 +283,14 @@ void App::draw_hud() {
     // Пять сенсорных кнопок: те же, что клавиши C, I, Q, K и меню.
     std::vector<Rect> b;
     hud_buttons(&b);
-    static const char* labels[5] = {"Герой", "Сумка", "Квесты", "Навыки", "Меню"};
-    for (int i = 0; i < 5; ++i)
-        button(c_, b[static_cast<std::size_t>(i)], labels[i], true, false);
+    // Нижний ряд — общим кеглем: пять кнопок в строку, и разнобой в них
+    // виден особенно.
+    std::vector<std::string> labels;
+    labels.push_back("Герой"); labels.push_back("Сумка"); labels.push_back("Квесты");
+    labels.push_back("Навыки"); labels.push_back("Меню");
+    const int bs = row_scale(c_, b, labels);
+    for (std::size_t i = 0; i < labels.size() && i < b.size(); ++i)
+        button_scaled(c_, b[i], labels[i], true, false, bs);
 }
 
 // ------------------------------------------------------------- главное меню
@@ -474,89 +485,181 @@ void App::create_hero_tap(int x, int y) {
 
 // -------------------------------------------------------------------- бой
 
-void App::combat_layout(std::vector<Rect>* top_row, std::vector<Rect>* bottom_row,
-                        Rect* body) const {
-    Rect frame;
-    const Rect area = panel_rect(c_, true, 40, 16, &frame);
-    if (body) *body = area;
+void App::combat_layout(CombatLayout* out) const {
+    const Combat& cb = g_.combat();
+    const int ch = c_.cell_h();
     const int bh = c_.touch_unit();
-    row_of(Rect(area.x, area.y + area.h - bh * 2 - 6, area.w, bh), 3, 6, top_row);
-    row_of(Rect(area.x, area.y + area.h - bh, area.w, bh), 3, 6, bottom_row);
+    const int n = static_cast<int>(cb.foes.size());
+
+    // Строка противника ростом в две клетки: имя и полоса здоровья читаются,
+    // а по строке во всю ширину попадают пальцем и без роста в целый палец.
+    const int foe_h = ch * 2 + 6;
+    // Высота окна считается по числу участников: с одним врагом окно не
+    // должно занимать пол-экрана пустотой, с восемью — не должно их обрезать.
+    const int need = foe_h * (n > 0 ? n : 1) + ch          // список и отступ
+                   + ch * 4 + ch                           // герой и отступ
+                   + ch * 5                                // журнал
+                   + bh * 2 + 6;                           // два ряда кнопок
+    int rows = need / ch + 1;
+    const int cap = c_.height() / ch - 6;
+    if (rows > cap) rows = cap;
+
+    Rect frame;
+    const Rect area = panel_rect(c_, true, 54, rows, &frame);
+    out->frame = frame;
+    out->area = area;
+
+    int y = area.y;
+    out->foes.clear();
+    for (int i = 0; i < n; ++i) {
+        out->foes.push_back(Rect(area.x, y, area.w, foe_h - 2));
+        y += foe_h;
+    }
+    y += ch / 2;
+
+    out->hero = Rect(area.x, y, area.w, ch * 4);
+    y += ch * 4 + ch / 2;
+
+    // Кнопки прижаты книзу, журнал занимает всё, что осталось между ними
+    // и блоком героя. Так число противников меняет длину журнала, а не
+    // положение кнопок: палец находит «Удар» на одном и том же месте.
+    const int btn_top = area.y + area.h - bh * 2 - 6;
+    out->log = Rect(area.x, y, area.w, btn_top - 6 - y > 0 ? btn_top - 6 - y : 0);
+    // Ширина кнопки — по длине подписи: «Конец хода» вдвое длиннее «Бежать»,
+    // и при равной ширине она одна роняла кегль всего ряда.
+    std::vector<std::string> l1, l2;
+    l1.push_back("Удар"); l1.push_back("Мощный"); l1.push_back("Сумка");
+    l2.push_back(stance_name(g_.player().stance));
+    l2.push_back("Конец хода"); l2.push_back("Бежать");
+    row_of_weighted(Rect(area.x, btn_top, area.w, bh), l1, 6, &out->row1);
+    row_of_weighted(Rect(area.x, area.y + area.h - bh, area.w, bh), l2, 6, &out->row2);
+}
+
+
+// Полоса здоровья с подписью. Одна на героя и на противников: рисовать их
+// порознь значило бы однажды поправить одну и забыть другую.
+static void hp_bar(Canvas& c, const Rect& r, int hp, int max_hp,
+                   Color back, Color fill, const std::string& label, Color text_col) {
+    if (hp < 0) hp = 0;
+    c.fill(r, back);
+    if (max_hp > 0 && hp > 0) c.fill(Rect(r.x, r.y, r.w * hp / max_hp, r.h), fill);
+    c.text(r.x + 4, r.y + (r.h - c.cell_h()) / 2, label, text_col, c.scale());
 }
 
 void App::draw_combat() {
     const Theme& th = theme();
     const Combat& cb = g_.combat();
-    const Mob* m = g_.mob_by_uid(cb.mob_uid);
-    const EnemyDef* e = m ? Content::get().enemy(m->enemy_id) : 0;
-    if (!e) return;
+    const Content& cont = Content::get();
+    if (cb.foes.empty()) return;
 
     dim_screen(c_, 120);
     const int ch = c_.cell_h();
     const int sc = c_.scale();
-    Rect frame;
-    const Rect area = panel(c_, "Бой", 40, 16, &frame);
-    (void)frame;
 
-    int y = area.y;
-    const int bw = area.w;
+    CombatLayout L;
+    combat_layout(&L);
+    panel_chrome(c_, L.frame, cb.foes.size() > 1
+             ? "Бой — противников " + to_str(static_cast<int>(cb.foes.size()))
+             : std::string("Бой"));
 
-    c_.text(area.x, y, e->name, th.warn, sc);
-    y += ch;
-    const int ehp = cb.enemy_hp < 0 ? 0 : cb.enemy_hp;
-    c_.fill(Rect(area.x, y, bw, ch), Color(60, 30, 30, 220));
-    c_.fill(Rect(area.x, y, e->stats.max_hp > 0 ? bw * ehp / e->stats.max_hp : 0, ch),
-            Color(190, 70, 62));
-    c_.text(area.x + 4, y, to_str(ehp) + " / " + to_str(e->stats.max_hp), th.text, sc);
-    y += ch * 2;
+    // --- участники ---
+    for (std::size_t i = 0; i < cb.foes.size() && i < L.foes.size(); ++i) {
+        const Mob* m = g_.mob_by_uid(cb.foes[i]);
+        if (!m) continue;
+        const EnemyDef* e = cont.enemy(m->enemy_id);
+        if (!e) continue;
+        const Rect& r = L.foes[i];
+        const bool aimed = (cb.foes[i] == cb.target);
 
-    const Player& p = g_.player();
-    const Stats t = g_.total();
-    c_.text(area.x, y, p.name + "  кураж " + to_str(p.momentum) + "/" + to_str(MOMENTUM_COST),
-            th.text, sc);
-    y += ch;
-    const int php = p.hp < 0 ? 0 : p.hp;
-    c_.fill(Rect(area.x, y, bw, ch), Color(30, 50, 34, 220));
-    c_.fill(Rect(area.x, y, t.max_hp > 0 ? bw * php / t.max_hp : 0, ch), Color(90, 170, 96));
-    c_.text(area.x + 4, y, to_str(php) + " / " + to_str(t.max_hp) + " HP   " +
-            to_str(p.ap) + "/" + to_str(t.max_ap) + " AP", th.text, sc);
-    y += ch * 2;
+        // Выбранный подсвечен подложкой и отмечен слева: по нему идёт удар,
+        // и это должно быть видно, не читая ничего.
+        if (aimed) {
+            c_.fill(r, Color(70, 46, 40, 200));
+            c_.frame(r, th.warn, 1);
+        }
+        const int mark_w = c_.cell_w() * 2;
+        // Метка цели обычной стрелкой: в шрифте 179 глифов, и «▶» среди них
+        // нет — он рисовался вопросительным знаком.
+        if (aimed) c_.text(r.x + 4, r.y + 1, ">", th.warn, sc);
 
-    // Журнал боя: последние строки, больше на экране и не нужно.
-    std::vector<Rect> r1, r2;
-    combat_layout(&r1, &r2, 0);
-    const int log_h = r1[0].y - 6 - y;
-    const int lines = log_h > 0 ? log_h / ch : 0;
-    const std::size_t cols = static_cast<std::size_t>(bw / c_.cell_w());
-    for (const std::string& s : log_tail(cb.log, cols, lines)) {
-        c_.text(area.x, y, s, th.faint, sc);
-        y += ch;
+        // Имя и, если есть, действующие на него эффекты.
+        std::string name = to_str(static_cast<int>(i) + 1) + ". " + e->name;
+        if (!m->effects.empty()) name += " *";
+        c_.text(r.x + mark_w, r.y + 1, name, aimed ? th.text : th.faint, sc);
+
+        // Полоса здоровья во всю ширину строки под именем.
+        hp_bar(c_, Rect(r.x + mark_w, r.y + ch + 3, r.w - mark_w - 4, ch),
+               m->hp, e->stats.max_hp,
+               Color(60, 30, 30, 220), Color(190, 70, 62),
+               to_str(m->hp < 0 ? 0 : m->hp) + "/" + to_str(e->stats.max_hp) +
+               "  мет " + to_str(e->stats.attack) + "%  бр " + to_str(e->stats.armor),
+               th.text);
     }
 
+    // --- герой ---
+    const Player& p = g_.player();
+    const Stats t = g_.total();
+    int hy = L.hero.y;
+    c_.text(L.hero.x, hy, p.name + "   кураж " + to_str(p.momentum) + "/" + to_str(MOMENTUM_COST),
+            th.text, sc);
+    hy += ch;
+    hp_bar(c_, Rect(L.hero.x, hy, L.hero.w, ch), p.hp, t.max_hp,
+           Color(30, 50, 34, 220), Color(90, 170, 96),
+           to_str(p.hp < 0 ? 0 : p.hp) + " / " + to_str(t.max_hp) + " HP   " +
+           to_str(p.ap) + "/" + to_str(t.max_ap) + " AP", th.text);
+    hy += ch + 2;
+    std::string line = "Стойка: " + std::string(stance_name(p.stance));
+    if (!p.effects.empty()) line += "   на тебе: " + Game::effects_line(p.effects);
+    c_.text(L.hero.x, hy, line, th.faint, sc);
+
+    // --- журнал боя ---
+    if (L.log.h >= ch) {
+        const int lines_fit = L.log.h / ch;
+        const std::size_t cols = static_cast<std::size_t>(L.log.w / c_.cell_w());
+        int ly = L.log.y;
+        for (const std::string& s : log_tail(cb.log, cols, lines_fit)) {
+            c_.text(L.log.x, ly, s, th.faint, sc);
+            ly += ch;
+        }
+    }
+
+    // --- кнопки ---
     const bool can_hit = p.ap >= g_.attack_cost();
-    button(c_, r1[0], "Удар", can_hit, false);
-    button(c_, r1[1], "Мощный", can_hit && p.momentum >= MOMENTUM_COST, false);
-    button(c_, r1[2], "Сумка", true, false);
-    button(c_, r2[0], std::string("Стойка: ") + stance_name(p.stance), true, false);
-    button(c_, r2[1], "Конец хода", true, false);
-    button(c_, r2[2], "Бежать", true, false);
+    std::vector<std::string> lab1, lab2;
+    lab1.push_back("Удар"); lab1.push_back("Мощный"); lab1.push_back("Сумка");
+    lab2.push_back(stance_name(p.stance)); lab2.push_back("Конец хода"); lab2.push_back("Бежать");
+    const int s1 = row_scale(c_, L.row1, lab1);
+    const int s2 = row_scale(c_, L.row2, lab2);
+    button_scaled(c_, L.row1[0], lab1[0], can_hit, false, s1);
+    button_scaled(c_, L.row1[1], lab1[1], can_hit && p.momentum >= MOMENTUM_COST, false, s1);
+    button_scaled(c_, L.row1[2], lab1[2], true, false, s1);
+    button_scaled(c_, L.row2[0], lab2[0], true, false, s2);
+    button_scaled(c_, L.row2[1], lab2[1], true, false, s2);
+    button_scaled(c_, L.row2[2], lab2[2], true, false, s2);
 }
 
 void App::combat_tap(int x, int y) {
-    std::vector<Rect> r1, r2;
-    combat_layout(&r1, &r2, 0);
+    CombatLayout L;
+    combat_layout(&L);
+    const Combat& cb = g_.combat();
 
-    if (r1[0].contains(x, y)) { g_.combat_attack(false); return; }
-    if (r1[1].contains(x, y)) { g_.combat_attack(true);  return; }
-    if (r1[2].contains(x, y)) { push(Modal::Inventory);  return; }
-    if (r2[0].contains(x, y)) {
+    // Тап по строке противника переносит на него удар. Разбирается первым:
+    // строки стоят выше кнопок и не пересекаются с ними.
+    for (std::size_t i = 0; i < L.foes.size() && i < cb.foes.size(); ++i)
+        if (L.foes[i].contains(x, y)) { g_.combat_set_target(cb.foes[i]); return; }
+
+    if (L.row1[0].contains(x, y)) { g_.combat_attack(false); return; }
+    if (L.row1[1].contains(x, y)) { g_.combat_attack(true);  return; }
+    if (L.row1[2].contains(x, y)) { push(Modal::Inventory);  return; }
+    if (L.row2[0].contains(x, y)) {
         const Stance s = g_.player().stance;
         g_.combat_set_stance(s == Stance::Cautious ? Stance::Balanced
                              : (s == Stance::Balanced ? Stance::Fierce : Stance::Cautious));
         return;
     }
-    if (r2[1].contains(x, y)) { g_.combat_end_turn(); return; }
-    if (r2[2].contains(x, y)) { g_.combat_flee();     return; }
+    if (L.row2[1].contains(x, y)) { g_.combat_end_turn(); return; }
+    if (L.row2[2].contains(x, y)) { g_.combat_flee();     return; }
 }
+
 
 } // namespace gfx
