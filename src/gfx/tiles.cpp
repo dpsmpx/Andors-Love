@@ -3,6 +3,7 @@
 #include "font.h"
 #include "../paths.h"
 #include "../platform.h"
+#include "../world.h"
 
 namespace gfx {
 
@@ -241,6 +242,35 @@ int load_slot_files(const std::string& dir, std::vector<Image>* tiles, std::stri
 std::string creature_tile_name(const std::string& kind, const std::string& id) {
     if (kind.empty() || id.empty()) return std::string();
     return kind + "_" + id;
+}
+
+std::string autotile_tile_name(int slot, int mask) {
+    if (slot < SLOT_FLOOR || slot > SLOT_DEADWATER) return std::string();
+    if (mask < 0 || mask >= AUTOTILE_VARIANTS) return std::string();
+    return std::string(slot_file(slot)) + "_" + to_str(mask);
+}
+
+std::vector<std::string> autotile_tile_names() {
+    std::vector<std::string> names;
+    for (int slot = SLOT_FLOOR; slot <= SLOT_DEADWATER; ++slot)
+        for (int mask = 0; mask < AUTOTILE_VARIANTS; ++mask)
+            names.push_back(autotile_tile_name(slot, mask));
+    return names;
+}
+
+int autotile_mask(const Location& loc, Vec2 p, const std::function<bool(Vec2)>& hidden) {
+    if (!loc.in_bounds(p)) return 0;
+    const Tile t = loc.at(p);
+    const Vec2 side[4] = { Vec2(p.x, p.y - 1), Vec2(p.x + 1, p.y),
+                           Vec2(p.x, p.y + 1), Vec2(p.x - 1, p.y) };
+    const int bit[4] = { EDGE_N, EDGE_E, EDGE_S, EDGE_W };
+    int mask = 0;
+    for (int i = 0; i < 4; ++i) {
+        const Vec2 q = side[i];
+        const bool same = !loc.in_bounds(q) || (hidden && hidden(q)) || loc.at(q) == t;
+        if (same) mask |= bit[i];
+    }
+    return mask;
 }
 
 int load_named_files(const std::string& dir, const std::vector<std::string>& names,

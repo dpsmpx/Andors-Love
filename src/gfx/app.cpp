@@ -44,7 +44,7 @@ App::App()
     : log_lines_src_(0), log_lines_w_(0), log_lines_ep_(0),
       mode_(MODE_MENU), quit_(false), has_save_(false),
       create_step_(0), new_race_("human"), new_spec_("swordsman"),
-      now_ms_(0), died_(false) {}
+      now_ms_(0), died_(false), has_variants_(false) {}
 
 const std::vector<std::string>& App::log_lines(int cols) const {
     const std::vector<std::string>& lg = g_.log();
@@ -103,8 +103,16 @@ bool App::start(int argc, char** argv, int win_w, int win_h) {
     // художник правил бы картинку и гадал, почему ничего не меняется.
     tiles_path_ = paths::tiles_dir(argv0);
     std::string terr;
-    tiles_.load(c_.renderer(), tiles_path_, tiles_path_ + "/tiles.png",
-                creature_tile_names(), &terr);
+    // Именованные тайлы — существа и варианты стыков местности: и те и
+    // другие ищутся по имени файла и ложатся в тот же атлас.
+    std::vector<std::string> named = creature_tile_names();
+    const std::vector<std::string> variants = autotile_tile_names();
+    named.insert(named.end(), variants.begin(), variants.end());
+    tiles_.load(c_.renderer(), tiles_path_, tiles_path_ + "/tiles.png", named, &terr);
+    // Без единого варианта маску стыков незачем и считать.
+    has_variants_ = false;
+    for (std::size_t i = 0; i < variants.size() && !has_variants_; ++i)
+        has_variants_ = tiles_.has_named(variants[i]);
     // Пустой каталог молчит: графика необязательна. А вот файл, который есть,
     // но не читается, надо назвать — иначе художник правит картинку и гадает,
     // почему в игре ничего не меняется.
@@ -668,6 +676,7 @@ void App::draw_world() {
     const int top  = blk.y;
     // Глиф уже клетки: центрируем, иначе знаки липнут к левому краю.
     const int gpad = (cw - FONT_W * sc) / 2;
+    const std::function<bool(Vec2)> hidden = [this](Vec2 q) { return !g_.cell_lit(q); };
 
     for (int gy = 0; gy < rows; ++gy) {
         for (int gx = 0; gx < cols; ++gx) {
@@ -677,10 +686,18 @@ void App::draw_world() {
             // остаётся чёрной: игрок не должен угадывать карту по силуэту.
             if (!g_.cell_lit(p)) { c_.fill(cell, Color(0, 0, 0, 255)); continue; }
             const Tile t = loc->at(p);
+            const int slot = slot_of_tile(t);
+            // Вариант стыка, если он нарисован, — по соседям той же
+            // местности; клетки во тьме считаются той же местностью, чтобы
+            // освещённая стена не выдавала, что лежит за ней.
+            if (has_variants_) {
+                const std::string variant = autotile_tile_name(slot, autotile_mask(*loc, p, hidden));
+                if (tiles_.draw_named(c_.renderer(), variant, cell)) continue;
+            }
             // Нарисованный тайл заменяет вид по умолчанию, ненарисованный —
             // нет. Поэтому набор можно рисовать по одному тайлу: готовое
             // появляется в игре сразу, остальное выглядит как раньше.
-            if (tiles_.draw(c_.renderer(), slot_of_tile(t), cell)) continue;
+            if (tiles_.draw(c_.renderer(), slot, cell)) continue;
             c_.fill(cell, tile_color(t));
             const unsigned tg = default_tile_texture(t);
             if (tg) c_.glyph_at(cell.x + gpad, cell.y, tg, Color(0, 0, 0, 70), sc);
