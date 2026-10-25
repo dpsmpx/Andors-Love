@@ -2,8 +2,11 @@
 #include "png.h"
 #include "../types.h"
 
+#include <functional>
 #include <string>
 #include <vector>
+
+struct Location;
 
 // Тайлы: файлы графики, раскладка слотов и вид по умолчанию.
 //
@@ -105,6 +108,34 @@ std::string creature_tile_name(const std::string& kind, const std::string& id);
 // порядок тоже; отсутствие файла оставляет в out пустую картинку.
 int load_named_files(const std::string& dir, const std::vector<std::string>& names,
                      std::vector<Image>* out, std::string* err);
+
+// --- стыки местности ---
+//
+// У местности может быть до шестнадцати вариантов — по тому, с каких сторон
+// к клетке примыкает та же местность: север 1, восток 2, юг 4, запад 8, а
+// маска — их сумма. Вариант — файл <слот>_<маска>.png рядом с основным:
+// wall_5.png — стена со стеной сверху и снизу, wall_15.png — со всех сторон.
+// Так варианты называет и режет редактор True Joint Tile Maker (экран «Набор
+// для игры», заготовка 4x4), и так же он подбирает их, показывая карту.
+//
+// Варианта нет — клетка рисуется основным тайлом, нет и его — по-старому.
+// Поэтому варианты, как и всё остальное, рисуются по одному, в любом порядке.
+
+const int EDGE_N = 1, EDGE_E = 2, EDGE_S = 4, EDGE_W = 8;
+const int AUTOTILE_VARIANTS = 16;
+
+// Имя варианта: autotile_tile_name(SLOT_WALL, 5) -> "wall_5". Пусто у слотов,
+// которые не местность, и у маски вне 0..15.
+std::string autotile_tile_name(int slot, int mask);
+
+// Все варианты всех местностей: их файлы ищутся вместе с тайлами существ.
+std::vector<std::string> autotile_tile_names();
+
+// Маска клетки p по соседям той же местности. За краем карты сосед считается
+// той же местностью: стена у края не обрывается. Клетка, которую игрок не
+// видит (hidden), — тоже: иначе вариант освещённой стены выдавал бы, что
+// лежит во тьме за ней. Пустой hidden — видно всё.
+int autotile_mask(const Location& loc, Vec2 p, const std::function<bool(Vec2)>& hidden);
 
 // --- вид по умолчанию ---
 //

@@ -12,7 +12,9 @@
 #include "../src/gfx/png.h"
 #include "../src/gfx/tiles.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <functional>
 #include <fstream>
 #include <set>
 #include <iostream>
@@ -2304,6 +2306,78 @@ void test_tiles() {
         eq(gfx::load_named_files(dir, want, &got2, &err4), 1, "целый тайл всё равно прочитан");
         check(err4.find("npc_smith.png") != std::string::npos,
               "а про испорченный сказано, какой именно");
+    }
+
+    // Стыки местности: имя варианта и маска по соседям. Комната та же, что
+    // в тесте редактора True Joint Tile Maker (tests/test_gameset.cpp), и
+    // маски те же: договор сверяется с обеих сторон.
+    {
+        eqs(gfx::autotile_tile_name(gfx::SLOT_WALL, 5), "wall_5",
+            "стена со стеной сверху и снизу");
+        eqs(gfx::autotile_tile_name(gfx::SLOT_DEADWATER, 15), "deadwater_15",
+            "стоячая вода со всех сторон");
+        check(gfx::autotile_tile_name(gfx::SLOT_NPC, 1).empty(), "у объектов вариантов нет");
+        check(gfx::autotile_tile_name(gfx::SLOT_WALL, 16).empty() &&
+                  gfx::autotile_tile_name(gfx::SLOT_WALL, -1).empty(),
+              "маска вне 0..15 имени не даёт");
+
+        const std::vector<std::string> v = gfx::autotile_tile_names();
+        eq(static_cast<int>(v.size()), 7 * gfx::AUTOTILE_VARIANTS, "вариантов: семь местностей по 16");
+        const std::set<std::string> uniq(v.begin(), v.end());
+        eq(static_cast<int>(uniq.size()), static_cast<int>(v.size()), "имена вариантов не повторяются");
+        int clash = 0;
+        for (int slot = 0; slot < gfx::TJTM_SLOTS; ++slot)
+            if (gfx::slot_file(slot) && uniq.count(gfx::slot_file(slot))) ++clash;
+        const Content& c = Content::get();
+        for (std::map<std::string, NpcDef>::const_iterator it = c.npcs().begin();
+             it != c.npcs().end(); ++it)
+            if (uniq.count(gfx::creature_tile_name("npc", it->first))) ++clash;
+        for (std::map<std::string, EnemyDef>::const_iterator it = c.enemies().begin();
+             it != c.enemies().end(); ++it)
+            if (uniq.count(gfx::creature_tile_name("mob", it->first))) ++clash;
+        eq(clash, 0, "и не спорят ни со слотом, ни с существом");
+
+        // Комната 5x4: стена по краю, пол внутри, одна стена посредине.
+        Location loc;
+        loc.w = 5;
+        loc.h = 4;
+        loc.tiles.assign(20, Tile::Floor);
+        for (int y = 0; y < loc.h; ++y)
+            for (int x = 0; x < loc.w; ++x)
+                if (x == 0 || y == 0 || x == loc.w - 1 || y == loc.h - 1)
+                    loc.tiles[static_cast<std::size_t>(y * loc.w + x)] = Tile::Wall;
+        loc.tiles[static_cast<std::size_t>(2 * loc.w + 2)] = Tile::Wall;
+        const std::function<bool(Vec2)> all_seen;
+        using gfx::EDGE_N;
+        using gfx::EDGE_E;
+        using gfx::EDGE_S;
+        using gfx::EDGE_W;
+        eq(gfx::autotile_mask(loc, Vec2(0, 0), all_seen), EDGE_N | EDGE_E | EDGE_S | EDGE_W,
+           "угол: за краем карты — та же местность");
+        eq(gfx::autotile_mask(loc, Vec2(2, 0), all_seen), EDGE_N | EDGE_E | EDGE_W,
+           "верхняя стена: снизу пол");
+        eq(gfx::autotile_mask(loc, Vec2(2, 2), all_seen), EDGE_S,
+           "стена посредине держится только за нижнюю");
+        eq(gfx::autotile_mask(loc, Vec2(1, 1), all_seen), EDGE_E | EDGE_S,
+           "пол в углу комнаты: пол справа и снизу");
+        eq(gfx::autotile_mask(loc, Vec2(-1, 0), all_seen), 0, "клетка за краем — без маски");
+        // Тьма не выдаёт, что за ней: невидимый сосед — та же местность.
+        const std::function<bool(Vec2)> dark_east = [](Vec2 q) { return q.x == 3; };
+        eq(gfx::autotile_mask(loc, Vec2(2, 2), dark_east), EDGE_E | EDGE_S,
+           "сосед во тьме считается той же местностью");
+
+        // Варианты читаются тем же путём, что тайлы существ.
+        const std::string dir = "build/test-tiles-autotile";
+        std::string err;
+        check(platform::make_dir(dir), "каталог для вариантов создан");
+        gfx::Image art(16, 16);
+        art.clear(90, 90, 100, 255);
+        check(gfx::png_write(dir + "/wall_5.png", art, &err), "вариант стены записан");
+        std::vector<gfx::Image> got;
+        eq(gfx::load_named_files(dir, v, &got, &err), 1, "нашёлся ровно нарисованный вариант");
+        const std::size_t at = static_cast<std::size_t>(
+            std::find(v.begin(), v.end(), std::string("wall_5")) - v.begin());
+        check(at < got.size() && got[at].w == 16, "и лёг на своё место");
     }
 
     // Лист по умолчанию: то, что игра отдаёт по --export-sheet.
